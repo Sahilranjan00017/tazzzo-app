@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -19,7 +20,15 @@ kotlin {
         }
     }
 
-    androidTarget()
+    androidTarget {
+        // Must match the Java target in android.compileOptions below. Enabling
+        // BuildConfig introduced a Java compile task and surfaced a pre-existing
+        // mismatch (Kotlin defaulted to 21 against Java 17); pinned rather than
+        // moving the project's Java level as a side effect.
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {
@@ -57,6 +66,23 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+    }
+    // BuildConfig.DEBUG is how the Android actual of isDebugBuild() decides the
+    // environment. Without this the flag does not exist and every build would
+    // have to be treated as production.
+    buildFeatures {
+        buildConfig = true
+    }
+    buildTypes {
+        debug {
+            isMinifyEnabled = false
+        }
+        release {
+            // Demo flags, the autopilot and DevLogSink are gated on
+            // AppEnvironment.allowsDevTooling, which is false whenever
+            // BuildConfig.DEBUG is false — i.e. in every release build.
+            isMinifyEnabled = false
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
