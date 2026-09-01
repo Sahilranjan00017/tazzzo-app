@@ -1,6 +1,14 @@
 # Tazzzo Visual & UX Specification
 
-> **STATUS: FROZEN — 2026-08-31.** The UI/UX Final Gate passed and the design
+> **STATUS: REOPENED — 2026-09-01, for an experience-quality pass only.**
+> The design owner raised the target from 4.8/5 to **5/5** and reopened the
+> freeze for interaction, motion, state-feedback and accessibility refinement.
+> **The brand identity is NOT reopened**: palette, wordmark, Poppins and the
+> green-identity / orange-savings split stand unchanged. Refinement, not
+> redesign. Findings and scope: `TAZZZO_5_STAR_EXPERIENCE_AUDIT.md`.
+> The freeze re-applies when that document's 5/5 gate closes.
+>
+> **Prior status, retained for history: FROZEN — 2026-08-31.** The UI/UX Final Gate passed and the design
 > system and customer-facing screens are frozen. Change them only to fix a real
 > defect, never for variation's sake. Backend integration must fit this UI; if
 > integration appears to require a redesign, raise it as a contract problem

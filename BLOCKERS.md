@@ -1,6 +1,11 @@
 # Production blockers — single source of truth
 
-> **Phase status (2026-08-31):** UI/UX Final Gate **PASSED**, UI **FROZEN**.
+> **Phase status (2026-09-01):** UI freeze **REOPENED** by the design owner for
+> a 5/5 experience pass. Target raised from 4.8/5 to 5/5. Backend integration
+> remains frozen and is now gated on that pass as well.
+> See `TAZZZO_5_STAR_EXPERIENCE_AUDIT.md`.
+>
+> **Prior (2026-08-31):** UI/UX Final Gate **PASSED**, UI **FROZEN**.
 > Production readiness **NOT passed**. Next: backend integration, gated on the
 > readiness report (`docs/BACKEND_INTEGRATION_READINESS.md`) and explicit GO.
 
@@ -39,6 +44,19 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       placeholders; attribution in docs/IMAGE_ATTRIBUTIONS.md).
 
 ## P1 — visual ceiling (new, Phase 6)
+- [ ] **5/5 EXPERIENCE PASS (opened 2026-09-01).** Four structural gaps found by
+      source audit, none visible in a screenshot: (S1) no component has a
+      designed pressed state — `collectIsPressedAsState` appears zero times
+      across 65 clickable sites; (S2) navigation has no direction — Crossfade is
+      the only transition, forward and back look identical; (S3) no state
+      survives navigation — `rememberSaveable` appears zero times against 27
+      scroll/query state holders, so scroll position, search query and filters
+      are lost on every back; (S4) no haptics anywhere. Full inventory, per
+      component and per screen before-scores, and the fix plan are in
+      TAZZZO_5_STAR_EXPERIENCE_AUDIT.md.
+- [ ] Hero banner carries THIRD-PARTY TRADE DRESS (Aashirvaad, Daawat, Maggi,
+      Tata Salt, Colgate, Fortune packaging) in Tazzzo's own marketing image.
+      Brand/licensing exposure, not just a placeholder issue. Raised 2026-09-01.
 - [ ] **Real product photography (ASSET DEPENDENCY, not an engineering gap).**
       The image ARCHITECTURE is complete and verified: fixed-aspect container,
       Fit-never-Crop, uniform neutral ground, loading skeleton, graceful
