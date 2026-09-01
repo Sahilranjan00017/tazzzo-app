@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.config.BrandCopy
-import com.tazzzo.app.data.MockCatalog
 import com.tazzzo.app.data.model.FaqItem
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
@@ -54,6 +54,12 @@ import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.ui.common.CartBar
 import com.tazzzo.app.ui.common.EmptyState
+import com.tazzzo.app.ui.state.rememberLoad
+import com.tazzzo.app.ui.state.UiState
+import com.tazzzo.app.ui.state.LoadHandle
+import com.tazzzo.app.ui.common.SkeletonBlock
+import com.tazzzo.app.ui.common.ErrorState
+import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.ui.common.PillButton
 import com.tazzzo.app.ui.common.SectionHeader
 import com.tazzzo.app.ui.common.TazIcon
@@ -77,9 +83,13 @@ fun HelpScreen() {
     var dialogText by remember { mutableStateOf<String?>(null) }
 
     val needle = query.trim().lowercase()
-    val results = remember(needle) {
-        if (needle.isEmpty()) MockCatalog.faqs
-        else MockCatalog.faqs.filter {
+    // FAQ content now comes from SupportRepository, so it follows the backend
+    // like every other customer-facing surface. Filtering stays on the client:
+    // that is what this screen has always done and no search endpoint exists.
+    val faqs = rememberLoad { ServiceLocator.support.getFaqs() }
+    val filter: (List<FaqItem>) -> List<FaqItem> = { all ->
+        if (needle.isEmpty()) all
+        else all.filter {
             it.question.lowercase().contains(needle) || it.answer.lowercase().contains(needle)
         }
     }
@@ -118,18 +128,21 @@ fun HelpScreen() {
                 // results a screen away from the query are not search results.
                 if (searching) {
                     Spacer(Modifier.height(TazSpace.lg))
-                    if (results.isEmpty()) {
-                        EmptyState(
-                            emoji = "🔍",
-                            title = "No help topics match",
-                            body = "Try a different word, or message us on WhatsApp",
-                            actionLabel = "Message us on WhatsApp",
-                            onAction = openWhatsApp
-                        )
-                    } else {
-                        SectionHeader("Matching topics")
-                        FaqCard(results, expandedQuestion) { q ->
-                            expandedQuestion = if (expandedQuestion == q) null else q
+                    FaqContent(faqs) { all ->
+                        val results = filter(all)
+                        if (results.isEmpty()) {
+                            EmptyState(
+                                emoji = "🔍",
+                                title = "No help topics match",
+                                body = "Try a different word, or message us on WhatsApp",
+                                actionLabel = "Message us on WhatsApp",
+                                onAction = openWhatsApp
+                            )
+                        } else {
+                            SectionHeader("Matching topics")
+                            FaqCard(results, expandedQuestion) { q ->
+                                expandedQuestion = if (expandedQuestion == q) null else q
+                            }
                         }
                     }
                 }
@@ -221,8 +234,10 @@ fun HelpScreen() {
                 if (!searching) {
                     Spacer(Modifier.height(TazSpace.lg))
                     SectionHeader("Frequently asked")
-                    FaqCard(results, expandedQuestion) { q ->
-                        expandedQuestion = if (expandedQuestion == q) null else q
+                    FaqContent(faqs) { all ->
+                        FaqCard(all, expandedQuestion) { q ->
+                            expandedQuestion = if (expandedQuestion == q) null else q
+                        }
                     }
                 }
 
@@ -433,4 +448,29 @@ private fun HelpMenuDivider() {
             .height(1.dp)
             .background(TazColors.CardBorder)
     )
+}
+
+/**
+ * Loading / error / content for the FAQ regions.
+ *
+ * Deliberately NOT "treat a failure as an empty list": an empty FAQ list and a
+ * support service that is down are different things, and only one of them is
+ * the customer's problem to retry.
+ */
+@Composable
+private fun FaqContent(
+    handle: LoadHandle<List<FaqItem>>,
+    content: @Composable (List<FaqItem>) -> Unit
+) {
+    when (val state = handle.state) {
+        is UiState.Loading -> Column(
+            Modifier.fillMaxWidth().padding(horizontal = TazSpace.gutter),
+            verticalArrangement = Arrangement.spacedBy(TazSpace.sm)
+        ) {
+            repeat(3) { SkeletonBlock(height = 44.dp) }
+        }
+        is UiState.Failure -> ErrorState(state.error, onRetry = { handle.retry() })
+        is UiState.Empty -> content(emptyList())
+        is UiState.Success -> content(state.data)
+    }
 }

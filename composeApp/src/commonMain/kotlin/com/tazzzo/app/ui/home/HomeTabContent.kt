@@ -54,6 +54,7 @@ import com.tazzzo.app.data.model.Category
 import com.tazzzo.app.data.model.Product
 import com.tazzzo.app.data.model.PromoBanner
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.data.repository.Taxonomy
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -130,7 +131,7 @@ fun HomeTabContent() {
         val pastOrders = ServiceLocator.orders.getOrders()
         HomeFeed(
             banners = catalog.getBanners(),
-            categories = catalog.getCategories(),
+            categories = Taxonomy.categories(catalog),
             rails = mapOf(
                 "Bestsellers" to catalog.getBestsellers(),
                 "Snacks & Munchies" to catalog.getProducts("munchies"),

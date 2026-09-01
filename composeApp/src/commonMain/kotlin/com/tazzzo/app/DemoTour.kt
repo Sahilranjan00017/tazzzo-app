@@ -2,7 +2,6 @@ package com.tazzzo.app
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import com.tazzzo.app.data.MockCatalog
 import com.tazzzo.app.data.model.PaymentMethodKind
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.order.OrderPlacement
@@ -62,7 +61,7 @@ fun DemoTourRunner() {
         delay(2_500)                                    // t≈19s category two-pane
 
         // Add items → cart bar + steppers.
-        MockCatalog.productsFor("meat").take(2).forEach { p ->
+        ServiceLocator.catalog.getProducts("meat").take(2).forEach { p ->
             app.addToCart(p); app.addToCart(p)
         }
         delay(2_000)                                    // t≈21s ADD steppers + cart bar

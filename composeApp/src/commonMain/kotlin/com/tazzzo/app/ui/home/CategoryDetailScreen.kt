@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
-import com.tazzzo.app.data.MockCatalog
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.data.repository.Taxonomy
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.theme.TazType
@@ -45,6 +45,7 @@ import com.tazzzo.app.ui.common.applyFilters
 import com.tazzzo.app.ui.common.ProductCardSkeleton
 import com.tazzzo.app.ui.common.StateHost
 import com.tazzzo.app.ui.common.TazTopBar
+import com.tazzzo.app.ui.state.UiState
 import com.tazzzo.app.ui.state.rememberLoad
 
 // --- two-pane geometry -------------------------------------------------------
@@ -61,9 +62,15 @@ private val Hairline = 1.dp
 @Composable
 fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
     val app = LocalAppState.current
-    val category = remember(categoryId) {
-        MockCatalog.categories.find { it.id == categoryId } ?: MockCatalog.categories.first()
+    // Taxonomy comes from the repository, not from the fixtures. Every route
+    // into this screen (home tab, categories tab, search) has already warmed
+    // the taxonomy cache, so the title and rail normally paint on first frame;
+    // the load below is the cold-start path.
+    val taxonomy = rememberLoad(categoryId) {
+        Taxonomy.categories().find { it.id == categoryId }
     }
+    val category = (taxonomy.state as? UiState.Success)?.data
+        ?: Taxonomy.cachedCategory(categoryId)
 
     var selectedSub by remember { mutableStateOf(initialSubcategoryId) } // null = All
     var filters by remember { mutableStateOf(ProductFilters()) }
@@ -72,14 +79,14 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
 
     // Keyed on the selected subcategory: switching aisles re-runs the load and
     // gives loading / empty / error / retry for free.
-    val products = rememberLoad(category.id, selectedSub) {
-        ServiceLocator.catalog.getProducts(category.id, selectedSub)
+    val products = rememberLoad(categoryId, selectedSub) {
+        ServiceLocator.catalog.getProducts(categoryId, selectedSub)
     }
 
     Box(Modifier.fillMaxSize().background(TazColors.Cream)) {
         Column(Modifier.fillMaxSize()) {
             TazTopBar(
-                title = category.name,
+                title = category?.name ?: "",
                 onBack = { app.back() },
                 trailing = {
                     // 44dp minimum touch target + a label for screen readers.
@@ -113,23 +120,25 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
                             )
                         }
                 ) {
-                    item {
-                        SidebarEntry(
-                            emoji = category.emoji,
-                            name = "All",
-                            tint = Color(category.tint),
-                            selected = selectedSub == null,
-                            onClick = { selectedSub = null }
-                        )
-                    }
-                    items(category.subcategories, key = { it.id }) { sub ->
-                        SidebarEntry(
-                            emoji = sub.emoji,
-                            name = sub.name,
-                            tint = Color(category.tint),
-                            selected = selectedSub == sub.id,
-                            onClick = { selectedSub = sub.id }
-                        )
+                    if (category != null) {
+                        item {
+                            SidebarEntry(
+                                emoji = category.emoji,
+                                name = "All",
+                                tint = Color(category.tint),
+                                selected = selectedSub == null,
+                                onClick = { selectedSub = null }
+                            )
+                        }
+                        items(category.subcategories, key = { it.id }) { sub ->
+                            SidebarEntry(
+                                emoji = sub.emoji,
+                                name = sub.name,
+                                tint = Color(category.tint),
+                                selected = selectedSub == sub.id,
+                                onClick = { selectedSub = sub.id }
+                            )
+                        }
                     }
                 }
 

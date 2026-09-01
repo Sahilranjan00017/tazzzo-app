@@ -45,7 +45,7 @@ interface CoinRepository {
 // Mock implementations (in-memory, small delay to simulate the network)
 // ---------------------------------------------------------------------------
 
-private const val FAKE_LATENCY_MS = 350L
+internal const val FAKE_LATENCY_MS = 350L
 
 class MockCatalogRepository : CatalogRepository {
     private val engine by lazy { SearchEngine(MockCatalog.products, MockCatalog.categories) }
@@ -165,4 +165,5 @@ object ServiceLocator {
     val coins: CoinRepository = MockCoinRepository()
     val addresses: AddressRepository = MockAddressRepository()
     val checkout: CheckoutRepository = MockCheckoutRepository(catalog, orders)
+    val support: SupportRepository = MockSupportRepository()
 }

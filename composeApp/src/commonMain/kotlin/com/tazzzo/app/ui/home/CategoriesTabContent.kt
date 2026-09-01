@@ -27,6 +27,7 @@ import androidx.compose.ui.zIndex
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.data.repository.Taxonomy
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazRadius
 import com.tazzzo.app.theme.TazSpace
@@ -45,7 +46,7 @@ private val RowGap: Dp = 12.dp
 @Composable
 fun CategoriesTabContent() {
     val app = LocalAppState.current
-    val categories = rememberLoad { ServiceLocator.catalog.getCategories() }
+    val categories = rememberLoad { Taxonomy.categories() }
 
     Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
         // ----- Header: a brand bar, same weight as home's -------------------

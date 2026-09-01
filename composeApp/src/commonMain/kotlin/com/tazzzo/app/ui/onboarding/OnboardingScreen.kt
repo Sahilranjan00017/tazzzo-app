@@ -58,8 +58,6 @@ import com.tazzzo.app.Screen
 import com.tazzzo.app.config.AppConfig
 import com.tazzzo.app.config.BrandCopy
 import com.tazzzo.app.config.DeliveryCopy
-import com.tazzzo.app.data.MockCatalog
-import com.tazzzo.app.data.model.Category
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
@@ -67,10 +65,11 @@ import com.tazzzo.app.theme.TazRadius
 import com.tazzzo.app.theme.TazSize
 import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
+import com.tazzzo.app.ui.common.CategoryArtTile
+import com.tazzzo.app.ui.common.categoryArtTiles
 import com.tazzzo.app.ui.common.LogoImage
 import com.tazzzo.app.ui.common.MarqueeRow
 import com.tazzzo.app.ui.common.PillButton
-import com.tazzzo.app.ui.common.categoryArtFor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -142,8 +141,11 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
         }
     }
 
-    val rowOne = remember { MockCatalog.categories.take(10) }
-    val rowTwo = remember { MockCatalog.categories.drop(10) }
+    // Decorative brand wall. Deliberately drawn from the bundled art table, not
+    // from CatalogRepository: this is the pre-auth screen and it must render
+    // instantly, offline, with no failure state. Nothing here is merchandise.
+    val rowOne = remember { categoryArtTiles.take(10) }
+    val rowTwo = remember { categoryArtTiles.drop(10) }
 
     Column(
         Modifier
@@ -541,25 +543,19 @@ internal fun tazFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.color
 
 /** One photographic tile in the entry photo band. */
 @Composable
-private fun WallTile(cat: Category) {
+private fun WallTile(tile: CategoryArtTile) {
     Box(
         Modifier
             .size(tileSize)
             .clip(TazRadius.tile)
-            .background(Color(cat.tint))
+            .background(Color(tile.tint))
     ) {
-        val art = categoryArtFor(cat.id)
-        if (art != null) {
-            Image(
-                painter = painterResource(art),
-                contentDescription = cat.name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            // Emoji here is CONTENT (the category itself), never UI chrome.
-            Text(cat.emoji, fontSize = 40.sp, modifier = Modifier.align(Alignment.Center))
-        }
+        Image(
+            painter = painterResource(tile.art),
+            contentDescription = tile.label,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
         // Subtle inner bottom scrim for depth.
         Box(
             Modifier.matchParentSize().background(

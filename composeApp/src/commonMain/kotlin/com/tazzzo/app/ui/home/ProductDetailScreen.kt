@@ -38,6 +38,7 @@ import com.tazzzo.app.config.DeliveryCopy
 import com.tazzzo.app.data.model.Availability
 import com.tazzzo.app.data.model.Product
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.data.repository.Taxonomy
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -78,7 +79,7 @@ fun ProductDetailScreen(productId: String) {
             val similar = ServiceLocator.catalog
                 .getProducts(product.categoryId)
                 .filter { it.id != product.id }
-            val categoryName = ServiceLocator.catalog.getCategories()
+            val categoryName = Taxonomy.categories()
                 .find { it.id == product.categoryId }?.name
             ProductDetailData(product, similar, categoryName)
         }

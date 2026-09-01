@@ -56,7 +56,6 @@ import com.tazzzo.app.Screen
 import com.tazzzo.app.config.AppConfig
 import com.tazzzo.app.config.BrandCopy
 import com.tazzzo.app.config.DeliveryCopy
-import com.tazzzo.app.data.MockCatalog
 import com.tazzzo.app.data.model.Availability
 import com.tazzzo.app.data.model.Category
 import com.tazzzo.app.data.model.Product
@@ -561,9 +560,6 @@ fun QuantityStepper(product: Product, modifier: Modifier = Modifier) {
     }
 }
 
-fun categoryTintOf(categoryId: String): Color =
-    MockCatalog.categories.find { it.id == categoryId }?.let { Color(it.tint) } ?: TazColors.Cream
-
 @Composable
 fun ProductCard(product: Product, modifier: Modifier = Modifier) {
     val app = LocalAppState.current
@@ -759,27 +755,55 @@ fun BoxScope.CartBar() {
 // v2: photography tiles, hero banner, guided-target anchors
 // ---------------------------------------------------------------------------
 
-private val categoryArt: Map<String, DrawableResource> = mapOf(
-    "fruits" to Res.drawable.cat_fruits,
-    "dairy" to Res.drawable.cat_dairy,
-    "atta" to Res.drawable.cat_atta,
-    "oil" to Res.drawable.cat_oil,
-    "meat" to Res.drawable.cat_meat,
-    "munchies" to Res.drawable.cat_munchies,
-    "drinks" to Res.drawable.cat_drinks,
-    "tea" to Res.drawable.cat_tea,
-    "instant" to Res.drawable.cat_instant,
-    "sweet" to Res.drawable.cat_sweet,
-    "bakery" to Res.drawable.cat_bakery,
-    "personal" to Res.drawable.cat_personal,
-    "skincare" to Res.drawable.cat_skincare,
-    "pharma" to Res.drawable.cat_pharma,
-    "baby" to Res.drawable.cat_baby,
-    "cleaning" to Res.drawable.cat_cleaning,
-    "home" to Res.drawable.cat_home,
-    "pet" to Res.drawable.cat_pet,
-    "paan" to Res.drawable.cat_paan
+/**
+ * One category tile: the bundled photograph plus the minimum display data a
+ * decorative surface needs to draw it.
+ *
+ * This is a DESIGN ASSET table, not catalogue data. It exists so the pre-auth
+ * brand wall on the login screen can render instantly with no network call and
+ * no failure mode — a login screen that waits on the catalogue service, or
+ * empties out when it is down, is a worse login screen. Everything that sells
+ * a product (names, prices, stock, taxonomy) still comes from
+ * CatalogRepository; nothing here is shown as merchandise.
+ *
+ * The photographs are openly-licensed Wikimedia Commons placeholders
+ * (docs/IMAGE_ATTRIBUTIONS.md) and are due for replacement before launch.
+ *
+ * CategoryArtTilesTest asserts this table stays aligned with the catalogue
+ * taxonomy, so the two cannot silently drift apart.
+ */
+data class CategoryArtTile(
+    val id: String,
+    val label: String,
+    val tint: Long,
+    val art: DrawableResource
 )
+
+val categoryArtTiles: List<CategoryArtTile> = listOf(
+    CategoryArtTile("fruits", "Vegetables & Fruits", 0xFFE8F5E9, Res.drawable.cat_fruits),
+    CategoryArtTile("dairy", "Dairy, Bread & Eggs", 0xFFFFF8E1, Res.drawable.cat_dairy),
+    CategoryArtTile("atta", "Atta, Rice & Dal", 0xFFFFF3E0, Res.drawable.cat_atta),
+    CategoryArtTile("oil", "Oil, Masala & Dry Fruits", 0xFFFFFDE7, Res.drawable.cat_oil),
+    CategoryArtTile("meat", "Chicken, Meat & Fish", 0xFFFFEBEE, Res.drawable.cat_meat),
+    CategoryArtTile("munchies", "Munchies & Snacks", 0xFFFFF3E0, Res.drawable.cat_munchies),
+    CategoryArtTile("drinks", "Cold Drinks & Juices", 0xFFE3F2FD, Res.drawable.cat_drinks),
+    CategoryArtTile("tea", "Tea, Coffee & More", 0xFFEFEBE9, Res.drawable.cat_tea),
+    CategoryArtTile("instant", "Instant & Frozen Food", 0xFFFCE4EC, Res.drawable.cat_instant),
+    CategoryArtTile("sweet", "Sweet Tooth", 0xFFF3E5F5, Res.drawable.cat_sweet),
+    CategoryArtTile("bakery", "Bakery & Biscuits", 0xFFFFF8E1, Res.drawable.cat_bakery),
+    CategoryArtTile("personal", "Bath & Body", 0xFFE0F7FA, Res.drawable.cat_personal),
+    CategoryArtTile("skincare", "Skin & Face Care", 0xFFFCE4EC, Res.drawable.cat_skincare),
+    CategoryArtTile("pharma", "Pharma & Wellness", 0xFFE8F5E9, Res.drawable.cat_pharma),
+    CategoryArtTile("baby", "Baby Care", 0xFFE3F2FD, Res.drawable.cat_baby),
+    CategoryArtTile("cleaning", "Cleaning Essentials", 0xFFE8F5E9, Res.drawable.cat_cleaning),
+    CategoryArtTile("home", "Home & Office", 0xFFFFF3E0, Res.drawable.cat_home),
+    CategoryArtTile("pet", "Pet Care", 0xFFEFEBE9, Res.drawable.cat_pet),
+    CategoryArtTile("paan", "Paan Corner", 0xFFE8F5E9, Res.drawable.cat_paan)
+)
+
+private val categoryArt: Map<String, DrawableResource> =
+    categoryArtTiles.associate { it.id to it.art }
+
 
 fun categoryArtFor(categoryId: String): DrawableResource? = categoryArt[categoryId]
 
