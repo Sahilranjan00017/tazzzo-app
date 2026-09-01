@@ -53,6 +53,12 @@ import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.ui.common.CartBar
 import com.tazzzo.app.ui.common.EmptyState
+import kotlinx.coroutines.CancellationException
+import com.tazzzo.app.ui.state.toLoadError
+import com.tazzzo.app.ui.state.rememberLoad
+import com.tazzzo.app.ui.state.UiState
+import com.tazzzo.app.ui.state.LoadError
+import com.tazzzo.app.ui.common.ErrorState
 import com.tazzzo.app.ui.common.FilterBar
 import com.tazzzo.app.ui.common.MicButton
 import com.tazzzo.app.ui.common.PillButton
@@ -82,28 +88,47 @@ fun SearchScreen() {
     var searching by remember { mutableStateOf(false) }
     /** The query whose results are currently on screen — "" until one settles. */
     var searchedQuery by remember { mutableStateOf("") }
-    var bestsellers by remember { mutableStateOf<List<Product>>(emptyList()) }
     var filters by remember { mutableStateOf(ProductFilters()) }
     var showSortSheet by remember { mutableStateOf(false) }
+    /** Set when the search itself failed. Distinct from "no results". */
+    var searchError by remember { mutableStateOf<LoadError?>(null) }
+    var searchAttempt by remember { mutableStateOf(0) }
 
-    LaunchedEffect(Unit) { bestsellers = ServiceLocator.catalog.getBestsellers() }
+    // Idle-state rail only. It loads independently so a bestsellers failure
+    // never blocks searching.
+    val bestsellers = rememberLoad { ServiceLocator.catalog.getBestsellers() }
 
-    LaunchedEffect(query) {
+    LaunchedEffect(query, searchAttempt) {
         if (query.isBlank()) {
             results = emptyList()
             searchedQuery = ""
             searching = false
+            searchError = null
         } else {
             // Debounce silently; the previous results stay on screen and a thin
             // progress bar under the header signals the load — no spinner flash.
+            // The deliberate exception to StateHost: swapping to a full loading
+            // state on every keystroke is the spinner flash this screen was
+            // designed to avoid. The error model is still the shared one.
             delay(250)
             searching = true
-            results = ServiceLocator.catalog.search(query)
-            searchedQuery = query
-            searching = false
-            filters = ProductFilters()
-            // Record once per settled (debounced) query that produced results.
-            if (results.isNotEmpty()) app.recordSearch(query)
+            searchError = null
+            try {
+                results = ServiceLocator.catalog.search(query)
+                searchedQuery = query
+                filters = ProductFilters()
+                // Record once per settled (debounced) query that produced results.
+                if (results.isNotEmpty()) app.recordSearch(query)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (t: Throwable) {
+                // A failed search must never look like "nothing matched".
+                searchError = t.toLoadError()
+                results = emptyList()
+                searchedQuery = query
+            } finally {
+                searching = false
+            }
         }
     }
 
@@ -150,12 +175,21 @@ fun SearchScreen() {
                     )
                     Spacer(Modifier.height(SectionGap))
                     // Honest label: this rail is getBestsellers — we have no trend data.
-                    ProductRail("Bestsellers", bestsellers)
+                    (bestsellers.state as? UiState.Success)?.data?.let { rail ->
+                        ProductRail("Bestsellers", rail)
+                    }
                     Spacer(Modifier.height(TazSpace.cartBarClearance))
                 }
 
                 // ----- First query still settling: keep the area calm -----
                 searchedQuery.isEmpty() -> Box(Modifier.fillMaxSize())
+
+                // ----- The search call itself failed -----
+                searchError != null -> ErrorState(
+                    error = searchError!!,
+                    onRetry = { searchAttempt++ },
+                    modifier = Modifier.fillMaxSize()
+                )
 
                 // ----- No results (for the settled query) -----
                 results.isEmpty() -> Column(

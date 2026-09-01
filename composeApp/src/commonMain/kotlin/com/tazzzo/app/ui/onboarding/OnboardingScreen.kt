@@ -70,6 +70,8 @@ import com.tazzzo.app.ui.common.categoryArtTiles
 import com.tazzzo.app.ui.common.LogoImage
 import com.tazzzo.app.ui.common.MarqueeRow
 import com.tazzzo.app.ui.common.PillButton
+import kotlinx.coroutines.CancellationException
+import com.tazzzo.app.ui.state.toLoadError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
@@ -127,7 +129,11 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
     var otp by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var verifying by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf(false) }
+    // Was a bare Boolean meaning "the server said the OTP was wrong". It now
+    // carries the message, because an unreachable auth service and a rejected
+    // OTP are different things and the customer must not be told they typed it
+    // wrong when the network failed. Null = no error.
+    var errorText by remember { mutableStateOf<String?>(null) }
     var resendIn by remember { mutableStateOf(30) }
 
     // Resend countdown: ticks once a second while the OTP step is showing.
@@ -285,6 +291,20 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             colors = tazFieldColors()
                         )
+                        // Only rendered when the OTP request actually failed.
+                        // Before this, a failed request silently did nothing and
+                        // the button sat on "Sending OTP…" forever.
+                        errorText?.let { message ->
+                            Spacer(Modifier.height(TazSpace.sm))
+                            Text(
+                                message,
+                                fontSize = TazType.captionSize,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TazColors.Danger,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                         Spacer(Modifier.height(TazSpace.md))
                         PillButton(
                             text = if (sending) "Sending OTP…" else "Continue",
@@ -292,11 +312,20 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                 if (!sending) {
                                     scope.launch {
                                         sending = true
-                                        ServiceLocator.auth.requestOtp(phone)
-                                        sending = false
-                                        otp = ""
-                                        error = false
-                                        step = 2
+                                        errorText = null
+                                        try {
+                                            ServiceLocator.auth.requestOtp(phone)
+                                            otp = ""
+                                            step = 2
+                                        } catch (cancellation: CancellationException) {
+                                            throw cancellation
+                                        } catch (t: Throwable) {
+                                            // Do not advance to the OTP step for
+                                            // a code that was never sent.
+                                            errorText = t.toLoadError().message
+                                        } finally {
+                                            sending = false
+                                        }
                                     }
                                 }
                             },
@@ -328,7 +357,7 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                     .clickable {
                                         step = 1
                                         otp = ""
-                                        error = false
+                                        errorText = null
                                     }
                                     .padding(horizontal = TazSpace.xs, vertical = TazSpace.xxs)
                             )
@@ -357,10 +386,10 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             colors = tazFieldColors()
                         )
-                        if (error) {
+                        errorText?.let { message ->
                             Spacer(Modifier.height(TazSpace.sm))
                             Text(
-                                "Invalid OTP, try again",
+                                message,
                                 fontSize = TazType.captionSize,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TazColors.Danger,
@@ -382,7 +411,16 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                         .defaultMinSize(minHeight = TazSize.touchTarget)
                                         .clip(TazRadius.chip)
                                         .clickable {
-                                            scope.launch { ServiceLocator.auth.requestOtp(phone) }
+                                            scope.launch {
+                                                errorText = null
+                                                try {
+                                                    ServiceLocator.auth.requestOtp(phone)
+                                                } catch (cancellation: CancellationException) {
+                                                    throw cancellation
+                                                } catch (t: Throwable) {
+                                                    errorText = t.toLoadError().message
+                                                }
+                                            }
                                             resendIn = 30
                                         }
                                         .padding(horizontal = TazSpace.md),
@@ -404,14 +442,22 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                 if (!verifying) {
                                     scope.launch {
                                         verifying = true
-                                        val u = ServiceLocator.auth.verifyOtp(phone, otp)
-                                        verifying = false
-                                        if (u != null) {
-                                            app.user = u
-                                            app.requestGuidedTourIfFirstTime()
-                                            app.resetTo(Screen.Home)
-                                        } else {
-                                            error = true
+                                        errorText = null
+                                        try {
+                                            val u = ServiceLocator.auth.verifyOtp(phone, otp)
+                                            if (u != null) {
+                                                app.user = u
+                                                app.requestGuidedTourIfFirstTime()
+                                                app.resetTo(Screen.Home)
+                                            } else {
+                                                errorText = "Invalid OTP, try again"
+                                            }
+                                        } catch (cancellation: CancellationException) {
+                                            throw cancellation
+                                        } catch (t: Throwable) {
+                                            errorText = t.toLoadError().message
+                                        } finally {
+                                            verifying = false
                                         }
                                     }
                                 }

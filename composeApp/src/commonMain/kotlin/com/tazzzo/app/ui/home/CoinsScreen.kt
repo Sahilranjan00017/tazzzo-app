@@ -43,6 +43,8 @@ import com.tazzzo.app.ui.common.CartBar
 import com.tazzzo.app.ui.common.SectionHeader
 import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.ui.common.TazTopBar
+import com.tazzzo.app.ui.state.rememberLoad
+import com.tazzzo.app.ui.common.StateHost
 
 @Composable
 fun CoinsScreen() {
@@ -50,24 +52,29 @@ fun CoinsScreen() {
         Analytics.track(AnalyticsEvents.COIN_VIEW)
     }
     val app = LocalAppState.current
-    var balance by remember { mutableStateOf(0) }
-    var ledger by remember { mutableStateOf<List<CoinTransaction>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        loading = true
-        balance = ServiceLocator.coins.getBalance()
-        ledger = ServiceLocator.coins.getLedger()
-        loading = false
+    // Balance and ledger are one screen and must agree, so they load together:
+    // a balance rendered beside a ledger that failed to load is worse than an
+    // honest error. An empty ledger is NOT an empty screen — a customer with a
+    // balance and no history still has a balance — so emptiness is decided by
+    // the pair never being present, not by the list being short.
+    val coins = rememberLoad<Pair<Int, List<CoinTransaction>>>(
+        isEmpty = { false }
+    ) {
+        ServiceLocator.coins.getBalance() to ServiceLocator.coins.getLedger()
     }
 
     Box(Modifier.fillMaxSize().background(TazColors.Cream)) {
         Column(Modifier.fillMaxSize()) {
             TazTopBar("Tazzzo Coins", onBack = { app.back() })
-            if (loading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = TazColors.Green)
+            StateHost(
+                handle = coins,
+                modifier = Modifier.fillMaxSize(),
+                loading = {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = TazColors.Green)
+                    }
                 }
-            } else {
+            ) { (balance, ledger) ->
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                         .padding(bottom = TazSpace.cartBarClearance)

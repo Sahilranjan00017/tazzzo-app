@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.sp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.repository.ServiceLocator
+import kotlinx.coroutines.CancellationException
+import com.tazzzo.app.ui.state.toLoadError
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazRadius
 import com.tazzzo.app.theme.TazSize
@@ -158,6 +160,20 @@ fun LoginScreen() {
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                 colors = tazFieldColors()
                             )
+                            // Only rendered when the OTP request actually
+                            // failed. Before this, a failed request silently
+                            // did nothing and the spinner never stopped.
+                            error?.let { message ->
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    message,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TazColors.Danger,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                             Spacer(Modifier.height(18.dp))
                             if (sending) {
                                 Box(
@@ -176,11 +192,21 @@ fun LoginScreen() {
                                         if (!sending) {
                                             scope.launch {
                                                 sending = true
-                                                ServiceLocator.auth.requestOtp(phone)
-                                                sending = false
                                                 error = null
-                                                otp = ""
-                                                step = 2
+                                                try {
+                                                    ServiceLocator.auth.requestOtp(phone)
+                                                    otp = ""
+                                                    step = 2
+                                                } catch (cancellation: CancellationException) {
+                                                    throw cancellation
+                                                } catch (t: Throwable) {
+                                                    // Never advance to the OTP
+                                                    // step for a code that was
+                                                    // never sent.
+                                                    error = t.toLoadError().message
+                                                } finally {
+                                                    sending = false
+                                                }
                                             }
                                         }
                                     },
@@ -264,7 +290,16 @@ fun LoginScreen() {
                                             .defaultMinSize(minHeight = 44.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .clickable {
-                                                scope.launch { ServiceLocator.auth.requestOtp(phone) }
+                                                scope.launch {
+                                                    error = null
+                                                    try {
+                                                        ServiceLocator.auth.requestOtp(phone)
+                                                    } catch (cancellation: CancellationException) {
+                                                        throw cancellation
+                                                    } catch (t: Throwable) {
+                                                        error = t.toLoadError().message
+                                                    }
+                                                }
                                                 resendIn = 30
                                             }
                                             .padding(horizontal = 12.dp),
@@ -297,15 +332,25 @@ fun LoginScreen() {
                                         if (otp.length == 4 && !verifying) {
                                             scope.launch {
                                                 verifying = true
-                                                val profile =
-                                                    ServiceLocator.auth.verifyOtp(phone, otp)
-                                                verifying = false
-                                                if (profile != null) {
-                                                    app.user = profile
-                                                    app.requestGuidedTourIfFirstTime()
-                                                    app.resetTo(Screen.Home)
-                                                } else {
-                                                    error = "Invalid OTP, try again"
+                                                error = null
+                                                try {
+                                                    val profile =
+                                                        ServiceLocator.auth.verifyOtp(phone, otp)
+                                                    if (profile != null) {
+                                                        app.user = profile
+                                                        app.requestGuidedTourIfFirstTime()
+                                                        app.resetTo(Screen.Home)
+                                                    } else {
+                                                        error = "Invalid OTP, try again"
+                                                    }
+                                                } catch (cancellation: CancellationException) {
+                                                    // A thrown auth error is not
+                                                    // a wrong OTP; say what it is.
+                                                    throw cancellation
+                                                } catch (t: Throwable) {
+                                                    error = t.toLoadError().message
+                                                } finally {
+                                                    verifying = false
                                                 }
                                             }
                                         }

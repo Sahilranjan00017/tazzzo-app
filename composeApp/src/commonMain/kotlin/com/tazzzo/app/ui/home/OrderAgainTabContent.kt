@@ -43,19 +43,18 @@ import com.tazzzo.app.ui.common.EmojiBox
 import com.tazzzo.app.ui.common.PillButton
 import com.tazzzo.app.ui.common.ProductRail
 import com.tazzzo.app.ui.common.TazIcon
+import com.tazzzo.app.ui.state.UiState
+import com.tazzzo.app.ui.state.rememberLoad
+import com.tazzzo.app.ui.common.StateHost
 
 /** "Order Again" bottom tab — past orders with one-tap reorder. */
 @Composable
 fun OrderAgainTabContent() {
-    var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
-    var bestsellers by remember { mutableStateOf<List<Product>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        loading = true
-        orders = ServiceLocator.orders.getOrders()
-        bestsellers = ServiceLocator.catalog.getBestsellers()
-        loading = false
-    }
+    // Orders drive the screen, so they own its load state. Bestsellers are a
+    // secondary rail: it loads separately and, if it fails, the rail is simply
+    // absent rather than taking the whole tab down with it.
+    val orders = rememberLoad { ServiceLocator.orders.getOrders() }
+    val bestsellers = rememberLoad { ServiceLocator.catalog.getBestsellers() }
 
     Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
         // Header
@@ -74,25 +73,32 @@ fun OrderAgainTabContent() {
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder))
 
-        when {
-            loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = TazColors.Green)
-            }
-
-            orders.isEmpty() -> EmptyOrderAgainState()
-
-            else -> LazyColumn(
+        StateHost(
+            handle = orders,
+            modifier = Modifier.fillMaxSize(),
+            loading = {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = TazColors.Green)
+                }
+            },
+            empty = { EmptyOrderAgainState() }
+        ) { orderList ->
+            LazyColumn(
                 Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = TazSpace.md, bottom = TazSpace.cartBarClearance
                 ),
                 verticalArrangement = Arrangement.spacedBy(TazSpace.md)
             ) {
-                items(orders, key = { it.id }) { order ->
+                items(orderList, key = { it.id }) { order ->
                     OrderAgainCard(order, Modifier.padding(horizontal = TazSpace.gutter))
                 }
                 item { Spacer(Modifier.height(TazSpace.sm)) }
-                item { ProductRail("Bestsellers you may need", bestsellers) }
+                item {
+                    (bestsellers.state as? UiState.Success)?.data?.let { rail ->
+                        ProductRail("Bestsellers you may need", rail)
+                    }
+                }
             }
         }
     }

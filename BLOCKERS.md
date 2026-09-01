@@ -67,6 +67,13 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
 - [ ] Terms of Service & Privacy Policy pages (legal content required before
       launch — link affordance removed until real pages exist). ← arguably P0 at launch.
 - [ ] Splash warm-start: prefetch home data during the logo beat.
+- [ ] OfflineBanner is built but not wired. Blocked on THREE things, recorded
+      2026-09-01: (a) no connectivity source exists — needs an expect/actual
+      ConnectivityObserver over ConnectivityManager / NWPathMonitor, verified on
+      physical devices; (b) a placement decision on frozen screens, which is the
+      design owner's call; (c) a policy decision on whether a global banner is
+      wanted at all, given that per-screen LoadError.Kind.Network already covers
+      the honest case and OS reachability lies about captive portals.
 - [ ] "India's first Voice Commerce" + "SAVE 8–20%" are founder-supplied claims,
       now config-sourced (BrandCopy). DECISION D6: substantiate or amend before launch.
 

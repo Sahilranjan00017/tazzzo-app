@@ -47,6 +47,8 @@ import com.tazzzo.app.ui.common.CartBar
 import com.tazzzo.app.ui.common.PillButton
 import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.ui.common.TazTopBar
+import com.tazzzo.app.ui.state.rememberLoad
+import com.tazzzo.app.ui.common.StateHost
 
 /**
  * The four states an order can be in. The model has exactly these — the UI
@@ -70,30 +72,32 @@ private fun itemsSummary(order: Order): String {
 @Composable
 fun OrdersScreen() {
     val app = LocalAppState.current
-    var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) {
-        loading = true
-        orders = ServiceLocator.orders.getOrders()
-        loading = false
-    }
+    // One shared load model: loading / empty / error+retry. Previously this was
+    // a bare LaunchedEffect with no try/catch, so a thrown network error would
+    // kill the coroutine and leave the screen spinning forever.
+    val orders = rememberLoad { ServiceLocator.orders.getOrders() }
 
     Box(Modifier.fillMaxSize().background(TazColors.Cream)) {
         Column(Modifier.fillMaxSize()) {
             TazTopBar("Your Orders", onBack = { app.back() })
-            when {
-                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = TazColors.Green)
-                }
-                orders.isEmpty() -> EmptyOrdersState()
-                else -> LazyColumn(
+            StateHost(
+                handle = orders,
+                modifier = Modifier.fillMaxSize(),
+                loading = {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = TazColors.Green)
+                    }
+                },
+                empty = { EmptyOrdersState() }
+            ) { list ->
+                LazyColumn(
                     contentPadding = PaddingValues(
                         start = TazSpace.gutter, end = TazSpace.gutter,
                         top = TazSpace.md, bottom = TazSpace.cartBarClearance
                     ),
                     verticalArrangement = Arrangement.spacedBy(TazSpace.md)
                 ) {
-                    items(orders, key = { it.id }) { order -> OrderCard(order) }
+                    items(list, key = { it.id }) { order -> OrderCard(order) }
                 }
             }
         }

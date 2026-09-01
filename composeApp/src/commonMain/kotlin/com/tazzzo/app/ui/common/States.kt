@@ -229,7 +229,29 @@ fun ErrorState(
     }
 }
 
-/** Thin persistent banner for connectivity loss. */
+/**
+ * Thin persistent banner for connectivity loss.
+ *
+ * DELIBERATELY NOT WIRED — and this is the exact dependency list, not a TODO.
+ * Three things are missing and none of them can be invented here:
+ *
+ *  1. A connectivity source. There is no HTTP client and no platform
+ *     reachability API in the project (no Ktor, no ConnectivityManager, no
+ *     NWPathMonitor). Wiring this needs an `expect/actual ConnectivityObserver`
+ *     — Android `ConnectivityManager.NetworkCallback`, iOS `NWPathMonitor` —
+ *     which is real platform work that must be verified on physical devices.
+ *  2. A placement decision. Where this banner sits, and whether it pushes
+ *     content or overlays it, is a change to frozen screens and belongs to the
+ *     design owner, not to integration work.
+ *  3. A policy decision. OS reachability reports "connected" for a captive
+ *     portal or a dead uplink. The honest signal is a failed request, which
+ *     LoadError.Kind.Network already carries per screen. Whether Tazzzo shows a
+ *     global banner at all, or keeps relying on per-screen error states, has
+ *     not been decided.
+ *
+ * Until all three are settled this stays unused rather than being driven by a
+ * fabricated signal. Tracked in BLOCKERS.md.
+ */
 @Composable
 fun OfflineBanner(modifier: Modifier = Modifier) {
     Row(

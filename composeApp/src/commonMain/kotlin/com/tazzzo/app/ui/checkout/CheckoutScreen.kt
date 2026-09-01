@@ -63,6 +63,10 @@ import com.tazzzo.app.theme.TazSize
 import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.ui.common.EmptyState
+import kotlinx.coroutines.CancellationException
+import com.tazzzo.app.ui.state.toLoadError
+import com.tazzzo.app.ui.state.LoadError
+import com.tazzzo.app.ui.common.ErrorState
 import com.tazzzo.app.ui.common.PillButton
 import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.ui.common.TazTopBar
@@ -91,17 +95,28 @@ fun CheckoutScreen() {
     val lines = app.cartLines()
     val bill = app.bill(lines)
 
-    // Revalidate the cart against live stock/prices on entry.
-    LaunchedEffect(Unit) {
-        session.validation = ServiceLocator.checkout.validateCart(app.cartLines())
-    }
+    // Revalidation is what stands between the customer and an order placed
+    // against stale stock or a stale price, so a thrown error here must be
+    // visible and retryable — never silent. If it were swallowed, `validation`
+    // would stay null, the CTA would stay disabled and the screen would sit on
+    // "Checking your cart…" forever with no way out.
+    var validationError by remember { mutableStateOf<LoadError?>(null) }
 
-    fun revalidate() {
+    suspend fun runValidation() {
+        validationError = null
         session.validation = null
-        scope.launch {
+        try {
             session.validation = ServiceLocator.checkout.validateCart(app.cartLines())
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (t: Throwable) {
+            validationError = t.toLoadError()
         }
     }
+
+    LaunchedEffect(Unit) { runValidation() }
+
+    fun revalidate() { scope.launch { runValidation() } }
 
     Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
         TazTopBar("Checkout", onBack = {
@@ -126,6 +141,11 @@ fun CheckoutScreen() {
             Modifier.weight(1f).verticalScroll(rememberScrollState())
                 .padding(TazSpace.screen)
         ) {
+            validationError?.let { error ->
+                ErrorState(error, onRetry = { revalidate() })
+                Spacer(Modifier.height(TazSpace.md))
+            }
+
             val validation = session.validation
             if (validation != null && !validation.ok) {
                 IssuesCard(
@@ -167,7 +187,7 @@ fun CheckoutScreen() {
             Column(
                 Modifier.fillMaxWidth().navigationBarsPadding().padding(TazSpace.gutter)
             ) {
-                if (session.validation == null) {
+                if (session.validation == null && validationError == null) {
                     Text(
                         "Checking your cart…",
                         fontSize = TazType.captionSize, color = TazColors.TextSecondary
@@ -696,13 +716,22 @@ private fun AddressStep(session: CheckoutSession) {
                                 formError = null
                                 scope.launch {
                                     saving = true
-                                    val added = ServiceLocator.addresses
-                                        .addAddress(label, line1, line2, pincode)
-                                    session.selectAddress(added)
-                                    saving = false
-                                    showForm = false
-                                    label = ""; line1 = ""; line2 = ""; pincode = ""
-                                    addresses.retry()
+                                    try {
+                                        val added = ServiceLocator.addresses
+                                            .addAddress(label, line1, line2, pincode)
+                                        session.selectAddress(added)
+                                        showForm = false
+                                        label = ""; line1 = ""; line2 = ""; pincode = ""
+                                        addresses.retry()
+                                    } catch (cancellation: CancellationException) {
+                                        throw cancellation
+                                    } catch (t: Throwable) {
+                                        // Keep the typed address on screen; the
+                                        // customer must not retype it.
+                                        formError = t.toLoadError().message
+                                    } finally {
+                                        saving = false
+                                    }
                                 }
                             }
                         },
