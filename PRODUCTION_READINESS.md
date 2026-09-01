@@ -33,6 +33,32 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 | Voice commerce | teaser only | n/a | ✅ renders | n/a | ❌ | ❌ | ❌ by design |
 
 ## Verification log (never remove a row — record how each was verified)
+
+- 2026-09-01 PRE-BACKEND PREPARATION — Wave 0. Project placed under git for the
+  first time; baseline commit "PRE-BACKEND BASELINE" records the verified state
+  (56 Kotlin files, 11,767 lines, 41 tests / 0 failures) as the rollback point.
+  DEFECT D-1 FIXED (money): the demo autopilot in DemoTour.kt placed real orders
+  through a hand-rolled copy of the checkout screen's logic and credited coins
+  WITHOUT the `!replayed` guard, so a replayed placement credited coins twice.
+  The earlier fix recorded on 2026-08-31 covered CheckoutScreen.kt only; the
+  duplicated logic was the actual defect. Both call sites now go through one
+  shared path, `order/OrderPlacement.kt`, where the guard is structural: all
+  once-per-order side effects live in a single private `applyFirstPlacement`.
+  Proven by 5 new tests (OrderPlacementTest): first placement credits exactly
+  once; a replayed placement credits zero more; failure-then-retry credits
+  exactly once and leaves the cart untouched; five repeated placements yield one
+  order id and one credit; an in-flight attempt never reaches the repository.
+  D-2 RESOLVED: data/remote/ApiConfig.kt carried its own endpoint sketch that
+  contradicted both contract documents and named a VOICE_SERVICE for a feature
+  with no implementation. Verified unreferenced by any source file, so no
+  functionality depended on it. Sketch removed; the file now points at
+  docs/BACKEND_INTEGRATION_READINESS.md (primary) and docs/BACKEND_CONTRACTS.md
+  (secondary) as the only contract authorities, and retains only the gateway
+  origin as the network seam.
+  D-3 RESOLVED: BLOCKERS.md said "30 domain tests" against an actual 41; count
+  corrected in place with an inline note rather than a silent rewrite.
+  Regression: 41 → 46 tests, 0 failures (XML-verified). No UI change; the
+  design freeze is intact and DESIGN_SPEC.md is untouched.
 - 2026-08-30 Android journey: launch → skip → tour → home → category → ADD ×2 →
   cart → checkout (address → slot → COD → review) → placed #TZ100484, +6 coins.
   Evidence: docs/screenshots/android/a1–a13. Emulator Pixel 7 / API 35 arm64.

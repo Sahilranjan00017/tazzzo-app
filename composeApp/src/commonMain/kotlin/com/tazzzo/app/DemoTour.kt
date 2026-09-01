@@ -3,10 +3,9 @@ package com.tazzzo.app
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import com.tazzzo.app.data.MockCatalog
-import com.tazzzo.app.data.model.OrderRequest
 import com.tazzzo.app.data.model.PaymentMethodKind
-import com.tazzzo.app.data.model.PlaceOrderResult
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.order.OrderPlacement
 import kotlinx.coroutines.delay
 
 /**
@@ -102,28 +101,17 @@ fun DemoTourRunner() {
         )
         delay(2_600)
 
-        // Place through the same contract the UI uses — same idempotency key.
-        session.placement = CheckoutSession.Placement.InFlight
-        val lines = app.cartLines()
-        val bill = app.bill(lines)
-        val result = ServiceLocator.checkout.placeOrder(
-            OrderRequest(
-                idempotencyKey = session.idempotencyKey,
-                lines = lines, bill = bill,
-                addressId = addresses.first().id,
-                addressText = addresses.first().label + " — " + addresses.first().line1,
-                slotId = session.slot!!.id, payment = PaymentMethodKind.COD
-            )
+        // Place through the SAME shared path the checkout screen uses, so the
+        // demo can never diverge from real placement semantics — including the
+        // replay guard that keeps a repeated placement from crediting coins
+        // twice. Do not hand-roll placement here again.
+        OrderPlacement.place(
+            app = app,
+            session = session,
+            address = addresses.first(),
+            slot = session.slot!!,
+            payment = PaymentMethodKind.COD
         )
-        if (result is PlaceOrderResult.Placed) {
-            ServiceLocator.coins.credit(bill.coinsEarned, "Order ${result.order.id} cashback")
-            app.user = app.user.copy(coinBalance = app.user.coinBalance + bill.coinsEarned)
-            app.lastOrder = result.order
-            app.clearCart()
-            app.checkout = null
-            app.resetTo(Screen.Home)
-            app.navigate(Screen.OrderSuccess(result.order.id))
-        }
         delay(2_500)                                    // order success
 
         app.resetTo(Screen.Home)

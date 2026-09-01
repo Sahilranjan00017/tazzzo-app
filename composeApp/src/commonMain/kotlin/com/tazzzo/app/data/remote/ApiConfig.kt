@@ -1,35 +1,40 @@
 package com.tazzzo.app.data.remote
 
 /**
- * Single place to wire the Tazzzo backend (JavaScript/Node microservices).
+ * Network host seam. **This file is NOT a backend contract.**
+ *
+ * The authoritative description of every endpoint, request and response shape
+ * lives in the documents, in this order of precedence:
+ *
+ *   1. `docs/BACKEND_INTEGRATION_READINESS.md`  — source of truth
+ *   2. `docs/BACKEND_CONTRACTS.md`              — earlier, narrower note
+ *
+ * This file previously carried its own "endpoint sketch" listing paths that
+ * disagreed with both documents (it had no addresses, payments, carts or
+ * serviceability service, and it named a `VOICE_SERVICE` for a feature that
+ * does not exist — the voice sheet is a dismiss-only "coming soon" card with
+ * no capture, no recognition and no waitlist). Three competing sources of
+ * truth is one more than the project can survive, so the sketch is gone.
+ * The endpoint table in the readiness report replaces it.
+ *
+ * Nothing referenced these constants at the time they were written; the first
+ * real consumer will be the `Remote*` repositories, which do not exist yet.
  *
  * When the backend is ready:
- *  1. Point these base URLs at your gateway / services.
- *  2. Implement the Remote* repositories in data/repository using a Ktor
- *     client (add `io.ktor:ktor-client-core` + `ktor-client-darwin` /
- *     `ktor-client-okhttp` in composeApp/build.gradle.kts).
- *  3. Swap the Mock* implementations in ServiceLocator for the Remote* ones.
+ *   1. Resolve the base URL from the build environment (see `AppEnvironment`).
+ *   2. Implement the `Remote*` repositories against the documented contract —
+ *      not against paths invented here.
+ *   3. Swap the `Mock*` implementations in `ServiceLocator`, keeping the mocks
+ *      as offline fallback, demo mode and test doubles.
  */
 object ApiConfig {
-    // API gateway (e.g. Express / NestJS gateway in front of the microservices)
-    const val GATEWAY = "https://api.tazzzo.in"
 
-    // Individual microservices behind the gateway
-    const val AUTH_SERVICE = "$GATEWAY/auth/v1"          // OTP login, tokens
-    const val CATALOG_SERVICE = "$GATEWAY/catalog/v1"    // categories, products, search
-    const val ORDER_SERVICE = "$GATEWAY/orders/v1"       // cart checkout, order tracking
-    const val COIN_SERVICE = "$GATEWAY/coins/v1"         // Tazzzo Coin balance & ledger
-    const val VOICE_SERVICE = "$GATEWAY/voice/v1"        // voice commerce (coming soon)
-    const val SUPPORT_SERVICE = "$GATEWAY/support/v1"    // help center, tickets
-
-    // Endpoint sketch the JS services should expose:
-    //   GET  /catalog/v1/categories
-    //   GET  /catalog/v1/categories/{id}/products?subcategory=
-    //   GET  /catalog/v1/search?q=
-    //   POST /auth/v1/otp/request        { phone }
-    //   POST /auth/v1/otp/verify         { phone, otp }
-    //   POST /orders/v1/orders           { lines[], addressId, payment }
-    //   GET  /orders/v1/orders?user=
-    //   GET  /coins/v1/balance
-    //   GET  /coins/v1/ledger
+    /**
+     * API gateway origin. Paths are owned by the contract documents and by the
+     * repository implementation that calls them, never by this object.
+     *
+     * No credentials, tokens or secrets belong in this file or anywhere else
+     * in source. See `data/local/SecureStore` for where auth material lives.
+     */
+    const val GATEWAY_BASE_URL: String = "https://api.tazzzo.in"
 }

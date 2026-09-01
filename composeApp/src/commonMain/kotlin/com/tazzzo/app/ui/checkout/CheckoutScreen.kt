@@ -50,14 +50,12 @@ import com.tazzzo.app.CheckoutSession
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.analytics.Analytics
 import com.tazzzo.app.analytics.AnalyticsEvents
-import com.tazzzo.app.Screen
 import com.tazzzo.app.TazzzoAppState
 import com.tazzzo.app.data.model.Address
 import com.tazzzo.app.data.model.CartIssue
-import com.tazzzo.app.data.model.OrderRequest
 import com.tazzzo.app.data.model.PaymentMethodKind
-import com.tazzzo.app.data.model.PlaceOrderResult
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.order.OrderPlacement
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -287,62 +285,20 @@ fun CheckoutScreen() {
                                 onClick = {
                                     if (!enabled) return@PillButton
                                     scope.launch {
-                                        if (session.placement is CheckoutSession.Placement.InFlight) return@launch
                                         val address = session.address ?: return@launch
                                         val slot = session.slot ?: return@launch
                                         val payment = session.payment ?: return@launch
-                                        session.placement = CheckoutSession.Placement.InFlight
-                                        Analytics.track(AnalyticsEvents.ORDER_ATTEMPTED)
-                                        val orderLines = app.cartLines()
-                                        val orderBill = app.bill(orderLines)
-                                        val res = ServiceLocator.checkout.placeOrder(
-                                            OrderRequest(
-                                                idempotencyKey = session.idempotencyKey,
-                                                lines = orderLines,
-                                                bill = orderBill,
-                                                addressId = address.id,
-                                                addressText = address.label + " — " + address.line1,
-                                                slotId = slot.id,
-                                                payment = payment
-                                            )
+                                        // Single shared placement path. It owns the
+                                        // in-flight guard, the analytics, and the
+                                        // replay-gated side effects, so this screen and
+                                        // the demo autopilot cannot drift apart again.
+                                        OrderPlacement.place(
+                                            app = app,
+                                            session = session,
+                                            address = address,
+                                            slot = slot,
+                                            payment = payment
                                         )
-                                        when (res) {
-                                            is PlaceOrderResult.Placed -> {
-                                                Analytics.track(
-                                                    AnalyticsEvents.ORDER_SUCCESS,
-                                                    mapOf("order_id" to res.order.id, "replayed" to res.replayed.toString())
-                                                )
-                                                // A replayed placement is the SAME order coming back
-                                                // (duplicate tap / retry after timeout). Crediting again
-                                                // would hand out coins twice for one purchase, so every
-                                                // side effect is gated on this being the first placement.
-                                                if (!res.replayed) {
-                                                    ServiceLocator.coins.credit(
-                                                        orderBill.coinsEarned, "Order ${res.order.id} cashback"
-                                                    )
-                                                    app.user = app.user.copy(
-                                                        coinBalance = app.user.coinBalance + orderBill.coinsEarned
-                                                    )
-                                                }
-                                                app.lastOrder = res.order
-                                                app.clearCart()
-                                                app.checkout = null
-                                                app.resetTo(Screen.Home)
-                                                app.navigate(Screen.OrderSuccess(res.order.id))
-                                            }
-                                            is PlaceOrderResult.Failed -> {
-                                                Analytics.track(
-                                                    AnalyticsEvents.ORDER_FAILURE,
-                                                    mapOf("retryable" to res.retryable.toString())
-                                                )
-                                                session.placement =
-                                                    CheckoutSession.Placement.Failed(res.reason, res.retryable)
-                                            }
-                                            is PlaceOrderResult.Rejected -> {
-                                                session.validation = res.validation
-                                                session.placement = CheckoutSession.Placement.Idle
-                                            }
-                                        }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = TazSize.buttonHeight)

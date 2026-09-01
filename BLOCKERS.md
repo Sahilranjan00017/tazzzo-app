@@ -25,7 +25,11 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       process-death matrix (8 tests), small-screen 480x854 pass, back
       navigation — all verified. Remaining: PDP tap-test, scroll/fling feel
       review, screen-reader (TalkBack) pass, physical-device verification.
-- [ ] Automated UI/journey tests (30 domain tests exist; no UI harness yet).
+- [ ] Automated UI/journey tests (46 domain tests exist; no UI harness yet).
+      COUNT CORRECTED 2026-09-01: this line read "30 domain tests" while the
+      repository actually held 41 (XML-verified); it was stale, not wrong at
+      the time it was written. 41 → 46 in the same session with the D-1
+      regression suite. See the PRODUCTION_READINESS.md log entry.
 - [ ] Accessibility: atoms done; CONTRAST AUDIT DONE 2026-08-30 (4 token fixes,
       measured table in DESIGN_SPEC.md); screen-reader human pass + dynamic
       type still open.
