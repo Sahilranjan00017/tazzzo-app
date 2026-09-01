@@ -1,0 +1,92 @@
+package com.tazzzo.app.data.model
+
+/**
+ * Checkout domain model.
+ *
+ * Design rule: the checkout cannot silently do the wrong thing. Every risky
+ * transition (stale stock, changed price, duplicate submission, unserviceable
+ * address) is represented as data the UI must handle, not as an assumption.
+ */
+
+data class Address(
+    val id: String,
+    val label: String,            // "Home", "Work"
+    val line1: String,
+    val line2: String,
+    val pincode: String,
+    val isServiceable: Boolean    // resolved by serviceability, not guessed
+) {
+    /** Minimal client-side validation; the server revalidates. */
+    companion object {
+        fun validate(label: String, line1: String, pincode: String): String? = when {
+            label.isBlank() -> "Give this address a name (Home, Work…)"
+            line1.trim().length < 8 -> "Enter the full address"
+            pincode.length != 6 || pincode.any { !it.isDigit() } -> "Enter a valid 6-digit pincode"
+            else -> null
+        }
+    }
+}
+
+data class DeliverySlot(
+    val id: String,
+    val label: String,            // "Today, 6–8 PM"
+    val available: Boolean,
+    val etaMinutes: Int? = null   // only when backed by serviceability data
+)
+
+enum class PaymentMethodKind { COD, UPI, CARD }
+
+data class PaymentMethod(
+    val kind: PaymentMethodKind,
+    val label: String,
+    val enabled: Boolean,
+    val note: String? = null      // e.g. "Coming soon"
+)
+
+/** Result of revalidating the cart against current stock and prices. */
+data class CartValidation(
+    val issues: List<CartIssue>
+) {
+    val ok: Boolean get() = issues.isEmpty()
+}
+
+sealed interface CartIssue {
+    val productId: String
+    val productName: String
+
+    data class OutOfStock(
+        override val productId: String,
+        override val productName: String
+    ) : CartIssue
+
+    data class QuantityReduced(
+        override val productId: String,
+        override val productName: String,
+        val requested: Int,
+        val available: Int
+    ) : CartIssue
+
+    data class PriceChanged(
+        override val productId: String,
+        override val productName: String,
+        val oldPrice: Int,
+        val newPrice: Int
+    ) : CartIssue
+}
+
+/** What the customer asked us to do, exactly once. */
+data class OrderRequest(
+    val idempotencyKey: String,
+    val lines: List<CartLine>,
+    val bill: BillSummary,
+    val addressId: String,
+    val addressText: String,
+    val slotId: String,
+    val payment: PaymentMethodKind
+)
+
+sealed interface PlaceOrderResult {
+    data class Placed(val order: Order, val replayed: Boolean) : PlaceOrderResult
+    data class Rejected(val validation: CartValidation) : PlaceOrderResult
+    data class Failed(val reason: String, val retryable: Boolean) : PlaceOrderResult
+}
