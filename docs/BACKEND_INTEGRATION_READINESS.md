@@ -137,7 +137,41 @@ polymorphism and need **custom serializers**:
   hand-written mapping, not the default `"type"`-discriminator encoding.
 - `CartIssue` — same problem.
 
-This is required integration work, not a done deal.
+**RESOLVED 2026-09-01 (pre-backend Wave 3).** Every model above now carries
+`@Serializable`, and both sealed types have hand-written serializers in
+`data/model/WireFormat.kt` producing exactly the flat shapes documented here.
+20 round-trip and wire-shape tests pin them (`SerializationTest`), including a
+round trip of the entire fixture catalogue. The exact encodings are:
+
+```
+Availability   {"status":"IN_STOCK"}
+               {"status":"LOW_STOCK","remaining":3}      // remaining REQUIRED
+               {"status":"OUT_OF_STOCK"}
+               {"status":"NOT_SERVICEABLE"}
+
+CartIssue      {"type":"OUT_OF_STOCK","productId":"p23","productName":"Rohu Fish"}
+               {"type":"QUANTITY_REDUCED","productId":"p2","productName":"Tomato",
+                "requested":5,"available":3}
+               {"type":"PRICE_CHANGED","productId":"p8","productName":"Milk",
+                "oldPrice":29,"newPrice":32}
+```
+
+The `"type"` envelope key and the per-issue field names are specified by
+`WireFormat.kt`; §5 named the codes but not the encoding. Unknown status/type
+strings and missing required fields are hard deserialization failures, on
+purpose: a `LOW_STOCK` with no count, or a `PRICE_CHANGED` with no prices, must
+never be degraded into something purchasable or something silently accepted.
+
+**`Product.emoji` CHANGED 2026-09-01:** it now defaults to `""` and is therefore
+OPTIONAL on the wire. It was required with no default, which meant an otherwise
+valid payload that omitted it failed to construct — unacceptable for a field
+that is an acknowledged temporary placeholder due to disappear when `imageUrl`
+is populated. The renderer treats a blank glyph as "no glyph". The server may
+still always send it.
+
+`PlaceOrderResult` is deliberately NOT serializable: it is the client's reading
+of an attempt (including transport failures that have no body), not a wire type.
+Mapping the response envelope onto it belongs to the repository implementation.
 
 **Other models:** `Category{id,name,emoji,tint,group,subcategories[]}`,
 `PromoBanner{id,title,subtitle,emoji,dark}` (note `dark` is a presentation flag

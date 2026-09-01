@@ -1,5 +1,25 @@
 package com.tazzzo.app.data.model
 
+import kotlinx.serialization.Serializable
+
+/*
+ * Wire format for the catalogue and order models.
+ *
+ * Ground rules, all of them load-bearing:
+ *  - Money is INTEGER RUPEES everywhere. No floats, no strings, no paise.
+ *  - Computed properties (discountPercent, purchasableLimit, lineTotal, saved,
+ *    ok) are derived on the client and are NOT part of any payload.
+ *  - `Availability` and `CartIssue` are sealed types whose documented JSON is
+ *    flat. kotlinx's default polymorphism would emit a "type" discriminator
+ *    around a nested object instead, so both have hand-written serializers in
+ *    `WireFormat.kt`. Do not replace them with the generated encoding without
+ *    changing the contract documents first.
+ *
+ * The authority for these shapes is docs/BACKEND_INTEGRATION_READINESS.md §3.
+ */
+
+
+@Serializable
 data class Category(
     val id: String,
     val name: String,
@@ -9,6 +29,7 @@ data class Category(
     val subcategories: List<Subcategory> = emptyList()
 )
 
+@Serializable
 data class Subcategory(
     val id: String,
     val name: String,
@@ -22,6 +43,7 @@ data class Subcategory(
  * carry what the backend reports so the UI can react. Solving out-of-stock only
  * in the UI layer is how grocery apps end up selling stock they do not have.
  */
+@Serializable(with = AvailabilitySerializer::class)
 sealed interface Availability {
     data object InStock : Availability
     /** In stock but scarce — drives "Only N left" urgency and caps quantity. */
@@ -33,11 +55,22 @@ sealed interface Availability {
     val isPurchasable: Boolean get() = this is InStock || this is LowStock
 }
 
+@Serializable
 data class Product(
     val id: String,
     val name: String,
     val brand: String,
-    val emoji: String,
+    /**
+     * Placeholder glyph shown until real product photography exists.
+     *
+     * Defaulted to empty ON PURPOSE. It was required with no default, which
+     * meant a perfectly valid payload that omitted it would fail to
+     * deserialize — and this field is a temporary development placeholder that
+     * is meant to disappear once `imageUrl` is populated, so it must not be
+     * able to break the catalogue on its way out. The renderer already treats a
+     * blank glyph as "no glyph". The server may still always send it.
+     */
+    val emoji: String = "",
     val unit: String,           // "500 g", "1 L", "6 pcs"
     val price: Int,             // selling price in ₹
     val mrp: Int,               // strike-through price in ₹
@@ -66,6 +99,7 @@ data class Product(
         }
 }
 
+@Serializable
 data class PromoBanner(
     val id: String,
     val title: String,
@@ -74,11 +108,13 @@ data class PromoBanner(
     val dark: Boolean           // dark-green banner vs orange banner
 )
 
+@Serializable
 data class CartLine(val product: Product, val quantity: Int) {
     val lineTotal: Int get() = product.price * quantity
     val lineMrp: Int get() = product.mrp * quantity
 }
 
+@Serializable
 data class BillSummary(
     val itemTotal: Int,
     val itemMrpTotal: Int,
@@ -90,8 +126,10 @@ data class BillSummary(
     val saved: Int get() = itemMrpTotal - itemTotal
 }
 
+@Serializable
 enum class OrderStatus { PLACED, PACKED, ON_THE_WAY, DELIVERED }
 
+@Serializable
 data class Order(
     val id: String,
     val lines: List<CartLine>,
@@ -103,6 +141,7 @@ data class Order(
     val payment: PaymentMethodKind? = null
 )
 
+@Serializable
 data class CoinTransaction(
     val id: String,
     val title: String,
@@ -110,6 +149,7 @@ data class CoinTransaction(
     val dateLabel: String
 )
 
+@Serializable
 data class UserProfile(
     val name: String,
     val phone: String,
@@ -118,4 +158,5 @@ data class UserProfile(
     val address: String
 )
 
+@Serializable
 data class FaqItem(val question: String, val answer: String)

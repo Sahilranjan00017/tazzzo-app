@@ -1,5 +1,7 @@
 package com.tazzzo.app.data.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Checkout domain model.
  *
@@ -8,6 +10,7 @@ package com.tazzzo.app.data.model
  * address) is represented as data the UI must handle, not as an assumption.
  */
 
+@Serializable
 data class Address(
     val id: String,
     val label: String,            // "Home", "Work"
@@ -27,6 +30,7 @@ data class Address(
     }
 }
 
+@Serializable
 data class DeliverySlot(
     val id: String,
     val label: String,            // "Today, 6–8 PM"
@@ -34,8 +38,10 @@ data class DeliverySlot(
     val etaMinutes: Int? = null   // only when backed by serviceability data
 )
 
+@Serializable
 enum class PaymentMethodKind { COD, UPI, CARD }
 
+@Serializable
 data class PaymentMethod(
     val kind: PaymentMethodKind,
     val label: String,
@@ -44,12 +50,14 @@ data class PaymentMethod(
 )
 
 /** Result of revalidating the cart against current stock and prices. */
+@Serializable
 data class CartValidation(
     val issues: List<CartIssue>
 ) {
     val ok: Boolean get() = issues.isEmpty()
 }
 
+@Serializable(with = CartIssueSerializer::class)
 sealed interface CartIssue {
     val productId: String
     val productName: String
@@ -75,6 +83,7 @@ sealed interface CartIssue {
 }
 
 /** What the customer asked us to do, exactly once. */
+@Serializable
 data class OrderRequest(
     val idempotencyKey: String,
     val lines: List<CartLine>,
@@ -85,6 +94,14 @@ data class OrderRequest(
     val payment: PaymentMethodKind
 )
 
+/**
+ * Deliberately NOT @Serializable. This is the client's interpretation of a
+ * placement attempt, not a wire type: `Placed` is built from the order payload,
+ * `Rejected` from a validation payload and `Failed` from a transport or 5xx
+ * outcome that has no body at all. The response envelope that maps onto it is
+ * the repository's job (docs/BACKEND_INTEGRATION_READINESS.md §7); inventing an
+ * envelope here would be inventing a contract.
+ */
 sealed interface PlaceOrderResult {
     data class Placed(val order: Order, val replayed: Boolean) : PlaceOrderResult
     data class Rejected(val validation: CartValidation) : PlaceOrderResult
