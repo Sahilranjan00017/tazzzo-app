@@ -135,6 +135,20 @@ object TazMotion {
     const val fast = 150      // taps, state flips
     const val normal = 300    // transitions, crossfades
     const val ambient = 700   // pulses, marquees
+
+    /**
+     * Screen-to-screen navigation.
+     *
+     * 240ms, not [normal]. A full-screen slide reads as slower than a fade of
+     * the same duration because the eye tracks the moving edge, so matching the
+     * crossfade's 300ms would have made navigation feel heavier than the screen
+     * it replaced. Long enough to establish direction, short enough that a
+     * customer tapping through four aisles never waits on the app.
+     */
+    const val nav = 240
+
+    /** Sheets travel further than screens, so they get slightly longer. */
+    const val sheet = 280
 }
 
 // ---------------------------------------------------------------------------

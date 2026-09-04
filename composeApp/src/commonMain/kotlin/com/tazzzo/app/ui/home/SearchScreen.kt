@@ -47,6 +47,10 @@ import com.tazzzo.app.data.model.Product
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.tazzzo.app.ui.common.ProductFiltersSaver
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -85,12 +89,16 @@ fun SearchScreen() {
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
     val app = LocalAppState.current
 
-    var query by remember { mutableStateOf("") }
+    // The query IS the customer's context. Losing it on back was the single
+    // most expensive state loss in the app: they retype, re-filter, re-scan.
+    var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Product>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     /** The query whose results are currently on screen — "" until one settles. */
-    var searchedQuery by remember { mutableStateOf("") }
-    var filters by remember { mutableStateOf(ProductFilters()) }
+    var searchedQuery by rememberSaveable { mutableStateOf("") }
+    var filters by rememberSaveable(stateSaver = ProductFiltersSaver) {
+        mutableStateOf(ProductFilters())
+    }
     var showSortSheet by remember { mutableStateOf(false) }
     /** Set when the search itself failed. Distinct from "no results". */
     var searchError by remember { mutableStateOf<LoadError?>(null) }
@@ -350,6 +358,10 @@ private fun SearchHeader(
                     onValueChange = onQueryChange,
                     modifier = Modifier
                         .fillMaxWidth()
+                        // The field carried no label at all: a screen reader
+                        // announced an unnamed edit box. The visible placeholder
+                        // is a sibling Text, which does not name the input.
+                        .semantics { contentDescription = "Search products" }
                         .focusRequester(focusRequester)
                         .onFocusChanged { focused = it.isFocused },
                     singleLine = true,

@@ -33,6 +33,8 @@ import com.tazzzo.app.ui.interaction.TazHaptic
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
 import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -58,6 +60,27 @@ data class ProductFilters(
         get() = (if (inStockOnly) 1 else 0) + brands.size +
             (if (sort != SortOption.RELEVANCE) 1 else 0)
 }
+
+/**
+ * Saver so a customer's filter selection survives navigation.
+ *
+ * Without this, opening a product from a filtered list and pressing back
+ * silently reset the filters — the customer's work, thrown away by the
+ * navigation layer. Encoded as primitives because `rememberSaveable` must
+ * round-trip through the platform's own state bundle.
+ */
+val ProductFiltersSaver: Saver<ProductFilters, Any> = listSaver(
+    save = { listOf(it.sort.name, it.inStockOnly, it.brands.toList()) },
+    restore = {
+        @Suppress("UNCHECKED_CAST")
+        ProductFilters(
+            sort = runCatching { SortOption.valueOf(it[0] as String) }
+                .getOrDefault(SortOption.RELEVANCE),
+            inStockOnly = it[1] as Boolean,
+            brands = (it[2] as List<String>).toSet()
+        )
+    }
+)
 
 enum class SortOption(val label: String) {
     RELEVANCE("Relevance"),
@@ -227,3 +250,4 @@ fun SortSheet(
         }
     }
 }
+

@@ -78,6 +78,8 @@ import androidx.compose.ui.semantics.Role
 import com.tazzzo.app.theme.TazMotion
 import com.tazzzo.app.ui.interaction.rememberHaptics
 import com.tazzzo.app.theme.MotionSettings
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.lazy.LazyListState
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -509,13 +511,29 @@ fun CoinChip(balance: Int, onClick: () -> Unit) {
 
 @Composable
 fun MicButton(size: Dp = TazSize.micButton, onClick: () -> Unit) {
+    // Two defects lived here, both invisible on screen and both found by an
+    // instrumented test rather than by reading the code:
+    //
+    //  1. The LABEL was on the outer box and the CLICK was on the inner one, so
+    //     a screen-reader user could focus "Voice shopping — coming soon" and
+    //     had no way to activate it — the focused node carried no action.
+    //  2. The 44dp `defaultMinSize` was on the outer box too, while the
+    //     clickable was only the 36dp circle. The code looked like it enforced
+    //     the accessibility minimum; the actual touch target was 36dp.
+    //
+    // Both are fixed by putting the label, the action and the touch area on one
+    // node, and letting the circle be purely decorative inside it.
     Box(
-        Modifier.defaultMinSize(minWidth = TazSize.touchTarget, minHeight = TazSize.touchTarget)
-            .semantics { contentDescription = "Voice shopping — coming soon" },
+        Modifier
+            .defaultMinSize(minWidth = TazSize.touchTarget, minHeight = TazSize.touchTarget)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Voice shopping — coming soon"
+            }
+            .tazPressable(onClick = onClick, pressScale = TazPress.compact),
         contentAlignment = Alignment.Center
     ) {
         Box(
-            Modifier.size(size).clip(CircleShape).background(TazColors.Green).tazPressable(onClick = { onClick() }, pressScale = TazPress.compact),
+            Modifier.size(size).clip(CircleShape).background(TazColors.Green),
             contentAlignment = Alignment.Center
         ) { TazIcon(TazIcons.Mic, null, size = TazSize.iconSm, tint = TazColors.White) }
     }
@@ -824,15 +842,41 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Horizontal product rail.
+ *
+ * Two things here are load-bearing, both learned the hard way in E1/E2.
+ *
+ * 1. **The rail's own scroll position is retained**, keyed by [title]. A rail
+ *    is a LazyRow inside a LazyColumn, and the vertical list disposes rows that
+ *    leave the viewport — so without a saved state, scrolling a rail sideways,
+ *    scrolling the page down and back, and finding the rail reset to the start
+ *    is not a bug in the rail: it is the outer list doing its job. Retaining it
+ *    is what makes the page feel like it kept your place.
+ *
+ * 2. **`contentType` is declared.** Every item is the same kind of card, so
+ *    Compose can reuse the composition and the layout node instead of building
+ *    a fresh subtree per item. This is the difference between a rail that
+ *    glides on a mid-range phone and one that hitches while scrolling.
+ *
+ * Nesting a LazyRow in a LazyColumn is supported precisely because the scroll
+ * axes differ; the failure mode is state and reuse, not gesture conflict.
+ */
 @Composable
 fun ProductRail(title: String, products: List<Product>, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     if (products.isEmpty()) return
     SectionHeader(title, actionLabel, onAction)
+    val railState = rememberSaveable(title, saver = LazyListState.Saver) { LazyListState() }
     LazyRow(
+        state = railState,
         contentPadding = PaddingValues(horizontal = TazSpace.gutter),
         horizontalArrangement = Arrangement.spacedBy(TazSpace.md)
     ) {
-        items(products, key = { it.id }) { p -> ProductCard(p) }
+        items(
+            products,
+            key = { it.id },
+            contentType = { "productCard" }
+        ) { p -> ProductCard(p) }
     }
 }
 

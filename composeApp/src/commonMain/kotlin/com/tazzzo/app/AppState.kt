@@ -25,6 +25,38 @@ sealed interface Screen {
     data object About : Screen
 }
 
+/**
+ * Stable identity for a destination, used to key retained UI state (scroll
+ * position, query, filters) across navigation.
+ *
+ * Deliberately NOT the back-stack index: an index shifts when the stack is
+ * popped, which would throw away exactly the state we are trying to keep. Two
+ * identical destinations in one stack share a key, and therefore share scroll
+ * position — the correct behaviour for this app, where that means the same
+ * product or the same aisle.
+ */
+val Screen.stateKey: String
+    get() = when (this) {
+        is Screen.Splash -> "splash"
+        is Screen.Onboarding -> "onboarding"
+        is Screen.Login -> "login"
+        is Screen.Home -> "home"
+        is Screen.CategoryDetail -> "category:$categoryId:${subcategoryId ?: ""}"
+        is Screen.ProductDetail -> "product:$productId"
+        is Screen.Search -> "search"
+        is Screen.Cart -> "cart"
+        is Screen.Checkout -> "checkout"
+        is Screen.OrderSuccess -> "orderSuccess:$orderId"
+        is Screen.Orders -> "orders"
+        is Screen.Coins -> "coins"
+        is Screen.Help -> "help"
+        is Screen.Addresses -> "addresses"
+        is Screen.About -> "about"
+    }
+
+/** Which way the customer is travelling. Drives the transition, nothing else. */
+enum class NavDirection { Forward, Backward, Replace }
+
 enum class HomeTab(val label: String, val emoji: String) {
     HOME("Home", "🏠"),
     CATEGORIES("Categories", "🗂️"),
@@ -41,7 +73,24 @@ class TazzzoAppState(
     val current: Screen get() = backStack.last()
     var homeTab by mutableStateOf(HomeTab.HOME)
 
-    fun navigate(screen: Screen) { backStack.add(screen) }
+    /** Set by every stack mutation so the host can pick the right transition. */
+    var navDirection by mutableStateOf(NavDirection.Forward)
+        private set
+
+    /**
+     * Pushes a destination.
+     *
+     * Ignores a push of the destination already on top. That single guard is
+     * what stops a double-tapped product card from stacking two identical PDPs
+     * and forcing the customer to press back twice — the classic "broken back
+     * stack" bug. Genuine re-entry (Home → PDP → Home → same PDP) still works,
+     * because the top of the stack differs by then.
+     */
+    fun navigate(screen: Screen) {
+        if (backStack.lastOrNull() == screen) return
+        navDirection = NavDirection.Forward
+        backStack.add(screen)
+    }
 
     /**
      * One back behaviour for every trigger (top-bar arrow, Android system
@@ -49,6 +98,13 @@ class TazzzoAppState(
      * the bottom tabs return to Home before the app is allowed to exit.
      */
     fun handleSystemBack() {
+        // Hierarchy, outermost first. An overlay must always swallow the first
+        // back press: dismissing what is on top of the screen is what the
+        // customer means, and popping the screen underneath it instead is the
+        // single most disorienting thing back navigation can do.
+        if (showVoiceSheet) { showVoiceSheet = false; return }
+        if (guidedJourneyPending) { markTourSeen(); return }
+
         val active = checkout
         if (current is Screen.Checkout && active != null) {
             if (!active.backStep()) { checkout = null; back() }
@@ -59,9 +115,20 @@ class TazzzoAppState(
     }
 
     val canHandleSystemBack: Boolean
-        get() = backStack.size > 1 || current is Screen.Checkout || homeTab != HomeTab.HOME
-    fun back() { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
-    fun resetTo(screen: Screen) { backStack.clear(); backStack.add(screen) }
+        get() = showVoiceSheet || guidedJourneyPending ||
+            backStack.size > 1 || current is Screen.Checkout || homeTab != HomeTab.HOME
+    fun back() {
+        if (backStack.size > 1) {
+            navDirection = NavDirection.Backward
+            backStack.removeAt(backStack.lastIndex)
+        }
+    }
+
+    fun resetTo(screen: Screen) {
+        navDirection = NavDirection.Replace
+        backStack.clear()
+        backStack.add(screen)
+    }
 
     // --- session ---
     private val _user = mutableStateOf(

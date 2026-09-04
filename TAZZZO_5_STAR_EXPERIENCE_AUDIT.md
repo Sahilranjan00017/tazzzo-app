@@ -1,6 +1,6 @@
 # TAZZZO — 5/5 EXPERIENCE AUDIT
 
-**Opened:** 2026-09-01 · **Status:** E1 COMPLETE (Android-verified) · E2–E7 OPEN
+**Opened:** 2026-09-01 · **Status:** E1 + E2 COMPLETE (Android-verified) · E3–E7 OPEN
 **Target:** 5/5 across the complete experience (raised from the 4.8/5 gate passed 2026-08-31)
 
 ---
@@ -284,8 +284,89 @@ remain at their audit scores; they are E2/E3.
 
 ---
 
+## 7b. WAVE E2 — NAVIGATION & CONTINUITY (executed 2026-09-01)
+
+### Inspected
+`App.kt` screen host, `AppState` back stack, every `remember` holding customer
+context, all lazy containers, `ProductRail`, `MicButton`, the system-back chain.
+
+### Found
+| # | Finding |
+|---|---|
+| **S2** | Confirmed: one `Crossfade` for every screen change. Forward and back were pixel-identical. |
+| **S3** | Confirmed and worse than "no `rememberSaveable`": `Crossfade` **disposes** the outgoing screen, so state was not merely unsaved, it was destroyed. |
+| **F4** | **`MicButton` could be focused but not activated by a screen reader.** The label was on an outer `Box` and the click on an inner one, so the focused node carried **no action**. The 44 dp `defaultMinSize` was also on the outer box while the clickable was the 36 dp circle — the code looked like it enforced the minimum; **the real touch target was 36 dp.** Found by an instrumented test, not by reading. |
+| **F5** | **Neither search entry point had an accessibility label** — the Home search bar and the search field were both unnamed. A screen reader announced an unlabelled edit box. |
+
+### Changed
+- **`NavMotion.kt`** — a directional language. Forward: new screen in from the
+  right, old one parallaxes ¼-width left (reads as "still underneath", not
+  discarded). Backward: exactly reversed. Replace: fade, for stack resets where
+  no spatial story exists. `TazMotion.nav = 240 ms`, deliberately *shorter* than
+  the 300 ms crossfade it replaces — a slide reads slower than a fade of equal
+  duration because the eye tracks the moving edge. Decelerate easing, no bounce.
+- **`SaveableStateHolder` keyed by `Screen.stateKey`** — the actual fix for S3.
+  Keyed by destination identity, **not** back-stack index, because an index
+  shifts on pop and would discard the state being preserved. Retained state is
+  pruned when a destination leaves the stack.
+- **Customer context made saveable** — search query, settled query, filters
+  (with a `ProductFiltersSaver`), selected aisle, Home scroll, category grid
+  scroll. Transient UI (the sort sheet) deliberately stays `remember` so it does
+  *not* come back.
+- **`ProductRail`** — retains its own horizontal scroll per rail, and declares
+  `contentType` so Compose reuses card compositions instead of rebuilding a
+  subtree per item. Same `contentType` on the category grid and aisle rail.
+- **Double-navigation guard** in `AppState.navigate` — a push of the destination
+  already on top is ignored, so a double-tapped card cannot stack two identical
+  PDPs and force two back presses.
+- **Back hierarchy** — overlays now swallow the first back press
+  (voice sheet → guided tour → checkout step → nav stack → tab → exit).
+- **F4/F5 fixed** — label, action and 44 dp touch area on one node for
+  `MicButton`; both search entry points labelled.
+
+### Verified `[RUN]` — Android emulator, API 35
+Instrumented suite **3 → 9 tests, all passing**:
+```
+InteractionSemanticsTest (3)  ·  NavigationJourneyTest (6)
+  home_to_category_to_pdp_and_back_returns_through_the_stack
+  category_scroll_position_survives_opening_a_product_and_coming_back
+  search_query_survives_opening_a_product_and_coming_back
+  rapid_taps_do_not_stack_duplicate_destinations
+  system_back_dismisses_the_voice_sheet_before_popping_the_screen
+  tab_switching_preserves_each_tabs_state
+```
+The scroll test asserts the **same product at the same pixel offset** after a
+round trip (drift < 8 px), not merely "something is on screen".
+
+Unit tests **69 → 69**, 0 failures. iOS **compiles**; still not runtime-verified.
+
+### Scores
+| Area | Before | After |
+|---|---|---|
+| Navigation direction (S2) | 2.0 | **5.0** |
+| State continuity (S3) | 1.5 | **5.0** |
+| Double-nav safety | 2.5 | **5.0** |
+| Back hierarchy | 3.5 | **5.0** |
+| Rail scroll retention | 2.0 | **5.0** |
+| `MicButton` a11y (F4) | 2.0 | **5.0** |
+| Search labelling (F5) | 2.0 | **5.0** |
+
+### NOT done in E2 — stated plainly
+Keyboard/IME choreography, skeleton geometry matching, sheet motion language,
+scroll-jank profiling and the **Perceived Performance & Smoothness Audit** are
+**not** in this wave. Nothing above claims a measured latency or frame number;
+every score is a behavioural assertion backed by a passing on-device test.
+Perceived-performance numbers on an emulator would be worthless — that audit
+needs `[DEVICE]` hardware and is recorded as such.
+
+---
+
 ## 8. LOG
 
+- **2026-09-01** — E2 executed. Directional navigation, per-destination state
+  retention, double-nav guard, overlay-first back. Two further a11y defects
+  found by test (F4 MicButton unactivatable + 36dp target, F5 unlabelled search).
+  Instrumented suite 3 → 9, all passing.
 - **2026-09-01** — E1 executed. Three unpredicted defects found by running the
   app rather than reading it: the cart bar covered the bottom nav, Home never
   stopped animating, and `selected` never reached the accessibility tree. First

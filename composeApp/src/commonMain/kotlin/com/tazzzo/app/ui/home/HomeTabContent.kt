@@ -59,6 +59,10 @@ import com.tazzzo.app.ui.interaction.tazPressableCard
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.MotionSettings
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -166,8 +170,11 @@ fun HomeTabContent() {
 @Composable
 private fun HomeFeedList(data: HomeFeed) {
     val app = LocalAppState.current
+    // Home scroll survives a trip into a product and back.
+    val homeScroll = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
+        state = homeScroll,
         contentPadding = PaddingValues(bottom = TazSpace.cartBarClearance)
     ) {
         // ------------------------------------------------- 1. restore notice
@@ -364,6 +371,7 @@ private fun HomeSearchBar() {
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
+            .semantics(mergeDescendants = true) { contentDescription = "Search products" }
             .tazPressable(onClick = { app.navigate(Screen.Search) }, pressScale = TazPress.compact)
             .padding(start = TazSpace.md, end = TazSpace.xs),
         verticalAlignment = Alignment.CenterVertically
