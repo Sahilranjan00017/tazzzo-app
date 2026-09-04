@@ -1,6 +1,6 @@
 # TAZZZO — 5/5 EXPERIENCE AUDIT
 
-**Opened:** 2026-09-01 · **Status:** AUDIT COMPLETE / FIXES NOT YET STARTED
+**Opened:** 2026-09-01 · **Status:** E1 COMPLETE (Android-verified) · E2–E7 OPEN
 **Target:** 5/5 across the complete experience (raised from the 4.8/5 gate passed 2026-08-31)
 
 ---
@@ -31,7 +31,7 @@ against nine axes, and it is **not 5/5 if any single axis is obviously weak**:
 |---|---|
 | `[CODE]` | Verified by reading the source. Exact file and line given. |
 | `[VISUAL]` | Verified against rendered evidence in `docs/screenshots/`. |
-| `[RUN]` | Verified by driving the running app. **Not yet performed for this pass.** |
+| `[RUN]` | Verified by driving the running app. Performed on Android for E1; **iOS runtime blocked, see §7a.** |
 | `[DEVICE]` | Requires physical hardware. **I cannot perform this.** |
 | `[HUMAN]` | Requires a human session (screen-reader traversal). **I cannot perform this.** |
 | `[DEP]` | Capped by an external dependency (asset, backend, or your decision). |
