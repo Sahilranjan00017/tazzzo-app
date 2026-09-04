@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tazzzo.app.theme.MotionSettings
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazMotion
@@ -47,6 +48,7 @@ import com.tazzzo.app.ui.state.UiState
 
 @Composable
 private fun shimmerAlpha(): Float {
+    if (!MotionSettings.ambientEnabled) return 0.7f   // resting frame
     val transition = rememberInfiniteTransition()
     val alpha by transition.animateFloat(
         initialValue = 0.45f,

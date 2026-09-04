@@ -187,12 +187,110 @@ This document is not closed until every row above either:
 
 **No row may be marked complete on the basis of "it compiles" or "tests pass."**
 
-**Current state: 0 of 7 fix waves executed. No score in this document has moved yet.**
+**Current state: E1 executed and verified on Android. E2–E7 not started.**
+
+---
+
+## 7a. WAVE E1 — INTERACTION SUBSTRATE (executed 2026-09-01)
+
+### Inspected
+All 65 `clickable` call sites, `PillButton`, `QuantityStepper`, `ProductCard`,
+`CategoryTile`, banners, bottom nav, toast, checkout selection rows, filter and
+sort controls, and every ambient animation site.
+
+### Found — including three defects the audit had NOT predicted
+
+| # | Finding | How it was found |
+|---|---|---|
+| **F1** | **The cart bar covered the bottom navigation.** As a bottom-aligned overlay it drew exactly over the nav bar, so from the moment a customer added one item, Home / Categories / Order Again / Account were **unreachable** until the cart was emptied. | On-device screenshot |
+| **F2** | **Home never stopped animating.** The voice banner ran **six** simultaneous infinite float animations, plus a self-advancing carousel — so Compose never reached idle. Real cost: battery, and the "multiple animations competing for attention" the brief forbids. | UI harness timed out on "pending recompositions" |
+| **F3** | **`selected` never reached the accessibility tree.** `clickable` + a separate `semantics` block produced **two** nodes: an outer clickable one and an inner labelled one. The state went on the wrong node. | `uiautomator` dump, then confirmed via the semantics tree |
+
+### Changed
+- **New `ui/interaction/` package** — one press language: shape-clipped scale
+  (`TazPress.card/control/compact/row`) plus an optional press tint. Not a
+  Material ripple: a rectangular ripple bleeding past a 14 dp card corner is
+  why feedback was switched off originally.
+- **Haptics** — `TazHaptic` vocabulary (Tap/Select/Add/Limit/Success/Error) with
+  `expect/actual` engines: Android via `View.performHapticFeedback` (respects
+  the OS setting, needs no permission), iOS via prepared `UIFeedbackGenerator`s
+  (unprepared generators fire ~100 ms late, which reads as broken). Both are
+  safe no-ops when haptics are unavailable. **16 call sites, not sprinkled.**
+- **`PillButton`** now owns `loading`: it shows a spinner, keeps its height, and
+  **refuses taps**. Callers previously faked it by rewriting the label while the
+  button stayed enabled, so a second tap gave a ripple and did nothing.
+- **`QuantityStepper`** is now **one control that transforms** — the pill
+  silhouette is held constant and only the interior crossfades — with quantity
+  digits animating directionally, and **44 dp touch targets inside the 40 dp
+  visual pill** (the spec's own minimum, previously violated).
+- **`MotionSettings.ambientEnabled`** — one gate for all perpetual motion
+  (shimmer, marquee, pulse, equaliser, carousel, pointer bob). Serves
+  reduce-motion (E6), battery, and test determinism.
+- **Cart bar** takes `aboveNav`, animates in/out, and no longer covers the nav.
+- **Toast** animates, is anchored to real geometry instead of a magic `120.dp`,
+  and carries `liveRegion` semantics so a refusal is **announced**, not only shown.
+- **`Modifier.selectable`** for nav tabs and checkout selection rows, so state,
+  role and action live on one node.
+
+### Android verification `[RUN]`
+Driven on a booted emulator (1080×2400, API 35), evidence in
+`docs/screenshots/e1-after/`:
+- ADD → stepper transforms in place, no card reflow, cart bar appears `03_added.png`
+- Quantity capped at 10, `+` dimmed, toast "Limit of 10 per order" renders above
+  the cart bar, incentive copy flips to "Free delivery unlocked" `04_limit_toast.png`
+- Cart bar clears the nav; all four tabs reachable and Categories selected `07_cart_above_nav.png`
+- 480×854 @ 240 dpi: checkout CTA above the fold, disabled **with its reason**
+  stated, "To pay" visible `10_small_480x854.png`
+
+**New on-device UI harness** (`androidInstrumentedTest`) — the project's first,
+asserting against the same semantics tree TalkBack reads:
+```
+InteractionSemanticsTest — OK (3 tests)
+  bottom_nav_publishes_selected_state_to_the_accessibility_tree
+  switching_tab_moves_the_selected_state
+  add_control_transforms_into_a_stepper_in_place
+```
+`uiautomator` is explicitly **not** treated as an oracle here — it flattened the
+nav into three same-bounds nodes and hid the very state being verified.
+
+### iOS verification
+**NOT PERFORMED.** `[DEP]` The simulator integration refuses to attach:
+`Xcode is installed but not selected` → needs
+`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, which
+requires your password. iOS **compiles** (`iosSimulatorArm64Test`, 69/69) and
+the shared code is identical, but E1 is **unverified at runtime on iOS** —
+specifically the `UIFeedbackGenerator` haptics, which have no Android analogue
+in this codebase and cannot be inferred from a passing build.
+
+### Tests
+Unit **69 → 69**, 0 failures. Instrumented **0 → 3**, 0 failures.
+
+### Scores
+| Component | Before | After | Note |
+|---|---|---|---|
+| Pressed state (app-wide) | 2.0 | **5.0** | 47 surfaces, one language |
+| Haptics | 0.0 | **4.5** | `[DEP]` iOS runtime unverified |
+| `PillButton` | 3.5 | **5.0** | idle/pressed/loading/disabled, enforced by the component |
+| `QuantityStepper` | 3.5 | **5.0** | one transforming control, 44 dp targets |
+| `ProductCard` press | 4.0 | **5.0** | |
+| Bottom nav | 4.0 | **4.5** | selected announced + animated; icon-family weight still mixed (E5) |
+| Toast | 3.0 | **5.0** | animated, anchored, announced |
+| Cart bar | 4.5 | **5.0** | F1 fixed; animated |
+| Hero banner fake CTA | 2.5 | 2.5 | **unchanged** — restyling the pill is E5 |
+| Home skeleton | 3.5 | 3.5 | **unchanged** — E4 |
+
+Motion, navigation direction and state continuity are **untouched by E1** and
+remain at their audit scores; they are E2/E3.
 
 ---
 
 ## 8. LOG
 
+- **2026-09-01** — E1 executed. Three unpredicted defects found by running the
+  app rather than reading it: the cart bar covered the bottom nav, Home never
+  stopped animating, and `selected` never reached the accessibility tree. First
+  on-device UI harness added. iOS runtime verification blocked on Xcode
+  selection (needs your password).
 - **2026-09-01** — Audit opened. Freeze reopened by design owner; target raised to
   5/5. Four structural findings (S1–S4) established by source verification.
   Component and screen inventories scored against rendered evidence. No fixes

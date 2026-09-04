@@ -37,6 +37,9 @@ import com.tazzzo.app.Screen
 import com.tazzzo.app.data.model.Order
 import com.tazzzo.app.data.model.OrderStatus
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.TazHaptic
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -213,7 +216,10 @@ internal fun ReorderPill(order: Order, modifier: Modifier = Modifier) {
             .clip(TazRadius.pill)
             .background(TazColors.Surface)
             .border(BorderStroke(1.5.dp, TazColors.Green), TazRadius.pill)
-            .clickable {
+            .tazPressable(
+                pressScale = TazPress.compact,
+                haptic = TazHaptic.Add,     // items really do enter the cart
+                onClick = {
                 order.lines.forEach { line ->
                     repeat(line.quantity) { app.addToCart(line.product) }
                         .also {
@@ -222,9 +228,10 @@ internal fun ReorderPill(order: Order, modifier: Modifier = Modifier) {
                             )
                         }
                 }
-                // Land in the cart so the customer can review before checkout.
-                app.navigate(Screen.Cart)
-            }
+                    // Land in the cart so the customer can review before checkout.
+                    app.navigate(Screen.Cart)
+                }
+            )
             .padding(horizontal = TazSpace.lg),
         contentAlignment = Alignment.Center
     ) {
@@ -293,7 +300,7 @@ private fun OrderCard(order: Order) {
                 Modifier
                     .defaultMinSize(minHeight = TazSize.touchTarget)
                     .clip(TazRadius.pill)
-                    .clickable { app.navigate(Screen.Help) }
+                    .tazPressable(onClick = { app.navigate(Screen.Help) }, pressScale = TazPress.compact)
                     .padding(horizontal = TazSpace.md),
                 contentAlignment = Alignment.Center
             ) {

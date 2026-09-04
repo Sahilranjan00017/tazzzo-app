@@ -63,6 +63,12 @@ import com.tazzzo.app.theme.TazSize
 import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.ui.common.EmptyState
+import com.tazzzo.app.data.model.PlaceOrderResult
+import com.tazzzo.app.ui.interaction.rememberHaptics
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import androidx.compose.ui.semantics.Role
+import com.tazzzo.app.ui.interaction.TazHaptic
 import kotlinx.coroutines.CancellationException
 import com.tazzzo.app.ui.state.toLoadError
 import com.tazzzo.app.ui.state.LoadError
@@ -101,6 +107,7 @@ fun CheckoutScreen() {
     // would stay null, the CTA would stay disabled and the screen would sit on
     // "Checking your cart…" forever with no way out.
     var validationError by remember { mutableStateOf<LoadError?>(null) }
+    val haptics = rememberHaptics()
 
     suspend fun runValidation() {
         validationError = null
@@ -302,6 +309,15 @@ fun CheckoutScreen() {
                                 text = if (placement is CheckoutSession.Placement.Failed) "Try again"
                                 else "Place order  ·  ₹${bill.grandTotal}",
                                 enabled = enabled,
+                                // The single most consequential button in the
+                                // app. While a placement is in flight it must
+                                // look busy AND refuse further taps — the
+                                // component enforces both, so the in-flight
+                                // guard in OrderPlacement is a second line of
+                                // defence rather than the only one.
+                                loading = placement is CheckoutSession.Placement.InFlight,
+                                loadingText = "Placing your order…",
+                                haptic = TazHaptic.Tap,
                                 onClick = {
                                     if (!enabled) return@PillButton
                                     scope.launch {
@@ -312,13 +328,28 @@ fun CheckoutScreen() {
                                         // in-flight guard, the analytics, and the
                                         // replay-gated side effects, so this screen and
                                         // the demo autopilot cannot drift apart again.
-                                        OrderPlacement.place(
+                                        val outcome = OrderPlacement.place(
                                             app = app,
                                             session = session,
                                             address = address,
                                             slot = slot,
                                             payment = payment
                                         )
+                                        // The payoff of the entire journey, and
+                                        // the one place a success haptic is
+                                        // earned. A replayed placement is the
+                                        // same order coming back, so it is still
+                                        // a success from the customer's point of
+                                        // view — but it moves no money and is
+                                        // already gated inside OrderPlacement.
+                                        when (outcome) {
+                                            is PlaceOrderResult.Placed ->
+                                                haptics.perform(TazHaptic.Success)
+                                            is PlaceOrderResult.Failed,
+                                            is PlaceOrderResult.Rejected ->
+                                                haptics.perform(TazHaptic.Error)
+                                            null -> Unit   // refused in flight
+                                        }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = TazSize.buttonHeight)
@@ -452,7 +483,7 @@ private fun IssuesCard(issues: List<CartIssue>, onFix: (CartIssue) -> Unit) {
                 Spacer(Modifier.width(TazSpace.md))
                 // Comfortable tap target: 44dp minimum height + horizontal breathing room.
                 Box(
-                    Modifier.clip(TazRadius.pill).clickable { onFix(issue) }
+                    Modifier.clip(TazRadius.pill).tazPressable(onClick = { onFix(issue) }, pressScale = TazPress.compact)
                         .defaultMinSize(minHeight = TazSize.touchTarget)
                         .padding(horizontal = TazSpace.sm),
                     contentAlignment = Alignment.Center
@@ -535,7 +566,19 @@ private fun SelectionRow(
                 ),
                 TazRadius.card
             )
-            .clickable(enabled = enabled) { onClick() }
+            // One selection response for address, slot and payment alike, so
+            // choosing feels the same wherever the customer is in checkout.
+            // Row scale is deliberately off (motion on a wide row is
+            // distracting); the shape-clipped tint carries the press.
+            .tazPressable(
+                onClick = onClick,
+                enabled = enabled,
+                pressScale = TazPress.row,
+                shape = TazRadius.card,
+                haptic = TazHaptic.Select,
+                role = Role.RadioButton,
+                selected = selected
+            )
             .padding(TazSpace.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -649,7 +692,7 @@ private fun AddressStep(session: CheckoutSession) {
 
         if (!showForm) {
             Row(
-                Modifier.clip(TazRadius.pill).clickable { showForm = true }
+                Modifier.clip(TazRadius.pill).tazPressable(onClick = { showForm = true }, pressScale = TazPress.compact)
                     .defaultMinSize(minHeight = TazSize.touchTarget)
                     .padding(horizontal = TazSpace.sm),
                 verticalAlignment = Alignment.CenterVertically
@@ -1012,7 +1055,7 @@ private fun ReviewCard(
             )
             if (actionLabel != null && onAction != null) {
                 Box(
-                    Modifier.clip(TazRadius.pill).clickable { onAction() }
+                    Modifier.clip(TazRadius.pill).tazPressable(onClick = { onAction() }, pressScale = TazPress.compact)
                         .defaultMinSize(minHeight = TazSize.touchTarget)
                         .padding(horizontal = TazSpace.sm),
                     contentAlignment = Alignment.Center

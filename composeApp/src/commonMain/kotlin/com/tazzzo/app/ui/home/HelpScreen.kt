@@ -45,6 +45,8 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.config.BrandCopy
 import com.tazzzo.app.data.model.FaqItem
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazMotion
@@ -210,7 +212,7 @@ fun HelpScreen() {
                         Modifier
                             .defaultMinSize(minHeight = TazSize.touchTarget)
                             .clip(TazRadius.pill).background(TazColors.Green)
-                            .clickable { openWhatsApp() }
+                            .tazPressable(onClick = { openWhatsApp() }, pressScale = TazPress.compact)
                             .padding(horizontal = TazSpace.lg),
                         contentAlignment = Alignment.Center
                     ) {
@@ -331,7 +333,7 @@ private fun HelpSearchField(query: String, onQueryChange: (String) -> Unit) {
         if (query.isNotEmpty()) {
             Box(
                 Modifier.size(TazSize.iconLg).clip(CircleShape)
-                    .clickable { onQueryChange("") },
+                    .tazPressable(onClick = { onQueryChange("") }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 TazIcon(
@@ -363,7 +365,7 @@ private fun FaqCard(
             )
             Column(
                 Modifier.fillMaxWidth()
-                    .clickable { onToggle(faq.question) }
+                    .tazPressable(onClick = { onToggle(faq.question) }, pressScale = TazPress.compact)
                     .heightIn(min = TazSize.touchTarget)
                     .padding(TazSpace.lg)
             ) {
@@ -413,7 +415,7 @@ private fun HelpMenuRow(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            .clickable { onClick() }
+            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact)
             .heightIn(min = 56.dp)
             .padding(horizontal = TazSpace.lg, vertical = TazSpace.sm),
         verticalAlignment = Alignment.CenterVertically

@@ -29,6 +29,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.tazzzo.app.data.model.Product
+import com.tazzzo.app.ui.interaction.TazHaptic
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import androidx.compose.ui.semantics.Role
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -139,7 +143,12 @@ private fun FilterChip(
                 BorderStroke(1.dp, if (selected) TazColors.Green else TazColors.CardBorder),
                 TazRadius.pill
             )
-            .clickable { onClick() }
+            .tazPressable(
+                onClick = onClick,
+                pressScale = TazPress.compact,
+                haptic = TazHaptic.Select,
+                role = Role.Button
+            )
             .padding(horizontal = TazSpace.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -178,7 +187,12 @@ fun SortSheet(
             SortOption.entries.forEach { option ->
                 Row(
                     Modifier.fillMaxWidth().clip(TazRadius.chip)
-                        .clickable { onSelect(option); onDismiss() }
+                        .tazPressable(
+                            onClick = { onSelect(option); onDismiss() },
+                            pressScale = TazPress.row,
+                            haptic = TazHaptic.Select,
+                            role = Role.RadioButton
+                        )
                         .padding(vertical = TazSpace.md, horizontal = TazSpace.xs),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

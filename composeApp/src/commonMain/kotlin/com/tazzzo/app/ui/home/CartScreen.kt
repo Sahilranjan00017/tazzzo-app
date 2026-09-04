@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -301,7 +303,7 @@ fun CartScreen() {
                     trailing = {
                         Box(
                             Modifier.clip(TazRadius.pill)
-                                .clickable { showAddressDialog = true }
+                                .tazPressable(onClick = { showAddressDialog = true }, pressScale = TazPress.compact)
                                 .defaultMinSize(minHeight = TazSize.touchTarget)
                                 .padding(horizontal = TazSpace.sm),
                             contentAlignment = Alignment.Center

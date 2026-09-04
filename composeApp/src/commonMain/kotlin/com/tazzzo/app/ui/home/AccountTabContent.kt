@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -126,7 +128,7 @@ fun AccountTabContent() {
                 Modifier.fillMaxWidth()
                     .clip(TazRadius.card)
                     .background(TazColors.DangerSoft)
-                    .clickable { app.markLoggedOut() }
+                    .tazPressable(onClick = { app.markLoggedOut() }, pressScale = TazPress.compact)
                     .defaultMinSize(minHeight = TazSize.touchTarget)
                     .padding(TazSpace.lg),
                 verticalAlignment = Alignment.CenterVertically,
@@ -195,7 +197,7 @@ private fun ProfileHeaderCard() {
                 Modifier
                     .defaultMinSize(minHeight = TazSize.touchTarget)
                     .clip(TazRadius.pill)
-                    .clickable { app.navigate(Screen.Login) }
+                    .tazPressable(onClick = { app.navigate(Screen.Login) }, pressScale = TazPress.compact)
                     .padding(horizontal = TazSpace.md),
                 contentAlignment = Alignment.Center
             ) {
@@ -222,7 +224,7 @@ private fun RowScope.QuickStatCard(
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-            .clickable { onClick() }
+            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact)
             .defaultMinSize(minHeight = TazSize.touchTarget)
             .padding(vertical = TazSpace.md, horizontal = TazSpace.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -253,7 +255,7 @@ private fun MenuRow(
 ) {
     Row(
         Modifier.fillMaxWidth()
-            .clickable { onClick() }
+            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact)
             .heightIn(min = 56.dp)
             .padding(horizontal = TazSpace.lg, vertical = TazSpace.sm),
         verticalAlignment = Alignment.CenterVertically

@@ -59,6 +59,25 @@ import com.tazzzo.app.config.DeliveryCopy
 import com.tazzzo.app.data.model.Availability
 import com.tazzzo.app.data.model.Category
 import com.tazzzo.app.data.model.Product
+import androidx.compose.material3.CircularProgressIndicator
+import com.tazzzo.app.ui.interaction.TazHaptic
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.tazPressableCard
+import com.tazzzo.app.ui.interaction.tazPressableIcon
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.semantics.Role
+import com.tazzzo.app.theme.TazMotion
+import com.tazzzo.app.ui.interaction.rememberHaptics
+import com.tazzzo.app.theme.MotionSettings
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -170,7 +189,7 @@ fun TazTopBar(
                 Box(
                     Modifier.size(TazSize.touchTarget).clip(CircleShape)
                         .background(TazColors.SurfaceSunken)
-                        .clickable { onBack() },
+                        .tazPressable(onClick = { onBack() }, pressScale = TazPress.compact),
                     contentAlignment = Alignment.Center
                 ) {
                     TazIcon(TazIcons.Back, "Back", size = TazSize.iconSm)
@@ -204,7 +223,7 @@ fun SectionHeader(title: String, actionLabel: String? = null, onAction: (() -> U
         )
         if (actionLabel != null) {
             Row(
-                Modifier.clip(TazRadius.pill).clickable { onAction?.invoke() }
+                Modifier.clip(TazRadius.pill).tazPressable(onClick = { onAction?.invoke() }, pressScale = TazPress.compact)
                     .padding(horizontal = TazSpace.sm, vertical = TazSpace.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -230,14 +249,27 @@ fun PillButton(
     filled: Boolean = true,
     color: Color = TazColors.Green,
     enabled: Boolean = true,
-    disabledHint: String? = null
+    disabledHint: String? = null,
+    loading: Boolean = false,
+    loadingText: String? = null,
+    haptic: TazHaptic? = TazHaptic.Tap
 ) {
+    // A loading button is NOT a disabled button and must not look like one:
+    // disabled means "you may not do this", loading means "I am doing it".
+    // But it is equally not tappable — the old behaviour rewrote the label to
+    // "Sending OTP…" while leaving the control fully enabled, so a second tap
+    // produced a ripple and silently did nothing. The component now owns that,
+    // so no caller can get it wrong again.
+    val interactive = enabled && !loading
+
     val bg = when {
+        loading -> if (filled) color else TazColors.Surface
         !enabled -> TazColors.GreenDisabled
         filled -> color
         else -> TazColors.Surface
     }
     val fg = when {
+        loading -> if (filled) TazColors.White else color
         !enabled -> TazColors.TextPrimary          // dark-on-light: readable disabled state
         filled -> TazColors.White
         else -> color
@@ -252,21 +284,45 @@ fun PillButton(
                 TazRadius.pill
             )
             .semantics {
-                if (!enabled) {
+                if (loading) {
+                    // Announced as busy, not as broken.
+                    stateDescription = loadingText ?: "Working"
+                } else if (!enabled) {
                     disabled()
                     disabledHint?.let { stateDescription = it }
                 }
             }
-            .clickable(enabled = enabled) { onClick() }
+            .tazPressable(
+                onClick = onClick,
+                enabled = interactive,
+                pressScale = TazPress.control,
+                haptic = haptic
+            )
             .padding(vertical = TazSpace.md, horizontal = TazSpace.xxl),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            // two lines rather than one: an action label that truncates loses
-            // its meaning, and long labels exist ("Verify & Start Shopping").
-            text, color = fg, fontWeight = TazType.buttonWeight, fontSize = TazType.buttonSize,
-            textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (loading) {
+                // Sized to the cap height of the label so the button never
+                // changes height between idle and loading.
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = fg,
+                    strokeWidth = 2.dp
+                )
+                Spacer(Modifier.width(TazSpace.sm))
+            }
+            Text(
+                // two lines rather than one: an action label that truncates loses
+                // its meaning, and long labels exist ("Verify & Start Shopping").
+                if (loading) (loadingText ?: text) else text,
+                color = fg, fontWeight = TazType.buttonWeight, fontSize = TazType.buttonSize,
+                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -285,7 +341,8 @@ fun MarqueeRow(
         content()
         content()
     }
-    LaunchedEffect(reverse) {
+    LaunchedEffect(reverse, MotionSettings.ambientEnabled) {
+        if (!MotionSettings.ambientEnabled) return@LaunchedEffect   // static row
         while (scroll.maxValue == 0 || scroll.maxValue == Int.MAX_VALUE) {
             withFrameNanos { }
         }
@@ -438,7 +495,7 @@ fun CoinChip(balance: Int, onClick: () -> Unit) {
             .defaultMinSize(minHeight = TazSize.touchTarget)
             .clip(TazRadius.pill).background(TazColors.CoinSoft)
             .border(BorderStroke(1.dp, TazColors.CoinInk), TazRadius.pill)
-            .clickable { onClick() }.padding(horizontal = TazSpace.md, vertical = TazSpace.xs),
+            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact).padding(horizontal = TazSpace.md, vertical = TazSpace.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TazIcon(TazIcons.Coin, null, size = TazSize.iconSm, tint = TazColors.CoinInk)
@@ -458,7 +515,7 @@ fun MicButton(size: Dp = TazSize.micButton, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Box(
-            Modifier.size(size).clip(CircleShape).background(TazColors.Green).clickable { onClick() },
+            Modifier.size(size).clip(CircleShape).background(TazColors.Green).tazPressable(onClick = { onClick() }, pressScale = TazPress.compact),
             contentAlignment = Alignment.Center
         ) { TazIcon(TazIcons.Mic, null, size = TazSize.iconSm, tint = TazColors.White) }
     }
@@ -480,6 +537,7 @@ fun MicButton(size: Dp = TazSize.micButton, onClick: () -> Unit) {
 @Composable
 fun QuantityStepper(product: Product, modifier: Modifier = Modifier) {
     val app = LocalAppState.current
+    val haptics = rememberHaptics()
     val qty = app.quantityOf(product)
 
     if (!product.isPurchasable) {
@@ -499,64 +557,149 @@ fun QuantityStepper(product: Product, modifier: Modifier = Modifier) {
     }
 
     val atLimit = qty >= product.purchasableLimit
-    if (qty == 0) {
-        Box(
-            modifier.defaultMinSize(minWidth = 74.dp).height(TazSize.buttonHeightSm)
-                .clip(TazRadius.pill).background(TazColors.Surface)
-                .border(BorderStroke(1.5.dp, TazColors.Success), TazRadius.pill)
-                .clickable { app.addToCart(product) }
-                .padding(horizontal = TazSpace.md),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "ADD", color = TazColors.Success, fontSize = TazType.buttonSize,
-                fontWeight = TazType.buttonWeight, maxLines = 1
-            )
-        }
-    } else {
-        Row(
-            modifier.defaultMinSize(minWidth = 74.dp).height(TazSize.buttonHeightSm)
-                .clip(TazRadius.pill).background(TazColors.Success),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .semantics { contentDescription = "Decrease quantity of ${product.name}" }
-                    .clickable { app.removeFromCart(product) }
-                    .size(TazSize.buttonHeightSm),
-                contentAlignment = Alignment.Center
-            ) {
-                TazIcon(TazIcons.Minus, null, size = TazSize.iconSm, tint = TazColors.White)
-            }
-            Text(
-                "$qty", color = TazColors.White, fontSize = TazType.buttonSize,
-                fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1
-            )
-            Box(
-                Modifier
-                    .semantics {
+
+    // ONE control that transforms, not two controls that swap.
+    //
+    // The pill silhouette is held constant (same min width, same height, same
+    // radius) and only its interior crossfades, so the card never reflows and
+    // the customer reads it as the ADD button *becoming* the stepper. The
+    // container keeps its own identity across the change; only `qty == 0`
+    // drives the interior.
+    val inCart = qty > 0
+    val containerColor by animateColorAsState(
+        targetValue = if (inCart) TazColors.Success else TazColors.Surface,
+        animationSpec = tween(TazMotion.fast),
+        label = "stepperContainer"
+    )
+    Box(
+        modifier
+            .defaultMinSize(minWidth = 74.dp)
+            .height(TazSize.buttonHeightSm)
+            .clip(TazRadius.pill)
+            .background(containerColor)
+            .border(
+                BorderStroke(if (inCart) 0.dp else 1.5.dp, TazColors.Success),
+                TazRadius.pill
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Crossfade(targetState = inCart, animationSpec = tween(TazMotion.fast), label = "stepper") { showStepper ->
+            if (!showStepper) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        // Label merged BEFORE the pressable so it lands on the
+                        // same accessibility node as the action (verified: the
+                        // reverse order splits them into two nodes).
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "Add ${product.name} to cart"
+                        }
+                        .tazPressable(
+                            onClick = { if (app.addToCart(product)) haptics.perform(TazHaptic.Add) },
+                            pressScale = TazPress.control,
+                            role = Role.Button
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "ADD", color = TazColors.Success, fontSize = TazType.buttonSize,
+                        fontWeight = TazType.buttonWeight, maxLines = 1
+                    )
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 44dp TOUCH target inside a 40dp VISUAL pill: the design
+                    // spec's accessibility minimum was being violated by reusing
+                    // the silhouette height as the hit area. The pill still
+                    // renders at buttonHeightSm; only the touch region grows.
+                    StepperTouchTarget(
+                        contentDescription = "Decrease quantity of ${product.name}",
+                        onClick = {
+                            app.removeFromCart(product)
+                            haptics.perform(TazHaptic.Add)
+                        }
+                    ) {
+                        TazIcon(TazIcons.Minus, null, size = TazSize.iconSm, tint = TazColors.White)
+                    }
+                    // Quantity animates so a change is never silent, even when
+                    // the finger is covering the + button that caused it.
+                    AnimatedContent(
+                        targetState = qty,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                (slideInVertically { it / 2 } + fadeIn(tween(TazMotion.fast))) togetherWith
+                                    (slideOutVertically { -it / 2 } + fadeOut(tween(TazMotion.fast)))
+                            } else {
+                                (slideInVertically { -it / 2 } + fadeIn(tween(TazMotion.fast))) togetherWith
+                                    (slideOutVertically { it / 2 } + fadeOut(tween(TazMotion.fast)))
+                            }.using(SizeTransform(clip = false))
+                        },
+                        label = "qty"
+                    ) { value ->
+                        Text(
+                            "$value", color = TazColors.White, fontSize = TazType.buttonSize,
+                            fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1
+                        )
+                    }
+                    StepperTouchTarget(
                         contentDescription =
                             if (atLimit) "Maximum quantity of ${product.name} reached"
-                            else "Increase quantity of ${product.name}"
+                            else "Increase quantity of ${product.name}",
+                        onClick = {
+                            if (atLimit) {
+                                // The screen barely changes when we refuse, so the
+                                // hand has to be told. This is the canonical haptic.
+                                haptics.perform(TazHaptic.Limit)
+                                val stock = product.availability
+                                app.transientMessage =
+                                    if (stock is Availability.LowStock) "Only ${stock.remaining} left in stock"
+                                    else "Limit of ${product.maxOrderQuantity} per order"
+                            } else {
+                                if (app.addToCart(product)) haptics.perform(TazHaptic.Add)
+                            }
+                        }
+                    ) {
+                        TazIcon(
+                            TazIcons.Plus, null, size = TazSize.iconSm,
+                            tint = if (atLimit) TazColors.White.copy(alpha = 0.45f) else TazColors.White
+                        )
                     }
-                    .clickable {
-                        if (atLimit) {
-                            val stock = product.availability
-                            app.transientMessage =
-                                if (stock is Availability.LowStock) "Only ${stock.remaining} left in stock"
-                                else "Limit of ${product.maxOrderQuantity} per order"
-                        } else app.addToCart(product)
-                    }
-                    .size(TazSize.buttonHeightSm),
-                contentAlignment = Alignment.Center
-            ) {
-                TazIcon(
-                    TazIcons.Plus, null, size = TazSize.iconSm,
-                    tint = if (atLimit) TazColors.White.copy(alpha = 0.45f) else TazColors.White
-                )
+                }
             }
         }
+    }
+}
+
+/**
+ * A stepper control whose TOUCH area meets the 44dp accessibility minimum
+ * while its VISUAL footprint stays at the compact 40dp pill height.
+ *
+ * The extra 4dp is taken outside the drawn pill, so nothing moves on screen.
+ */
+@Composable
+private fun StepperTouchTarget(
+    contentDescription: String,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Box(
+        Modifier
+            .size(TazSize.buttonHeightSm)
+            .wrapContentSize(unbounded = true)
+            .size(TazSize.touchTarget)
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription }
+            .tazPressable(
+                onClick = onClick,
+                pressScale = TazPress.compact,
+                role = Role.Button
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
     }
 }
 
@@ -570,10 +713,13 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { app.navigate(Screen.ProductDetail(product.id)) }
+            // Whole-card press response, clipped to the card's own 14dp radius.
+            // No haptic: this is the most repeated tap in the app and a tick on
+            // every product view would become noise. The scale answers the finger.
+            .tazPressableCard(
+                onClick = { app.navigate(Screen.ProductDetail(product.id)) },
+                shape = TazRadius.card
+            )
     ) {
         Column(Modifier.fillMaxWidth()) {
             // --- image well: flat, sunken, one colour for the whole grid ------
@@ -694,24 +840,37 @@ fun ProductRail(title: String, products: List<Product>, actionLabel: String? = n
 // Floating "view cart" bar
 // ---------------------------------------------------------------------------
 
+/**
+ * @param aboveNav true on the tabbed shell, where a bottom navigation bar owns
+ *   the bottom edge. Found during E1 verification: as an overlay aligned to
+ *   the bottom, this bar drew EXACTLY over the nav bar, so the moment a
+ *   customer added one item, Home / Categories / Order Again / Account became
+ *   unreachable until the cart was emptied. With `aboveNav` the bar floats
+ *   above the nav instead; content is still not displaced (no layout jump),
+ *   and scrolling surfaces keep using [TazSpace.cartBarClearance].
+ */
 @Composable
-fun BoxScope.CartBar() {
+fun BoxScope.CartBar(aboveNav: Boolean = false) {
     val app = LocalAppState.current
     val count = app.cartItemCount
     AnimatedVisibility(
         visible = count > 0,
         modifier = Modifier.align(Alignment.BottomCenter),
-        enter = slideInVertically { it },
-        exit = slideOutVertically { it }
+        enter = slideInVertically(tween(TazMotion.normal)) { it } + fadeIn(tween(TazMotion.fast)),
+        exit = slideOutVertically(tween(TazMotion.fast)) { it } + fadeOut(tween(TazMotion.fast))
     ) {
         Row(
-            Modifier.padding(horizontal = TazSpace.gutter, vertical = TazSpace.md)
+            Modifier
+                // Clear the nav bar's full height (bar + its hairline). The nav
+                // applies the system inset itself, so it is applied here once.
+                .padding(bottom = if (aboveNav) TazSize.navBarHeight + 1.dp else 0.dp)
+                .padding(horizontal = TazSpace.gutter, vertical = TazSpace.md)
                 .navigationBarsPadding()
                 .fillMaxWidth()
                 .shadow(10.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.32f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(TazColors.Green)
-                .clickable { app.navigate(Screen.Cart) }
+                .tazPressable(onClick = { app.navigate(Screen.Cart) }, pressScale = TazPress.compact)
                 .height(64.dp)
                 .padding(horizontal = TazSpace.lg),
             verticalAlignment = Alignment.CenterVertically
@@ -823,7 +982,10 @@ fun CategoryTile(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(size + TazSpace.sm)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClick() }
+            // Tile press response. The label sits outside the artwork, so the
+            // whole column scales together and the tile never looks detached
+            // from its caption.
+            .tazPressable(onClick = onClick, pressScale = TazPress.card)
     ) {
         Box(
             Modifier.size(size)
@@ -1106,15 +1268,22 @@ fun CoinsPromoBanner(modifier: Modifier = Modifier) {
 @Composable
 fun VoiceCommerceBannerV3() {
     val app = LocalAppState.current
-    val anim = rememberInfiniteTransition()
-    val pulse by anim.animateFloat(
-        0.85f, 1.15f, infiniteRepeatable(tween(700), RepeatMode.Reverse)
-    )
-    val eq1 by anim.animateFloat(0.35f, 1f, infiniteRepeatable(tween(380), RepeatMode.Reverse))
-    val eq2 by anim.animateFloat(1f, 0.3f, infiniteRepeatable(tween(300), RepeatMode.Reverse))
-    val eq3 by anim.animateFloat(0.5f, 0.95f, infiniteRepeatable(tween(460), RepeatMode.Reverse))
-    val eq4 by anim.animateFloat(0.9f, 0.4f, infiniteRepeatable(tween(340), RepeatMode.Reverse))
-    val eq5 by anim.animateFloat(0.4f, 0.8f, infiniteRepeatable(tween(420), RepeatMode.Reverse))
+    // Six perpetual animations on a banner that sits on Home for the whole
+    // session. Gated: with ambient motion off they hold a resting frame.
+    val ambient = MotionSettings.ambientEnabled
+    val pulse: Float
+    val eq1: Float; val eq2: Float; val eq3: Float; val eq4: Float; val eq5: Float
+    if (ambient) {
+        val anim = rememberInfiniteTransition()
+        pulse = anim.animateFloat(0.85f, 1.15f, infiniteRepeatable(tween(700), RepeatMode.Reverse)).value
+        eq1 = anim.animateFloat(0.35f, 1f, infiniteRepeatable(tween(380), RepeatMode.Reverse)).value
+        eq2 = anim.animateFloat(1f, 0.3f, infiniteRepeatable(tween(300), RepeatMode.Reverse)).value
+        eq3 = anim.animateFloat(0.5f, 0.95f, infiniteRepeatable(tween(460), RepeatMode.Reverse)).value
+        eq4 = anim.animateFloat(0.9f, 0.4f, infiniteRepeatable(tween(340), RepeatMode.Reverse)).value
+        eq5 = anim.animateFloat(0.4f, 0.8f, infiniteRepeatable(tween(420), RepeatMode.Reverse)).value
+    } else {
+        pulse = 1f; eq1 = 0.6f; eq2 = 0.75f; eq3 = 0.5f; eq4 = 0.8f; eq5 = 0.55f
+    }
 
     Row(
         Modifier.fillMaxWidth()
@@ -1122,7 +1291,7 @@ fun VoiceCommerceBannerV3() {
             .shadow(BannerElevation, TazRadius.tile, spotColor = Color.Black.copy(alpha = 0.30f))
             .clip(TazRadius.tile)
             .background(Brush.linearGradient(listOf(TazColors.GreenDark, Color(0xFF062313))))
-            .clickable { app.showVoiceSheet = true }
+            .tazPressable(onClick = { app.showVoiceSheet = true }, pressScale = TazPress.compact)
             .padding(horizontal = TazSpace.lg, vertical = TazSpace.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -59,6 +59,9 @@ import com.tazzzo.app.config.AppConfig
 import com.tazzzo.app.config.BrandCopy
 import com.tazzzo.app.config.DeliveryCopy
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.TazHaptic
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -307,7 +310,9 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                         }
                         Spacer(Modifier.height(TazSpace.md))
                         PillButton(
-                            text = if (sending) "Sending OTP…" else "Continue",
+                            text = "Continue",
+                            loading = sending,
+                            loadingText = "Sending OTP…",
                             onClick = {
                                 if (!sending) {
                                     scope.launch {
@@ -354,11 +359,9 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                 color = TazColors.Green,
                                 modifier = Modifier
                                     .clip(TazRadius.chip)
-                                    .clickable {
-                                        step = 1
+                                    .tazPressable(onClick = { step = 1
                                         otp = ""
-                                        errorText = null
-                                    }
+                                        errorText = null }, pressScale = TazPress.compact)
                                     .padding(horizontal = TazSpace.xs, vertical = TazSpace.xxs)
                             )
                         }
@@ -410,7 +413,10 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                     Modifier
                                         .defaultMinSize(minHeight = TazSize.touchTarget)
                                         .clip(TazRadius.chip)
-                                        .clickable {
+                                        .tazPressable(
+                                            pressScale = TazPress.compact,
+                                            haptic = TazHaptic.Tap,
+                                            onClick = {
                                             scope.launch {
                                                 errorText = null
                                                 try {
@@ -422,7 +428,8 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                                 }
                                             }
                                             resendIn = 30
-                                        }
+                                            }
+                                        )
                                         .padding(horizontal = TazSpace.md),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -437,7 +444,9 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                         }
                         Spacer(Modifier.height(TazSpace.md))
                         PillButton(
-                            text = if (verifying) "Verifying…" else "Verify & Start Shopping",
+                            text = "Verify & Start Shopping",
+                            loading = verifying,
+                            loadingText = "Verifying…",
                             onClick = {
                                 if (!verifying) {
                                     scope.launch {
@@ -478,10 +487,8 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                     .padding(horizontal = TazSpace.xl)
                     .defaultMinSize(minHeight = 48.dp)
                     .clip(TazRadius.card)
-                    .clickable {
-                        app.requestGuidedTourIfFirstTime()
-                        app.resetTo(Screen.Home)
-                    },
+                    .tazPressable(onClick = { app.requestGuidedTourIfFirstTime()
+                        app.resetTo(Screen.Home) }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

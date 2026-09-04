@@ -55,6 +55,10 @@ import com.tazzzo.app.data.model.Product
 import com.tazzzo.app.data.model.PromoBanner
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.data.repository.Taxonomy
+import com.tazzzo.app.ui.interaction.tazPressableCard
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.theme.MotionSettings
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -293,7 +297,7 @@ private fun HomeHeader() {
                     .size(TazSize.avatar)
                     .clip(CircleShape)
                     .background(TazColors.GreenSoft)
-                    .clickable { app.homeTab = HomeTab.ACCOUNT },
+                    .tazPressable(onClick = { app.homeTab = HomeTab.ACCOUNT }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 TazIcon(
@@ -310,7 +314,7 @@ private fun HomeHeader() {
                 .fillMaxWidth()
                 .guidedTarget("location")
                 .defaultMinSize(minHeight = TazSize.touchTarget)
-                .clickable { /* address picker — demo only */ },
+                .tazPressable(onClick = { /* address picker — demo only */ }, pressScale = TazPress.compact),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TazIcon(TazIcons.Location, null, size = TazSize.iconXs, tint = TazColors.Green)
@@ -360,7 +364,7 @@ private fun HomeSearchBar() {
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-            .clickable { app.navigate(Screen.Search) }
+            .tazPressable(onClick = { app.navigate(Screen.Search) }, pressScale = TazPress.compact)
             .padding(start = TazSpace.md, end = TazSpace.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -393,9 +397,14 @@ private fun BannerCarousel(banners: List<PromoBanner>) {
     // customers try first.
     val pagerState = rememberPagerState(pageCount = { banners.size })
 
-    LaunchedEffect(banners) {
+    // Auto-advance is ambient motion: off under reduce-motion and under test.
+    // It also yields to the customer — a banner that is yanked away mid-drag,
+    // or advances while a finger is resting on it, is a classic annoyance.
+    LaunchedEffect(banners, MotionSettings.ambientEnabled) {
+        if (!MotionSettings.ambientEnabled) return@LaunchedEffect
         while (true) {
             delay(4000)
+            if (pagerState.isScrollInProgress) continue
             val next = (pagerState.currentPage + 1) % banners.size
             pagerState.animateScrollToPage(next, animationSpec = tween(450))
         }
@@ -413,11 +422,10 @@ private fun BannerCarousel(banners: List<PromoBanner>) {
                 else -> { { app.homeTab = HomeTab.CATEGORIES } }
             }
             Box(
-                Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick
-                )
+                // Banners are large surfaces, so the scale is gentle and a
+                // shape-clipped tint carries most of the response. Previously
+                // this had indication = null and gave no feedback at all.
+                Modifier.tazPressableCard(onClick = onClick, shape = TazRadius.tile)
             ) {
                 when (page) {
                     0 -> HeroBasketBanner()
@@ -541,7 +549,7 @@ private fun RestoreNoticeBanner() {
             modifier = Modifier
                 .defaultMinSize(minHeight = TazSize.touchTarget)
                 .clip(TazRadius.pill)
-                .clickable { app.restoreNotice = null }
+                .tazPressable(onClick = { app.restoreNotice = null }, pressScale = TazPress.compact)
                 .padding(horizontal = TazSpace.sm)
                 .wrapContentHeight()
         )

@@ -26,6 +26,8 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.data.repository.Taxonomy
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.theme.TazType
@@ -92,7 +94,7 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
                     // 44dp minimum touch target + a label for screen readers.
                     Box(
                         Modifier.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                            .clickable { app.navigate(Screen.Search) }
+                            .tazPressable(onClick = { app.navigate(Screen.Search) }, pressScale = TazPress.compact)
                             .semantics { contentDescription = "Search" },
                         contentAlignment = Alignment.Center
                     ) {
@@ -255,7 +257,7 @@ private fun SidebarEntry(
     onClick: () -> Unit
 ) {
     Box(
-        Modifier.fillMaxWidth().clickable { onClick() },
+        Modifier.fillMaxWidth().tazPressable(onClick = { onClick() }, pressScale = TazPress.compact),
         contentAlignment = Alignment.CenterStart
     ) {
         Column(

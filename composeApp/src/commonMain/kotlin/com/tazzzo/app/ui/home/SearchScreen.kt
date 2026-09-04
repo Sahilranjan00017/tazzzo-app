@@ -45,6 +45,8 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.config.BrandCopy
 import com.tazzzo.app.data.model.Product
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -304,7 +306,7 @@ private fun SearchHeader(
                 .size(TazSize.touchTarget)
                 .clip(CircleShape)
                 .background(TazColors.SurfaceSunken)
-                .clickable { onBack() },
+                .tazPressable(onClick = { onBack() }, pressScale = TazPress.compact),
             contentAlignment = Alignment.Center
         ) {
             TazIcon(TazIcons.Back, "Back", size = TazSize.iconSm, tint = TazColors.TextPrimary)
@@ -364,7 +366,7 @@ private fun SearchHeader(
                     Modifier
                         .size(TazSize.iconLg)
                         .clip(CircleShape)
-                        .clickable { onQueryChange("") },
+                        .tazPressable(onClick = { onQueryChange("") }, pressScale = TazPress.compact),
                     contentAlignment = Alignment.Center
                 ) {
                     TazIcon(
@@ -391,7 +393,7 @@ private fun SearchChip(label: String, recent: Boolean, onClick: () -> Unit) {
             .clip(TazRadius.pill)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.pill)
-            .clickable { onClick() }
+            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact)
             .padding(horizontal = TazSpace.md),
         verticalAlignment = Alignment.CenterVertically
     ) {

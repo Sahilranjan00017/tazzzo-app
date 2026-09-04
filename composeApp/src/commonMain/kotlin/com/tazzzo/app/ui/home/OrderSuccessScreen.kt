@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -179,7 +181,7 @@ fun OrderSuccessScreen(orderId: String) {
             Spacer(Modifier.height(TazSpace.md))
             Box(
                 Modifier.fillMaxWidth().clip(TazRadius.pill)
-                    .clickable { app.resetTo(Screen.Home) }
+                    .tazPressable(onClick = { app.resetTo(Screen.Home) }, pressScale = TazPress.compact)
                     .defaultMinSize(minHeight = 48.dp),
                 contentAlignment = Alignment.Center
             ) {
