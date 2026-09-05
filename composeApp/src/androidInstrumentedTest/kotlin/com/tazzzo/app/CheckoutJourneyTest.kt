@@ -56,11 +56,24 @@ class CheckoutJourneyTest {
         rule.waitForIdle()
     }
     private fun present(m: SemanticsMatcher) = rule.onAllNodes(m).fetchSemanticsNodes().isNotEmpty()
+    /**
+     * Evidence capture is BEST EFFORT and must never decide a verdict.
+     *
+     * `captureToImage` goes through PixelCopy, which fails on a loaded
+     * software-GL emulator with "Failed waiting for PixelCopy!" — an
+     * environment fault, not a defect in the app or in what this test asserts.
+     * Letting it throw turned a passing journey into a red test (seen
+     * 2026-09-06). The assertions are the oracle; the PNG is documentation.
+     */
     private fun snapshot(name: String) {
-        val bmp = rule.onRoot().captureToImage().asAndroidBitmap()
-        val dir = File(ApplicationProvider.getApplicationContext<android.content.Context>()
-            .getExternalFilesDir(null), "evidence").apply { mkdirs() }
-        File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        try {
+            val bmp = rule.onRoot().captureToImage().asAndroidBitmap()
+            val dir = File(ApplicationProvider.getApplicationContext<android.content.Context>()
+                .getExternalFilesDir(null), "evidence").apply { mkdirs() }
+            File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        } catch (t: Throwable) {
+            android.util.Log.w("TazzzoEvidence", "snapshot '$name' skipped: ${t.message}")
+        }
     }
     private fun addFromHome(product: String, times: Int) {
         val add = hasContentDescription("Add $product to cart")

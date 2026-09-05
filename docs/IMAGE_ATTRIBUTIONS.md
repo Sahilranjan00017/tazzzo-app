@@ -16,6 +16,7 @@ Category tile photographs sourced from Wikimedia Commons. Logo, basket hero and 
 - `cat_oil.jpg` — Sunflower oil bottles in Dnipro 2.jpg — (metadata fetch failed)
 - `cat_paan.jpg` — Fennel seed.jpg — (metadata fetch failed)
 - `cat_personal.jpg` — Aleppo soap 01.jpg — (metadata fetch failed)
+- `cat_pooja.jpg` — [A Mud Diya or Lamp.jpg](https://commons.wikimedia.org/wiki/File:A_Mud_Diya_or_Lamp.jpg) — 2006nishan178713 — CC BY-SA 4.0
 - `cat_pet.jpg` — Dog food in a bowl.jpg — (metadata fetch failed)
 - `cat_pharma.jpg` — Cod Liver Oil Capsules.jpg — (metadata fetch failed)
 - `cat_skincare.jpg` — Contoh Produk Wardah.jpg — (metadata fetch failed)

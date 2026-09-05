@@ -80,6 +80,7 @@ import com.tazzzo.app.ui.interaction.rememberHaptics
 import com.tazzzo.app.theme.MotionSettings
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.graphics.luminance
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -110,6 +111,7 @@ import tazzzo.resources.cat_baby
 import tazzzo.resources.cat_cleaning
 import tazzzo.resources.cat_home
 import tazzzo.resources.cat_pet
+import tazzzo.resources.cat_pooja
 import tazzzo.resources.cat_paan
 
 // ---------------------------------------------------------------------------
@@ -138,11 +140,15 @@ fun TazIcon(
 // placeholder is always the exact silhouette of the thing that replaces it.
 // ---------------------------------------------------------------------------
 
-internal val ProductCardWidth: Dp = 158.dp
+// 120dp: three cards fit a 360dp screen with the gutter. The previous 158dp
+// showed 2.3 cards and read as sparse next to every mature commerce app.
+internal val ProductCardWidth: Dp = 120.dp
 internal val ProductCardImageHeight: Dp = 104.dp
 /** Card image container aspect — 158w x 104h ≈ 1.52. Fixed so the grid aligns. */
-internal const val ProductCardImageAspect: Float = 1.52f
-internal val ProductCardPadding: Dp = 10.dp
+// Square: the ADD control now floats on the image, so the image is the card's
+// stage and a square stage keeps every rail the same height.
+internal const val ProductCardImageAspect: Float = 1f
+internal val ProductCardPadding: Dp = 8.dp
 internal val ProductNameBlockHeight: Dp = 34.dp   // exactly two lines of productNameLine
 
 /** Below this content width the price and the control cannot share a line. */
@@ -160,6 +166,19 @@ fun LogoImage(height: Dp, modifier: Modifier = Modifier) {
         modifier = modifier.height(height)
     )
 }
+
+
+/**
+ * Label colour for a filled pill, chosen from the fill's own luminance.
+ *
+ * Previously the label was hard-coded white whenever the button was filled, so
+ * a light fill produced white-on-white — a button with no visible text at all.
+ * That shipped on the Deals campaign band and was invisible to every semantic
+ * assertion, because the label node was present and correct; only a screenshot
+ * showed a blank pill. Deriving the colour means no caller can reintroduce it.
+ */
+internal fun pillLabelColor(fill: Color): Color =
+    if (fill.luminance() > 0.5f) TazColors.TextPrimary else TazColors.White
 
 /** TAZZZO wordmark rendered as text (for places where the PNG is too heavy). */
 @Composable
@@ -271,9 +290,9 @@ fun PillButton(
         else -> TazColors.Surface
     }
     val fg = when {
-        loading -> if (filled) TazColors.White else color
+        loading -> if (filled) pillLabelColor(color) else color
         !enabled -> TazColors.TextPrimary          // dark-on-light: readable disabled state
-        filled -> TazColors.White
+        filled -> pillLabelColor(color)
         else -> color
     }
     Box(
@@ -749,6 +768,7 @@ private fun StepperTouchTarget(
 @Composable
 fun ProductCard(product: Product, modifier: Modifier = Modifier) {
     val app = LocalAppState.current
+    val inCart = app.quantityOf(product) > 0
     Box(
         modifier = modifier
             .width(ProductCardWidth)
@@ -756,119 +776,105 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-            // Whole-card press response, clipped to the card's own 14dp radius.
-            // No haptic: this is the most repeated tap in the app and a tick on
-            // every product view would become noise. The scale answers the finger.
             .tazPressableCard(
                 onClick = { app.navigate(Screen.ProductDetail(product.id)) },
                 shape = TazRadius.card
             )
     ) {
         Column(Modifier.fillMaxWidth()) {
-            // --- image well: flat, sunken, one colour for the whole grid ------
-            // One image architecture for every product surface — fixed aspect,
-            // Fit (never Crop), skeleton while loading, graceful fallback.
-            ProductImage(
-                product = product,
-                modifier = Modifier.fillMaxWidth()
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = TazRadius.cardDp, topEnd = TazRadius.cardDp
-                        )
-                    ),
-                aspectRatio = ProductCardImageAspect,
-                glyphSize = 44.sp,
-                // out of stock dims the produce, never the price or the name
-                dimmed = !product.isPurchasable
-            )
-
-            // --- body ---------------------------------------------------------
-            Column(Modifier.fillMaxWidth().padding(ProductCardPadding)) {
-                // Brand first, when the catalogue has one. Trust starts with
-                // "who made this"; a blank brand renders nothing rather than a gap.
-                if (product.brand.isNotBlank()) {
-                    Text(
-                        product.brand, fontSize = TazType.microSize, fontWeight = TazType.microWeight,
-                        color = TazColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Text(
-                    product.name,
-                    fontSize = TazType.productNameSize,
-                    fontWeight = TazType.productNameWeight,
-                    lineHeight = TazType.productNameLine,
-                    color = TazColors.TextPrimary,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    // reserves two lines so short and long names align across the grid
-                    modifier = Modifier.fillMaxWidth().heightIn(min = ProductNameBlockHeight)
+            // --- stage: square image with the ADD control floating on it -------
+            // The commerce-card anatomy: image → price → savings → name → pack.
+            // The control lives on the image so the body is pure information,
+            // which is what lets three cards fit a screen without clutter.
+            Box(Modifier.fillMaxWidth()) {
+                ProductImage(
+                    product = product,
+                    modifier = Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = TazRadius.cardDp, topEnd = TazRadius.cardDp)),
+                    aspectRatio = ProductCardImageAspect,
+                    glyphSize = 40.sp,
+                    dimmed = !product.isPurchasable
                 )
-                Spacer(Modifier.height(TazSpace.xxs))
-                Text(
-                    product.unit, fontSize = TazType.unitSize, color = TazColors.TextTertiary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                // ADD sits bottom-end; once in the cart the stepper spans the
+                // stage so − and + have room. Same control, same place.
+                QuantityStepper(
+                    product,
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(TazSpace.xs + TazSpace.xxs)
+                        .then(if (inCart || !product.isPurchasable) Modifier.fillMaxWidth() else Modifier)
                 )
-                // Honest copy: nothing renders unless the promise is verified.
-                DeliveryCopy.short(AppConfig.deliveryPromise)?.let { eta ->
-                    Spacer(Modifier.height(TazSpace.xxs))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TazIcon(
-                            TazIcons.Slot, null,
-                            size = TazSize.iconXs, tint = TazColors.TextTertiary
-                        )
-                        Spacer(Modifier.width(TazSpace.xs))
+                val stock = product.availability
+                if (stock is Availability.LowStock) {
+                    Box(
+                        Modifier.align(Alignment.TopStart).padding(TazSpace.xs + TazSpace.xxs)
+                            .clip(TazRadius.chip).background(TazColors.WarningSoft)
+                            .padding(horizontal = 6.dp, vertical = TazSpace.xxs)
+                    ) {
                         Text(
-                            eta, fontSize = TazType.microSize, fontWeight = TazType.microWeight,
-                            color = TazColors.TextTertiary, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            "Only ${stock.remaining} left", color = TazColors.Warning,
+                            fontSize = TazType.microSize, fontWeight = TazType.microWeight, maxLines = 1
                         )
-                    }
-                }
-                Spacer(Modifier.height(TazSpace.sm))
-
-                // Price + control. On a wide card they share a line; on the
-                // narrow two-column grids (a 84dp sidebar leaves ~110dp of
-                // content) they stack so neither is ever truncated.
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val sideBySide = product.isPurchasable && maxWidth >= CardRowThreshold
-                    if (sideBySide) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CardPriceBlock(product.price, product.mrp, Modifier.weight(1f))
-                            QuantityStepper(product)
-                        }
-                    } else {
-                        Column(Modifier.fillMaxWidth()) {
-                            CardPriceBlock(product.price, product.mrp, Modifier.fillMaxWidth())
-                            Spacer(Modifier.height(TazSpace.sm))
-                            QuantityStepper(product, Modifier.fillMaxWidth())
-                        }
                     }
                 }
             }
-        }
 
-        // Both badges live in one top row: on a narrow two-column grid an
-        // absolutely-positioned pair would overlap in the middle.
-        Row(
-            Modifier.fillMaxWidth().align(Alignment.TopStart),
-            verticalAlignment = Alignment.Top
-        ) {
-            SavingsBadge(product.mrp - product.price)
-            Spacer(Modifier.weight(1f))
-            val stock = product.availability
-            if (stock is Availability.LowStock) {
-                Box(
-                    Modifier.padding(TazSpace.sm)
-                        .clip(TazRadius.chip).background(TazColors.WarningSoft)
-                        .padding(horizontal = 6.dp, vertical = TazSpace.xxs)
-                ) {
+            // --- body: price leads --------------------------------------------
+            Column(Modifier.fillMaxWidth().padding(ProductCardPadding)) {
+                Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        "Only ${stock.remaining} left", color = TazColors.Warning,
-                        fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        "₹${product.price}", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
+                        color = TazColors.TextPrimary, maxLines = 1
+                    )
+                    if (product.mrp > product.price) {
+                        Spacer(Modifier.width(TazSpace.xs))
+                        Text(
+                            "₹${product.mrp}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                            textDecoration = TextDecoration.LineThrough, maxLines = 1,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+                }
+                // The saving in rupees — one signal, verifiable, Tazzzo orange = savings.
+                if (product.mrp > product.price) {
+                    Text(
+                        "₹${product.mrp - product.price} OFF", fontSize = TazType.microSize,
+                        fontWeight = TazType.microWeight, color = TazColors.Orange, maxLines = 1
+                    )
+                }
+                Spacer(Modifier.height(TazSpace.xxs))
+                Text(
+                    product.name,
+                    fontSize = TazType.productNameSize, fontWeight = TazType.productNameWeight,
+                    lineHeight = TazType.productNameLine, color = TazColors.TextPrimary,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = ProductNameBlockHeight)
+                )
+                // The customer's own word for the item, where a verified one
+                // exists. Never transliterated at render time — a wrong word in
+                // someone's own language is worse than English alone.
+                product.localName?.let { local ->
+                    Text(
+                        local, fontSize = TazType.microSize, color = TazColors.TextTertiary,
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
+                }
+                // Pack size, and beside it the per-unit price when the pack is
+                // actually measurable. That figure is the only price claim a
+                // customer can check against another pack without arithmetic,
+                // and it is derived, never authored.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        product.unit, fontSize = TazType.unitSize, color = TazColors.TextTertiary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    product.unitPriceLabel?.let { perUnit ->
+                        Text(
+                            "  \u00b7  " + perUnit, fontSize = TazType.unitSize,
+                            color = TazColors.TextTertiary, maxLines = 1
+                        )
+                    }
                 }
             }
         }
@@ -903,7 +909,7 @@ fun ProductRail(title: String, products: List<Product>, actionLabel: String? = n
     LazyRow(
         state = railState,
         contentPadding = PaddingValues(horizontal = TazSpace.gutter),
-        horizontalArrangement = Arrangement.spacedBy(TazSpace.md)
+        horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
     ) {
         items(
             products,
@@ -1034,6 +1040,7 @@ val categoryArtTiles: List<CategoryArtTile> = listOf(
     CategoryArtTile("cleaning", "Cleaning Essentials", 0xFFE8F5E9, Res.drawable.cat_cleaning),
     CategoryArtTile("home", "Home & Office", 0xFFFFF3E0, Res.drawable.cat_home),
     CategoryArtTile("pet", "Pet Care", 0xFFEFEBE9, Res.drawable.cat_pet),
+    CategoryArtTile("pooja", "Pooja & Religious Needs", 0xFFFFF3E0, Res.drawable.cat_pooja),
     CategoryArtTile("paan", "Paan Corner", 0xFFE8F5E9, Res.drawable.cat_paan)
 )
 

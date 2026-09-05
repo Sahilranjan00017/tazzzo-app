@@ -66,3 +66,42 @@ adb shell am instrument -w -r com.tazzzo.app.test/androidx.test.runner.AndroidJU
 - Launch the emulator with `-no-snapshot-load -no-boot-anim -no-audio`.
 - If `adb devices` is empty mid-run, the emulator was OOM-killed: that is an
   environment failure, not a test result.
+
+### Failure class: duplicate semantics node (one item in two modules)
+
+Symptom: `Expected exactly '1' node but found '2' nodes that satisfy: ContentDescription = '…'`
+from a singleton finder (`onNodeWithContentDescription`, `onNodeWithText`).
+
+Cause: merchandising legitimately places the same category or product in more
+than one module (festival hero + category grid; deals rail + category rail).
+Seen 2026-09-06 when `CampaignHero` reused the grid tile's label.
+
+Rule, two halves:
+1. **App:** two controls must not announce identically — give the second module
+   a distinct label (`"<campaign>: <category>"`), keep the image decorative
+   (`contentDescription = null`). This is an accessibility defect first, a test
+   failure second.
+2. **Tests:** match actionable nodes — `onAllNodes(matcher and hasClickAction()).onFirst()`
+   — never a singleton finder for anything that merchandising may duplicate.
+   `HomeEvidenceTest` locks the count of actionable grid tiles to exactly one.
+
+### Dev launch flag `taz_start_home`
+
+`enterDemoHome()` marks the device onboarded *and* routes to Home in one step
+(2026-09-06). Before, a manual `am start --ez taz_start_home true` could land on
+the login wall — two scripted capture runs did. Ships nowhere (`DemoFlags`);
+every test class clears the store first via `TestState.reset()`.
+
+### Failure class: evidence capture, not the app
+
+Symptom: `AssertionError: Failed waiting for PixelCopy!` from
+`captureToImage()`, with every assertion in the test already passed.
+
+Cause: `captureToImage` copies real window pixels through PixelCopy, which
+times out on a loaded 2-core software-GL emulator. Seen 2026-09-06 in
+`HomeEvidenceTest` — the journey was correct and the run was still red.
+
+Rule: **screenshots are documentation, assertions are the verdict.** Every
+`snapshot()` helper catches and logs instead of throwing. Do not respond to this
+by widening a timeout; the capture is not what the test is for. If evidence
+PNGs are genuinely missing from a run, re-run on an idle device.

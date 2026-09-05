@@ -229,7 +229,141 @@ milestone-unlock moment with E3 motion.
 
 ---
 
+## 3. Wave C3 — Home as a commerce destination, the card as a price-first unit
+
+### INSPECTED
+The founder's reference screenshots (Zepto, Blinkit, noon Minutes — first-hand,
+benchmark §8), `HomeTabContent` (banner carousel, rails, category grid),
+`ProductCard`, `Components.kt`, `CategoryArtTile`, and each on device through
+in-process snapshots after the two scripted `adb` capture runs landed on the
+wrong screens.
+
+### FOUND
+| # | Finding | Class |
+|---|---|---|
+| — | Home opened on a **generic banner carousel** with placeholder copy. Nothing on the first screen said *what is on today*. | Structural gap |
+| — | `ProductCard` was ~156 dp with a 4:3 image and a percent badge: the three-per-row density of every reference was impossible, and the **price was not the first thing read**. | Density / hierarchy |
+| — | No deals module. Real MRP–price gaps existed in the catalogue but nothing surfaced the largest ones. | Merchandising gap |
+| **F9** | After the festival hero landed, **"Vegetables & Fruits" was announced by two controls** (hero tile and grid tile). Found by the regression — `Expected exactly '1' node but found '2'` — not by reading. A screen-reader user has the same problem the test had. | **App defect (accessibility)** |
+| **F10** | A `taz_start_home` launch could land on the **login wall**: the flag routed to Home but never marked the device onboarded, so routing could bounce it. Two evidence captures showed Account and Login instead of Home. | Dev tooling (ships nowhere) |
+| — | The single largest visual gap to the references is **real product photography**. The card is now laid out for it; the assets do not exist and will not be fabricated. | `[ASSET REQUIRED — PRODUCTION PHOTOGRAPHY]` |
+
+### CHANGED `[IMPLEMENTED]`
+- **`Campaign`** model + **`CampaignConfig.current`** (Janmashtami; `categoryIds` dairy / sweet / oil / fruits; `validFrom/UntilLabel`; `memberOnlyOffer`; `heroImageUrl = null` `[ASSET REQUIRED]`). Copy is Tazzzo's own; no reference wording or artwork.
+- **`CampaignHero`** replaces `BannerCarousel`: title, subtitle, validity, four category tiles (own `CategoryArtTile` art) routed to `CategoryDetail`, CTA. **F9 fixed**: tile label is `"<campaign>: <category>"`, image decorative (`contentDescription = null`).
+- **`ProductCard` compact anatomy**: 120 dp, square image, stepper overlaid bottom-end (full width once in cart), body = **price → struck MRP + `₹X OFF`** (orange, only when MRP > price) → name (2 lines) → unit; low-stock chip top-start. Rail spacing `TazSpace.sm`. Nothing invented: no ratings, reviews, stock counts or delivery promises the data does not carry.
+- **"Today's deals" rail**: top-10 by real `mrp − price` across every rail — derived, never authored.
+- **Section rhythm** `SectionGap = 20 dp`; rails hoisted into one `rails` map.
+- **F10 fixed**: `AppState.enterDemoHome()` marks onboarded *and* routes Home in one step; `DemoTourRunner` uses it. Dev flag only.
+- **Tests**: `NavigationJourneyTest` now matches actionable nodes (`and hasClickAction()`) — merchandising may legitimately duplicate an item; **`HomeEvidenceTest`** (new) locks *exactly one* actionable grid tile and one hero tile, asserts the deals rail shows a derived `₹X OFF`, opens a category, and checks Back preserves Home. Failure class recorded in `docs/TESTING.md`.
+
+### WHY
+Every reference answers three questions on the first screen — *what's on today,
+what's cheap, what do I usually buy* — and on a small card the price is the
+first thing the eye reads. None of that needs their branding: Tazzzo green
+identity, orange reserved for savings, Poppins, our own hero copy and category
+art. F9 is the cost of merchandising done honestly: the moment one category
+appears in two modules, the two controls must *sound* different, not just look
+different.
+
+<!-- C3-RESULTS -->
+
+### NOT BUILT — stated plainly
+Product photography and hero artwork `[ASSET REQUIRED]`; login redesign
+`[ASSET REQUIRED]`; extended order-status timeline; Buy Again with change
+indication; PDP optional facts; basket completion; price-drop notices; refund
+reversal; payment-method sheet; design-system component extraction. Tip remains
+`[BUSINESS DECISION]`. D4/D5/D6 untouched.
+
+### BLOCKERS — carried, none removed
+Photography, hero artwork, D4/D5/D6, iOS runtime (`xcode-select`), backend
+endpoints for campaigns/promotions/slots — all in `BLOCKERS.md`, dated.
+
+### NEXT WAVE
+On receipt of photography, wire `Product.imageUrl` into the existing card slot
+(no layout change needed). Then the order-status timeline and Buy Again.
+
+---
+
+## 4. Wave N0–N2 — taxonomy truth, a savings destination, and the festival question answered properly
+
+### INSPECTED
+Blinkit's live store with a Bengaluru address and noon.com's UAE mobile web,
+both first-hand on 2026-09-06 (findings in `TAZZZO_FULL_COMMERCE_ROADMAP.md`
+§1). Then the frozen backend taxonomy, verified directly against
+`Tazzzo_Taxonomy_V1_Master.csv` (293 rows), the master JSON and the catalogue
+service's own `openapi.json`, rather than against the handoff document that
+described them.
+
+### FOUND
+| # | Finding | Class |
+|---|---|---|
+| — | **Festivals are a supply problem, not a hero image.** Blinkit runs no festival banner today; it carries a permanent Pooja aisle, Flowers & Leaves inside produce, and gift packs as a sub-category of seven food categories. Our festival hero pointed at dairy and fruit, so tapping it reached ordinary milk. | Merchandising gap |
+| — | Blinkit shows a **local-language name on every produce item** (Onion (Eerulli), Southekayi) and sells 50–250 g packs. Tazzzo had neither. | Localisation gap |
+| — | noon gives **Deals a permanent nav slot** and shows **price per piece / per 100 g** on every card. Savings in Tazzzo were reachable only as a sort option. | Structural gap |
+| **F11** | I began building a "Pooja & Festive" **category** before checking the frozen taxonomy. That is the wrong plane: the taxonomy's own three-plane rule puts festive in collections. Caught by reading the CSV, not by review. | **My design error, corrected** |
+| **F12** | The handoff document states there is no festive category in a way that reads as though ritual goods are absent. **`Pooja & Religious Needs` does exist** — 2 sub-categories, 9 verticals, TZV-000225..233 — and §3 of the same document lists it. | Document defect |
+| **F13** | **Every vertical id in the shipped master CSV is suffixed " (provisional)"** — all 293. Branch status is leaking into the identity column, contradicting the document's own stability contract. Anything keying on that string breaks when a branch locks. | Backend data defect |
+| **F14** | **There is no browse, list or search endpoint.** `GET /api/v1/products` requires `canonicalKey` and returns one product. Category and search screens cannot be served at all. | Blocker, verified |
+| **F15** | Fresh produce, dairy and pet care are **excluded from v0.9.0 by recorded decision**, yet they are the app's entire spine. Zero Dairy, Milk, Curd, Paneer, Dog or Cat verticals exist. Eggs do. | `[BUSINESS DECISION]` |
+| — | A green regression turned red on `Failed waiting for PixelCopy!` — evidence capture failing on a loaded emulator, with every assertion already passed. | Environment |
+
+### CHANGED `[IMPLEMENTED]`
+- **Pooja & Religious Needs aisle**, mirroring the real taxonomy verbatim: the
+  TZC name, its two sub-categories, and one SKU per vertical TZV-000225..233
+  (agarbatti, dhoop, camphor, wicks, diya, deepam oil, havan samagri, roli
+  chandan set, brass thali). Deliberately **not** called "Festive".
+- **`Product.verticalId`** carries the bare backend id, so mock-to-service is a
+  data change. Null marks exactly which SKUs the backend cannot serve today.
+- **`Product.unitPriceLabel`** — per-kg, per-litre and per-piece prices derived
+  from the pack size, with multipacks ("4 x 100 g") counted whole and
+  unmeasurable packs declining rather than guessing. Rendered on every card.
+- **`Product.localName`** rendered under the product name where a verified name
+  exists; never transliterated at render time.
+- **Deals facet** — MRP genuinely above price, composable with the other
+  filters, surviving navigation and restoring from older state bundles.
+- **Deals tab** — fifth destination: dated campaign band, offers stating the
+  minimum spend that gates them, members-only offers hidden from non-members,
+  and a savings grid ranked by rupees off. `getDeals()` added to the catalogue
+  contract.
+- **`cat_pooja` tile** sourced from Wikimedia Commons under CC BY-SA 4.0 and
+  attributed. A first automated pick returned a 19th-century museum artefact;
+  candidates are now reviewed visually before anything ships.
+- **Evidence capture is best-effort in every test class.** Screenshots are
+  documentation; assertions are the verdict. Failure class documented.
+- **Produce depth stopped, not quietly shipped**, pending the ruling on F15.
+
+### WHY
+The reference apps answer "what is on today, what is cheap, what do I usually
+buy" on the first screen, and they can serve a festival because the flowers and
+the lamp are in stock on an ordinary Tuesday. Building that as a *category*
+would have contradicted a frozen backend model that already has the right home
+for it. Checking cost twenty minutes; not checking would have cost a taxonomy
+release.
+
+### TEST RESULTS
+Unit **136/136**. Instrumented **12/13** before the PixelCopy fix, whose single
+failure was the capture itself; re-run with the Deals journey added is reported
+in the log below.
+
+### NOT BUILT — stated plainly
+Variants, wishlist, PDP carousel, order timeline, returns, account depth — all
+scoped in the roadmap. Ratings, reviews, "sold recently", price history and
+category rank stay `[BACKEND REQUIRED]` capabilities and are **not** faked.
+Price-band facet dropped with a reason. Per-item ETA gated on **D4**.
+
+### BLOCKERS — carried, none removed
+F13, F14, F15, the unbuilt collections plane, all-provisional branch status,
+production photography, native review of local names, and D4/D5/D6. All dated
+in `BLOCKERS.md`.
+
+---
+
 ## Log
+- **2026-09-06** — N0–N2: taxonomy verified against source and the app realigned
+  to it; Pooja aisle mapped to TZV-000225..233; per-unit price and local names;
+  Deals facet and Deals destination. Found and recorded three backend defects
+  and one of my own (F11–F15). Unit 136/136.
 - **2026-09-06** — C2 complete on Android: delivery as a priced choice echoed to
   the receipt; cart savings header; OrderDetail; F8 (double gutter) fixed; suite
   12/12 after warm-up; two new test-failure classes recorded.

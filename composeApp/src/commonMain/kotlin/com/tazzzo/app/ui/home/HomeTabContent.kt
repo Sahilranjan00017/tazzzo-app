@@ -109,7 +109,7 @@ private val RAIL_ORDER = listOf(
 // cards (banners) and edge-bleeding rails.
 // ---------------------------------------------------------------------------
 
-private val SectionGap: Dp = 28.dp
+private val SectionGap: Dp = 20.dp
 private val InnerGap: Dp = 12.dp
 private val CategoryTileSize: Dp = 74.dp
 
@@ -122,7 +122,9 @@ private data class HomeFeed(
     val categories: List<Category>,
     val rails: Map<String, List<Product>>,
     /** Distinct products from real past orders — empty when no order history. */
-    val orderAgain: List<Product>
+    val orderAgain: List<Product>,
+    /** Largest MRP-vs-price savings among the loaded rails. Data, not a claim. */
+    val deals: List<Product> = emptyList()
 )
 
 /**
@@ -140,22 +142,27 @@ fun HomeTabContent() {
     val feed = rememberLoad(isEmpty = { false }) {
         val catalog = ServiceLocator.catalog
         val pastOrders = ServiceLocator.orders.getOrders()
+        val rails = mapOf(
+            "Bestsellers" to catalog.getBestsellers(),
+            "Snacks & Munchies" to catalog.getProducts("munchies"),
+            "Dairy, Bread & Eggs" to catalog.getProducts("dairy"),
+            "Personal Care" to (catalog.getProducts("personal") + catalog.getProducts("skincare")),
+            "Sweet Tooth" to catalog.getProducts("sweet"),
+            "Cleaning Essentials" to catalog.getProducts("cleaning")
+        )
         HomeFeed(
             banners = catalog.getBanners(),
             categories = Taxonomy.categories(catalog),
-            rails = mapOf(
-                "Bestsellers" to catalog.getBestsellers(),
-                "Snacks & Munchies" to catalog.getProducts("munchies"),
-                "Dairy, Bread & Eggs" to catalog.getProducts("dairy"),
-                "Personal Care" to (catalog.getProducts("personal") + catalog.getProducts("skincare")),
-                "Sweet Tooth" to catalog.getProducts("sweet"),
-                "Cleaning Essentials" to catalog.getProducts("cleaning")
-            ),
+            rails = rails,
             orderAgain = pastOrders
                 .flatMap { it.lines }
                 .map { it.product }
                 .distinctBy { it.id }
-                .take(8)
+                .take(8),
+            deals = rails.values.flatten().distinctBy { it.id }
+                .filter { it.mrp > it.price && it.isPurchasable }
+                .sortedByDescending { it.mrp - it.price }
+                .take(10)
         )
     }
 
@@ -200,13 +207,21 @@ private fun HomeFeedList(data: HomeFeed) {
 
         // ----------------------------------------------- 3. offers carousel
         item { Spacer(Modifier.height(SectionGap)) }
-        item { BannerCarousel(data.banners) }
+        // The campaign hero replaces the promo carousel. That carousel carried the
+        // unsubstantiated "SAVE 8–20%" claim (D6) and a photograph full of
+        // third-party trade dress; neither belongs on Home. The hero is
+        // config-driven and curates categories the store actually sells.
+        item { CampaignHero() }
 
         // ------------------------------------ 4. bestsellers + order again
         item { Spacer(Modifier.height(SectionGap)) }
         // Coupons that exist in config, with their thresholds stated. A coupon
         // card that hides its minimum is a disappointment waiting in the cart.
         item { CouponRail() }
+        // Data-backed: the biggest rupee savings among products already loaded
+        // for this feed. No historical price claims — just MRP vs price today.
+        item { ProductRail("Today's deals", data.deals) }
+        item { Spacer(Modifier.height(SectionGap)) }
         item { ProductRail("Bestsellers", data.rails["Bestsellers"] ?: emptyList()) }
         if (data.orderAgain.isNotEmpty()) {
             item { Spacer(Modifier.height(SectionGap)) }
@@ -610,4 +625,88 @@ private fun CouponRail() {
         }
     }
     Spacer(Modifier.height(TazSpace.lg))
+}
+
+/**
+ * Festival / seasonal hero. Reads [com.tazzzo.app.config.CampaignConfig];
+ * renders nothing when there is no campaign, so Home never shows an empty slot.
+ *
+ * Artwork is [ASSET REQUIRED]: with no `heroImageUrl` the hero is a
+ * typographic treatment over Tazzzo green, with the collection's own category
+ * art (openly licensed, already attributed) as the visual cue. It is a real
+ * module with real destinations — the CTA opens the first collection aisle,
+ * each tile opens its aisle — not a decorative rectangle.
+ */
+@Composable
+private fun CampaignHero() {
+    val campaign = com.tazzzo.app.config.CampaignConfig.current ?: return
+    val app = LocalAppState.current
+    val byId = (Taxonomy.cached() ?: emptyList()).associateBy { it.id }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = TazSpace.gutter)
+            .clip(TazRadius.tile).background(TazColors.GreenDark)
+            .tazPressableCard(
+                onClick = { campaign.categoryIds.firstOrNull()?.let { app.navigate(Screen.CategoryDetail(it)) } },
+                shape = TazRadius.tile
+            )
+            .padding(TazSpace.lg)
+    ) {
+        campaign.validUntilLabel?.let {
+            Text(
+                it.uppercase(), fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                letterSpacing = TazType.labelTracking, color = TazColors.White.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(TazSpace.xs))
+        }
+        Text(
+            campaign.title, fontSize = TazType.h1Size, fontWeight = TazType.h1Weight,
+            lineHeight = TazType.h1Line, color = TazColors.White
+        )
+        Spacer(Modifier.height(TazSpace.xxs))
+        Text(campaign.subtitle, fontSize = TazType.bodySize, color = TazColors.White.copy(alpha = 0.85f))
+        Spacer(Modifier.height(TazSpace.lg))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
+            campaign.categoryIds.take(4).forEach { id ->
+                val cat = byId[id] ?: return@forEach
+                Column(
+                    Modifier.weight(1f)
+                        .clip(TazRadius.card).background(TazColors.White.copy(alpha = 0.10f))
+                        // Distinct label: the SAME category also appears in the grid
+                        // below. Two controls announcing "Vegetables & Fruits" are
+                        // indistinguishable to a screen reader (and to a test).
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "${campaign.title}: ${cat.name}"
+                        }
+                        .tazPressableCard(onClick = { app.navigate(Screen.CategoryDetail(cat.id)) }, shape = TazRadius.card)
+                        .padding(TazSpace.sm),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    com.tazzzo.app.ui.common.categoryArtFor(cat.id)?.let { art ->
+                        androidx.compose.foundation.Image(
+                            painter = org.jetbrains.compose.resources.painterResource(art),
+                            contentDescription = null,   // decorative; the tile carries the label
+                            modifier = Modifier.size(52.dp).clip(TazRadius.chip),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    }
+                    Spacer(Modifier.height(TazSpace.xs))
+                    Text(
+                        cat.name.substringBefore(","), fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        color = TazColors.White, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(TazSpace.lg))
+        Box(
+            Modifier.clip(TazRadius.pill).background(TazColors.White)
+                .padding(horizontal = TazSpace.lg, vertical = TazSpace.sm)
+        ) {
+            Text(
+                campaign.ctaLabel, fontSize = TazType.buttonSize, fontWeight = TazType.buttonWeight,
+                color = TazColors.GreenDark
+            )
+        }
+    }
+    Spacer(Modifier.height(SectionGap))
 }

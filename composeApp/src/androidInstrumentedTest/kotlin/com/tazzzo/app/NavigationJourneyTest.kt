@@ -75,7 +75,7 @@ class NavigationJourneyTest {
     @Test
     fun home_to_category_to_pdp_and_back_returns_through_the_stack() {
         waitFor(hasContentDescription("Vegetables & Fruits"))
-        rule.onNodeWithContentDescription("Vegetables & Fruits")
+        rule.onAllNodes(hasContentDescription("Vegetables & Fruits") and hasClickAction()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
 
         waitFor(hasText("Fresh Onion"))
@@ -126,7 +126,7 @@ class NavigationJourneyTest {
         // What matters is the resulting back stack, asserted below.
         repeat(5) {
             runCatching {
-                rule.onNodeWithContentDescription("Vegetables & Fruits")
+                rule.onAllNodes(hasContentDescription("Vegetables & Fruits") and hasClickAction()).onFirst()
                     .performSemanticsAction(SemanticsActions.OnClick)
             }
         }
@@ -155,7 +155,7 @@ class NavigationJourneyTest {
     @Test
     fun category_scroll_position_survives_opening_a_product_and_coming_back() {
         waitFor(hasContentDescription("Vegetables & Fruits"))
-        rule.onNodeWithContentDescription("Vegetables & Fruits")
+        rule.onAllNodes(hasContentDescription("Vegetables & Fruits") and hasClickAction()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
         waitFor(hasText("Fresh Onion"))
 

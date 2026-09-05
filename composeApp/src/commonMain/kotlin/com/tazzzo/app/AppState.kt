@@ -69,6 +69,10 @@ enum class NavDirection { Forward, Backward, Replace }
 enum class HomeTab(val label: String, val emoji: String) {
     HOME("Home", "🏠"),
     CATEGORIES("Categories", "🗂️"),
+    // Savings is a destination, not a filter buried in a list. Every benchmark
+    // gives it a permanent slot, because "what is cheap today" is one of the
+    // three questions a customer opens a grocery app to answer.
+    DEALS("Deals", "🏷️"),
     ORDER_AGAIN("Order Again", "🔄"),
     ACCOUNT("Account", "👤")
 }
@@ -199,6 +203,12 @@ class TazzzoAppState(
 
     /** Returning customers skip the login wall; logout resets this. */
     val isOnboarded: Boolean get() = store?.onboarded == true
+
+    /** Dev-only entry behind the `taz_start_home` launch flag: mark the device
+     *  onboarded AND route to Home in one step, so no later routing effect
+     *  (Splash → Onboarding for a new device) can bounce a demo launch back onto
+     *  the login wall. Ships nowhere; test classes clear the store first. */
+    fun enterDemoHome() { store?.onboarded = true; resetTo(Screen.Home) }
 
     fun markLoggedOut() {
         store?.onboarded = false

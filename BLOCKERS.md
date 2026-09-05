@@ -44,6 +44,10 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       placeholders; attribution in docs/IMAGE_ATTRIBUTIONS.md).
 
 ## P1 — visual ceiling (new, Phase 6)
+- [ ] **Campaign artwork [ASSET REQUIRED] (2026-09-06).** CampaignHero is live and
+      data-driven (CampaignConfig, [MOCKED]); it renders typographically with
+      licensed category art until production artwork is supplied. Date windowing
+      is [BACKEND REQUIRED].
 - [ ] **Delivery slots are [MOCKED] (2026-09-06).** Slot model now carries fee,
       reason, group and recommended; the chosen slot follows the order to the
       receipt. Real slots, fees and availability are [BACKEND REQUIRED]
@@ -75,6 +79,10 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       are lost on every back; (S4) no haptics anywhere. Full inventory, per
       component and per screen before-scores, and the fix plan are in
       TAZZZO_5_STAR_EXPERIENCE_AUDIT.md.
+- [x] REMOVED FROM HOME 2026-09-06: the hero carousel (and with it the
+      "SAVE 8–20%" claim and the trade-dress photograph) is replaced by a
+      config-driven CampaignHero. The asset still exists in MockCatalog banners
+      and D6 remains UNRESOLVED for About / splash / login copy.
 - [ ] Hero banner carries THIRD-PARTY TRADE DRESS (Aashirvaad, Daawat, Maggi,
       Tata Salt, Colgate, Fortune packaging) in Tazzzo's own marketing image.
       Brand/licensing exposure, not just a placeholder issue. Raised 2026-09-01.
@@ -122,3 +130,52 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
 - [ ] Micro-interactions, transitions, checkout polish.
 - [ ] Performance pass (emulator cold start is slow under swiftshader;
       profile on hardware).
+
+## Taxonomy v0.9.0 conflicts (2026-09-06)
+
+Raised after verifying `Tazzzo_Taxonomy_Handoff_for_Mobile_App.md` directly
+against `Tazzzo_Taxonomy_V1_Master.csv` (293 rows), `Tazzzo_Taxonomy_V1_Master.json`
+and `tazzzo-catalog-service/docs/openapi.json` (29 paths, 8 GET). None of these
+is an app defect. All need a decision or backend work.
+
+- [ ] **No browse, list or search endpoint. Blocks the category screen and
+      search entirely.** Verified: `GET /api/v1/products` *requires*
+      `canonicalKey` and returns a single `ProductResponse`, not a page. There
+      is no node-children endpoint. The app currently renders both screens from
+      `MockCatalog`, so this is invisible today and fatal at integration.
+      Needs a contract change, which the handoff says is not scoped.
+- [ ] **Every vertical id in the shipped master CSV is suffixed
+      " (provisional)"** — all 293 rows, e.g. `TZV-000225 (provisional)`. That
+      is branch status leaking into the identity column, and it contradicts the
+      handoff's own stability contract. The app stores the bare id in
+      `Product.verticalId`. If anyone keys on the raw CSV string it breaks the
+      day a branch locks. Backend should split status out of the id column.
+- [ ] **Fresh produce, dairy and pet care do not exist in v0.9.0 and were
+      excluded by recorded decision — but they are the app's entire spine.**
+      Verified absent: zero Dairy, Milk, Curd, Paneer, Dog or Cat verticals;
+      the only produce-adjacent nodes are Frozen Vegetables, Nuts, Dried
+      Fruits, Dates, Seeds and Juice & Fruit Drinks, all inside Food. Eggs DO
+      exist (under Meat, Seafood & Eggs). `[BUSINESS DECISION]` — either the
+      exclusion is reversed through the release machinery, or Tazzzo ships
+      without the aisles its Home screen is built around. **Produce depth work
+      is stopped pending this ruling; it was not expanded.**
+- [ ] **The collections plane is not built.** Festival campaigns, offer rows
+      and curated rails have no backend home. `CampaignConfig` and
+      `PromotionConfig` are `[MOCKED]` locally and have nothing to bind to.
+- [ ] **All 9 Pooja verticals are `PROPOSED — 50-SKU validation pending`**, as
+      are all of Personal Care, Home Care, Meat and Health & Wellness (161 of
+      293 rows). Only Staples (69) and Food (63) are conditionally locked.
+      Names and structure in the Pooja aisle may still move.
+- [ ] **Local-language product names need native review before launch.** The
+      Kannada names planned for Bengaluru produce (Eerulli, Baale Hannu,
+      Southekayi) are researched, not verified by a native speaker. A wrong
+      word in a customer's own language is worse than English only. None have
+      shipped yet.
+
+### Correction to the handoff document itself
+§1.2 states "there is no festive category" in a way that reads as though ritual
+goods are absent. **`Pooja & Religious Needs` does exist** — a full Category
+under Household & Lifestyle with 2 sub-categories and 9 verticals
+(TZV-000225..TZV-000233), and §3 of the same document lists it. What does not
+exist is *festive as a seasonal grouping*, which the document's own three-plane
+rule correctly places in collections. The app now mirrors the real shape.

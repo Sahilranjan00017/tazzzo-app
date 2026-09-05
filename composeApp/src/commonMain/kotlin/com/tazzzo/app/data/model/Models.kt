@@ -84,9 +84,45 @@ data class Product(
     val availability: Availability = Availability.InStock,
     /** Hard ceiling per order, independent of stock (e.g. fair-use limits). */
     val maxOrderQuantity: Int = 10,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    /**
+     * Local-language name shown beside the English one — "Eerulli" for onion in
+     * Bengaluru, "Baale Hannu" for banana.
+     *
+     * Per-SKU and ultimately per-store, because the language follows the dark
+     * store that serves the customer, not the phone's locale. Null where no
+     * verified name exists: a transliteration guessed at render time would put
+     * a wrong word in a customer's own language, which is worse than showing
+     * only English.
+     */
+    val localName: String? = null,
+    /**
+     * The catalogue service's vertical id for this SKU — "TZV-000225".
+     *
+     * Carried on the mock so that swapping mock for service is a data change,
+     * not a re-modelling exercise. Nullable because the app's own aisles
+     * (fresh produce, dairy, pet) have no vertical in taxonomy v0.9.0: those
+     * were a recorded scope exclusion, and a null here marks exactly which
+     * SKUs the backend cannot serve today rather than hiding the gap.
+     *
+     * Store the bare id. The master CSV currently suffixes every id with
+     * " (provisional)"; that suffix is branch status, not identity, and keying
+     * on it would break the day the branch locks.
+     */
+    val verticalId: String? = null
 ) {
     val discountPercent: Int get() = if (mrp > price) ((mrp - price) * 100) / mrp else 0
+
+    /**
+     * Price per standard unit — "₹32/kg", "₹58/L", "₹7/pc" — derived from the
+     * pack size and nothing else.
+     *
+     * Null whenever the pack is not a measurable quantity ("1 unit",
+     * "180 pages"): inventing a denominator would be a false price claim, and
+     * this figure exists precisely so a customer can compare two pack sizes
+     * honestly.
+     */
+    val unitPriceLabel: String? get() = unitPriceLabel(price, unit)
 
     val isPurchasable: Boolean get() = availability.isPurchasable
 
@@ -197,3 +233,38 @@ data class UserProfile(
 
 @Serializable
 data class FaqItem(val question: String, val answer: String)
+
+/**
+ * Derives a per-unit price label from a pack-size string.
+ *
+ * Understands "1 kg", "500 g", "1 L", "250 ml", "6 pcs" and multipacks such as
+ * "4 x 100 g" (which is 400 g, not 100 g — reading only the trailing figure
+ * would overstate the value by four times). Returns null for anything it cannot
+ * measure rather than guessing.
+ */
+internal fun unitPriceLabel(price: Int, unit: String): String? {
+    val u = unit.lowercase()
+    val multi = Regex("""(\d+)\s*[x\u00d7]\s*(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b""").find(u)
+    val mass = multi ?: Regex("""(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b""").find(u)
+    if (mass != null) {
+        val g = mass.groupValues
+        val qty: Double
+        val suffix: String
+        if (multi != null) { qty = g[1].toDouble() * g[2].toDouble(); suffix = g[3] }
+        else { qty = g[1].toDouble(); suffix = g[2] }
+        if (qty <= 0.0) return null
+        return when (suffix) {
+            "kg" -> "\u20b9${(price / qty).roundToWhole()}/kg"
+            "g"  -> if (qty < 20) null else "\u20b9${(price * 1000 / qty).roundToWhole()}/kg"
+            "l"  -> "\u20b9${(price / qty).roundToWhole()}/L"
+            "ml" -> if (qty < 20) null else "\u20b9${(price * 1000 / qty).roundToWhole()}/L"
+            else -> null
+        }
+    }
+    val pieces = Regex("""(\d+)\s*(pcs|pc|pieces|piece)\b""").find(u) ?: return null
+    val n = pieces.groupValues[1].toIntOrNull() ?: return null
+    if (n <= 1) return null
+    return "\u20b9${(price.toDouble() / n).roundToWhole()}/pc"
+}
+
+private fun Double.roundToWhole(): Int = (this + 0.5).toInt()

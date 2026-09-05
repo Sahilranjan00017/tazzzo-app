@@ -54,10 +54,19 @@ import androidx.compose.ui.unit.dp
 data class ProductFilters(
     val sort: SortOption = SortOption.RELEVANCE,
     val inStockOnly: Boolean = false,
-    val brands: Set<String> = emptySet()
+    val brands: Set<String> = emptySet(),
+    /**
+     * Only items whose MRP genuinely exceeds their selling price.
+     *
+     * Derived from the two prices on the SKU, never from a "deal" flag someone
+     * set: a discount the customer cannot verify against an MRP is not a
+     * discount. An item priced at its MRP is excluded even if it is on a
+     * campaign, because there is nothing off.
+     */
+    val dealsOnly: Boolean = false
 ) {
     val activeCount: Int
-        get() = (if (inStockOnly) 1 else 0) + brands.size +
+        get() = (if (inStockOnly) 1 else 0) + brands.size + (if (dealsOnly) 1 else 0) +
             (if (sort != SortOption.RELEVANCE) 1 else 0)
 }
 
@@ -70,14 +79,17 @@ data class ProductFilters(
  * round-trip through the platform's own state bundle.
  */
 val ProductFiltersSaver: Saver<ProductFilters, Any> = listSaver(
-    save = { listOf(it.sort.name, it.inStockOnly, it.brands.toList()) },
+    save = { listOf(it.sort.name, it.inStockOnly, it.brands.toList(), it.dealsOnly) },
     restore = {
         @Suppress("UNCHECKED_CAST")
         ProductFilters(
             sort = runCatching { SortOption.valueOf(it[0] as String) }
                 .getOrDefault(SortOption.RELEVANCE),
             inStockOnly = it[1] as Boolean,
-            brands = (it[2] as List<String>).toSet()
+            brands = (it[2] as List<String>).toSet(),
+            // Older saved bundles predate this filter, so read it defensively:
+            // a restore must never crash on state written by a previous build.
+            dealsOnly = it.getOrNull(3) as? Boolean ?: false
         )
     }
 )
@@ -94,6 +106,7 @@ fun List<Product>.applyFilters(f: ProductFilters): List<Product> {
     var out = this
     if (f.inStockOnly) out = out.filter { it.isPurchasable }
     if (f.brands.isNotEmpty()) out = out.filter { it.brand in f.brands }
+    if (f.dealsOnly) out = out.filter { it.mrp > it.price }
     out = when (f.sort) {
         SortOption.RELEVANCE -> out
         SortOption.PRICE_LOW -> out.sortedBy { it.price }
@@ -134,6 +147,15 @@ fun FilterBar(
             selected = filters.inStockOnly,
             leading = if (filters.inStockOnly) TazIcons.Check else null,
             onClick = { onChange(filters.copy(inStockOnly = !filters.inStockOnly)) }
+        )
+        // Sits beside "In stock" because both are one-tap truths about the
+        // item, not preferences. "Deals" means MRP exceeds price on this SKU
+        // today — nothing else qualifies.
+        FilterChip(
+            label = "Deals",
+            selected = filters.dealsOnly,
+            leading = if (filters.dealsOnly) TazIcons.Check else null,
+            onClick = { onChange(filters.copy(dealsOnly = !filters.dealsOnly)) }
         )
         brands.forEach { brand ->
             FilterChip(

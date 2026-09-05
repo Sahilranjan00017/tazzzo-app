@@ -63,7 +63,7 @@ import com.tazzzo.app.ui.voice.VoiceComingSoonSheet
 import kotlinx.coroutines.delay
 
 /**
- * The main shell of the app: 4 bottom tabs + floating cart bar + one-time
+ * The main shell of the app: 5 bottom tabs + floating cart bar + one-time
  * guided-journey overlay + voice "coming soon" sheet.
  */
 @Composable
@@ -75,6 +75,7 @@ fun MainScaffold() {
                 when (app.homeTab) {
                     HomeTab.HOME -> HomeTabContent()
                     HomeTab.CATEGORIES -> CategoriesTabContent()
+                    HomeTab.DEALS -> DealsTabContent()
                     HomeTab.ORDER_AGAIN -> OrderAgainTabContent()
                     HomeTab.ACCOUNT -> AccountTabContent()
                 }
@@ -156,6 +157,7 @@ private fun BoxScope.TransientMessageToast() {
 private fun navIconFor(tab: HomeTab): ImageVector = when (tab) {
     HomeTab.HOME -> TazIcons.Home
     HomeTab.CATEGORIES -> TazIcons.Categories
+    HomeTab.DEALS -> TazIcons.Offer
     HomeTab.ORDER_AGAIN -> TazIcons.OrderAgain
     HomeTab.ACCOUNT -> TazIcons.Account
 }
