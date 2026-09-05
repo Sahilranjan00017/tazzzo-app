@@ -228,3 +228,48 @@ class MembershipTest {
         assertEquals(35, MembershipCalculator.exampleSavings(plan, 700))
     }
 }
+
+/**
+ * Club progress must advance through the SAME replay-guarded path that money
+ * does, and must not advance at all on an order the discount never touched.
+ */
+class MembershipOrderProgressTest {
+
+    private val plan = MembershipConfig.plan
+
+    private fun activeRepo() = LocalMembershipRepository(store = null).also { }
+
+    @Test fun ineligible_orders_do_not_advance_progress() = runTest {
+        val r = LocalMembershipRepository(store = null)
+        r.activate(
+            MembershipTransaction(
+                "pay_a", plan.id, plan.priceRupees, MembershipStatus.ACTIVE,
+                "pay_a", isTestPayment = true, placedAtLabel = "5 Sep"
+            )
+        )
+        // A member whose basket never reached the threshold: no discount was
+        // applied, so nothing may be credited toward milestones.
+        val before = r.getState()
+        // Caller only records when clubDiscount > 0; simulate that contract.
+        val discount = MembershipCalculator.evaluate(300, true, plan).discountRupees
+        if (discount > 0) r.recordEligibleOrder("TZ-low", 300, discount, "5 Sep")
+        assertEquals(before.eligibleOrderCount, r.getState().eligibleOrderCount)
+        assertEquals(0, r.getState().cumulativeSpendRupees)
+    }
+
+    @Test fun savings_accumulate_across_distinct_orders() = runTest {
+        val r = LocalMembershipRepository(store = null)
+        r.activate(
+            MembershipTransaction(
+                "pay_b", plan.id, plan.priceRupees, MembershipStatus.ACTIVE,
+                "pay_b", isTestPayment = true, placedAtLabel = "5 Sep"
+            )
+        )
+        r.recordEligibleOrder("TZ-1", 700, 35, "5 Sep")
+        r.recordEligibleOrder("TZ-2", 900, 45, "6 Sep")
+        val state = r.getState()
+        assertEquals(1_600, state.cumulativeSpendRupees)
+        assertEquals(80, state.cumulativeSavingsRupees)
+        assertEquals(2, state.eligibleOrderCount)
+    }
+}

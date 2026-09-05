@@ -169,6 +169,18 @@ object TazSize {
     val chipHeight: Dp = 36.dp
     val navBarHeight: Dp = 62.dp
 
+    /**
+     * Width of the quantity stepper when it sits BESIDE content rather than
+     * spanning it (cart rows, list rows).
+     *
+     * Needed because the stepper's interior fills its container so the − and +
+     * sit at the pill's edges. As an unweighted child of a Row that makes it
+     * claim all remaining width, which starved the cart row's name/price
+     * column to zero — the row rendered as an image and a stepper with no
+     * product on it. Callers that place the stepper alongside text pass this.
+     */
+    val stepperInlineWidth: Dp = 116.dp
+
     val productCardWidth: Dp = 150.dp
     val productImageHeight: Dp = 96.dp
     val categoryTile: Dp = 72.dp

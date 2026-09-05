@@ -28,6 +28,9 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.config.MembershipConfig
+import com.tazzzo.app.ui.interaction.TazHaptic
+import androidx.compose.foundation.layout.width
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -168,7 +171,10 @@ fun CartScreen() {
                                 }
                             }
                             Spacer(Modifier.width(TazSpace.md))
-                            QuantityStepper(line.product)
+                            QuantityStepper(
+                                line.product,
+                                Modifier.width(TazSize.stepperInlineWidth)
+                            )
                         }
                         if (index < lines.lastIndex) {
                             HorizontalDivider(
@@ -178,6 +184,9 @@ fun CartScreen() {
                         }
                     }
                 }
+
+                // ----- Tazzzo Club: context-aware, never nagging -----
+                ClubCartPrompt()
 
                 // ----- Savings strip -----
                 if (bill.saved > 0) {
@@ -259,6 +268,21 @@ fun CartScreen() {
                             BillValue("₹${bill.handlingCharge}")
                         }
                         Spacer(Modifier.height(TazSpace.md))
+
+                        // Club savings — only ever shown when a real discount
+                        // was applied to THIS bill. Never an estimate, never a
+                        // "what you could have saved" figure on a real bill.
+                        if (bill.clubDiscount > 0) {
+                            BillRow(label = "Tazzzo Club savings") {
+                                Text(
+                                    "−₹${bill.clubDiscount}",
+                                    fontSize = TazType.bodySize,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TazColors.Green
+                                )
+                            }
+                            Spacer(Modifier.height(TazSpace.md))
+                        }
 
                         // Coins earned
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -452,4 +476,86 @@ private fun BillValue(text: String) {
         text, fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
         color = TazColors.TextPrimary, maxLines = 1
     )
+}
+
+/**
+ * The one Club surface in the cart.
+ *
+ * Four different customers get four different messages, because a single
+ * generic "Join Club" banner is noise to three of them:
+ *  - member, discount applied  → confirm the saving happened;
+ *  - member, cart short        → how much more unlocks it;
+ *  - non-member, cart qualifies→ the exact rupees this basket would save;
+ *  - non-member, cart short    → the offer, stated honestly, no fake number.
+ *
+ * It never blocks checkout. Membership is an offer, not a toll gate.
+ */
+@Composable
+private fun ClubCartPrompt() {
+    val app = LocalAppState.current
+    val eligibility = app.clubEligibility()
+    val plan = MembershipConfig.plan
+
+    // Nothing useful to say about an empty cart.
+    if (app.cartItemCount == 0) return
+
+    val (title, body) = when {
+        eligibility.isMember && eligibility.isEligible ->
+            "Club savings applied" to "₹${eligibility.discountRupees} off this order."
+        eligibility.isMember ->
+            "Add ₹${eligibility.amountToUnlockRupees} more to unlock Club savings" to
+                "${plan.discountRule.percent}% off eligible orders ₹${plan.discountRule.minOrderValueRupees}+."
+        !eligibility.isMember && eligibility.amountToUnlockRupees == 0 -> {
+            val wouldSave = plan.discountRule.discountFor(app.bill(app.cartLines()).itemTotal)
+            "Join Club — save ₹$wouldSave on this order" to
+                "₹${plan.priceRupees} membership. ${plan.discountRule.percent}% off eligible orders."
+        }
+        else ->
+            "Join Tazzzo Club" to
+                "${plan.discountRule.percent}% off eligible orders ₹${plan.discountRule.minOrderValueRupees}+, plus rewards."
+    }
+
+    val isMemberBenefit = eligibility.isMember && eligibility.isEligible
+
+    Row(
+        Modifier.fillMaxWidth()
+            .padding(horizontal = TazSpace.gutter)
+            .clip(TazRadius.card)
+            .background(if (isMemberBenefit) TazColors.GreenSoft else TazColors.Surface)
+            .border(
+                BorderStroke(1.dp, if (isMemberBenefit) TazColors.Green else TazColors.CardBorder),
+                TazRadius.card
+            )
+            .then(
+                if (eligibility.isMember) Modifier
+                else Modifier.tazPressable(
+                    onClick = { app.navigate(Screen.Club) },
+                    pressScale = TazPress.row,
+                    shape = TazRadius.card,
+                    haptic = TazHaptic.Tap
+                )
+            )
+            .padding(TazSpace.lg),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title, fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
+                lineHeight = TazType.bodyLine, color = TazColors.TextPrimary
+            )
+            Spacer(Modifier.height(TazSpace.xxs))
+            Text(
+                body, fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
+                color = TazColors.TextSecondary
+            )
+        }
+        if (!eligibility.isMember) {
+            Spacer(Modifier.width(TazSpace.sm))
+            Text(
+                "See Club", fontSize = TazType.captionSize,
+                fontWeight = FontWeight.SemiBold, color = TazColors.Green
+            )
+        }
+    }
+    Spacer(Modifier.height(TazSpace.md))
 }

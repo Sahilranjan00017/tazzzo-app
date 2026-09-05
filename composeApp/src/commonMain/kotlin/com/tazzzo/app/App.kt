@@ -22,6 +22,8 @@ import com.tazzzo.app.ui.home.CoinsScreen
 import com.tazzzo.app.ui.home.HelpScreen
 import com.tazzzo.app.ui.home.AddressesScreen
 import com.tazzzo.app.ui.home.AboutScreen
+import com.tazzzo.app.ui.club.ClubScreen
+import com.tazzzo.app.ui.club.ClubCheckoutScreen
 import com.tazzzo.app.ui.onboarding.LoginScreen
 import com.tazzzo.app.ui.onboarding.OnboardingScreen
 import com.tazzzo.app.ui.splash.SplashScreen
@@ -84,6 +86,8 @@ fun App() {
                         is Screen.Help -> HelpScreen()
                         is Screen.Addresses -> AddressesScreen()
                         is Screen.About -> AboutScreen()
+                        is Screen.Club -> ClubScreen()
+                        is Screen.ClubCheckout -> ClubCheckoutScreen()
                     }
                     }
                 }

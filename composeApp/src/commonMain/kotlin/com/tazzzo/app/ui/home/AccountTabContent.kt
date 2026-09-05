@@ -39,6 +39,7 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.config.MembershipConfig
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -93,6 +94,19 @@ fun AccountTabContent() {
                 .background(TazColors.Surface)
                 .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
         ) {
+            // Club sits first: for a member it is the most valuable thing on
+            // this screen, and for everyone else it is the offer.
+            MenuRow(
+                TazIcons.Coin,
+                if (app.isClubMember) "${MembershipConfig.plan.name} ✓"
+                else MembershipConfig.plan.name,
+                if (app.isClubMember)
+                    "₹${app.membership.cumulativeSavingsRupees} saved · ${app.membership.eligibleOrderCount} eligible orders"
+                else "₹${MembershipConfig.plan.priceRupees} · ${MembershipConfig.plan.discountRule.percent}% off eligible orders"
+            ) {
+                app.navigate(Screen.Club)
+            }
+            MenuDivider()
             MenuRow(TazIcons.Receipt, "Your orders", "Track and reorder") {
                 app.navigate(Screen.Orders)
             }

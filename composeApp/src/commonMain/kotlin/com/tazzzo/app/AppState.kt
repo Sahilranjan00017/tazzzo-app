@@ -23,6 +23,10 @@ sealed interface Screen {
     data object Help : Screen
     data object Addresses : Screen
     data object About : Screen
+    /** Tazzzo Club landing — the value proposition, before any payment. */
+    data object Club : Screen
+    /** Confirm + pay. Separate destination so back returns to the landing page. */
+    data object ClubCheckout : Screen
 }
 
 /**
@@ -52,6 +56,8 @@ val Screen.stateKey: String
         is Screen.Help -> "help"
         is Screen.Addresses -> "addresses"
         is Screen.About -> "about"
+        is Screen.Club -> "club"
+        is Screen.ClubCheckout -> "clubCheckout"
     }
 
 /** Which way the customer is travelling. Drives the transition, nothing else. */
@@ -198,6 +204,7 @@ class TazzzoAppState(
         st.loadSession()?.let {
             _user.value = UserProfile(it.name, it.phone, it.isGuest, it.coinBalance, it.address)
         }
+        st.loadMembership()?.let { membership = it }
         val searches = st.loadRecentSearches()
         if (recentSearches.isEmpty() && searches.isNotEmpty()) {
             recentSearches.addAll(searches)
@@ -270,9 +277,32 @@ class TazzzoAppState(
 
     val cartItemCount: Int get() = cartEntries.values.sumOf { it.quantity }
 
+    // --- Tazzzo Club --------------------------------------------------------
+
+    /**
+     * Local mirror of the customer's club standing. Authoritative only until
+     * a backend exists — see BLOCKERS.md, same caveat as coin balances.
+     */
+    var membership by mutableStateOf(com.tazzzo.app.data.model.MembershipState())
+
+    val isClubMember: Boolean get() = membership.isActive
+
+    /** Club eligibility for the CURRENT cart. One source, used by cart, checkout and CTAs. */
+    fun clubEligibility(lines: List<CartLine> = cartLines()) =
+        com.tazzzo.app.config.MembershipCalculator.evaluate(
+            itemTotalRupees = lines.sumOf { it.lineTotal },
+            isMember = isClubMember,
+            plan = com.tazzzo.app.config.MembershipConfig.plan,
+            cumulativeSpendRupees = membership.cumulativeSpendRupees
+        )
+
     /** Delegates to [com.tazzzo.app.config.BillCalculator] — the one place money maths lives. */
     fun bill(lines: List<CartLine>): BillSummary =
-        com.tazzzo.app.config.BillCalculator.bill(lines)
+        com.tazzzo.app.config.BillCalculator.bill(
+            lines = lines,
+            isClubMember = isClubMember,
+            clubCumulativeSpendRupees = membership.cumulativeSpendRupees
+        )
 
     fun clearCart() { cartEntries.clear(); store?.clearCart() }
 
