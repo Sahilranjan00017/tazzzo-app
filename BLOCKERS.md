@@ -44,6 +44,18 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       placeholders; attribution in docs/IMAGE_ATTRIBUTIONS.md).
 
 ## P1 — visual ceiling (new, Phase 6)
+- [ ] **Delivery slots are [MOCKED] (2026-09-06).** Slot model now carries fee,
+      reason, group and recommended; the chosen slot follows the order to the
+      receipt. Real slots, fees and availability are [BACKEND REQUIRED]
+      (serviceability). No ETA is fabricated — D4 stands.
+- [ ] **Tip / delivery-partner gratuity — [BUSINESS DECISION], NOT BUILT.** Seen
+      in the reference checkout; deliberately not copied. Needs revenue-
+      recognition and reversal rules before any UI exists.
+- [ ] **"Rate order" — not built.** No ratings backend; a rating control with no
+      destination is a fake. [BACKEND REQUIRED].
+- [x] F8 FIXED 2026-09-06 — cart's Club and Offers cards rendered narrower than
+      the delivery/bill cards (double gutter). Found in a screenshot after all
+      semantic assertions passed.
 - [ ] **Promotions are [MOCKED] (2026-09-05).** A deterministic promotion engine now
       exists (config/PromotionEngine.kt, 22 unit tests) but the promotion SET,
       usage counters per user and real validity windows are [BACKEND REQUIRED].

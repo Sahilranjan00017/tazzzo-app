@@ -183,3 +183,27 @@ commit → report with `[IMPLEMENTED] / [MOCKED] / [BACKEND REQUIRED] /
 - **2026-09-05** — Benchmark opened and completed. Headline: no promotions layer
   exists; Club discount is correct but isolated. Competitor columns sourced as
   `[CTO-RESEARCH]` / `[PRINCIPLE]`, never presented as first-hand verification.
+
+---
+
+## 8. Addendum (2026-09-06) — what the reference screenshots actually show
+
+The CTO supplied screenshots of three live apps (a noon-Minutes-market checkout,
+Zepto, Blinkit). Unlike §2, these observations are **first-hand from the
+images**, tagged `[SCREENSHOT]`. They are read for information architecture
+and density — not copied.
+
+| Surface | `[SCREENSHOT]` observation | Tazzzo response |
+|---|---|---|
+| **Checkout** | One screen does five jobs: savings header → offers & coupons row → optional tip → delivery instructions → payment summary with struck fees (`25.00 FREE`) → savings breakdown **by type** (price discount vs delivery savings) → persistent CTA. | Cart: realised-savings header with expandable breakdown by type (promotion / Club / **delivery waived, with reason**); delivery struck-through when waived; delivery-instruction chips at review (config-driven). **Tip: `[BUSINESS DECISION]`, not built** — an optional gratuity has revenue-recognition and reversal rules Tazzzo has not set. |
+| **Product card** | Dense and uniform: image with floating `+`, price pill, struck MRP, `₹X OFF` in green, name, pack size. Nothing else. | Brand line (when present), price bold + struck MRP, **`₹X OFF` badge in Tazzzo orange** (rupees, not percent — what the customer can verify). Emoji imagery remains `[ASSET REQUIRED]`. |
+| **Savings** | One number at the top ("Yay! You saved ₹35"), expandable. The breakdown separates discount-on-price from delivery-fee savings. | Same structure. **MRP comparison kept out of it** and relabelled "₹X below MRP on these items" so it cannot be confused with money kept. |
+| **Slots / delivery** | Delivery context in the header of every checkout screen ("9 minutes delivery"); fee shown against the option. | Grouped slots (Next available / Today / Tomorrow), fee per slot with reason, recommended tag, sold-out state; chosen slot echoed on review, confirmation, orders list and detail. **No universal minute promise — D4.** |
+| **Orders** | Card: status ✓, amount, item thumbnails, Rate / Order Again. Detail: status + arrival, items with struck MRP, bill with struck fees, invoice download, order id copy, address, Get Help. | Card gains "Saved ₹X" and the slot; tap opens a new **OrderDetailScreen**: status, slot, items, bill with struck waived delivery, Club line, payment, instructions, **order-scoped "Need help"**, Order again. **"Rate order": not built — no ratings system, and a rating UI with no backend is a fake.** Invoice download: `[BACKEND REQUIRED]`. |
+| **Home** | Campaign hero with sub-tiles; coupon rail **stating thresholds**; Buy Again with current prices; deal rails with `₹X OFF`. | Coupon rail from `PromotionConfig` with thresholds and codes (data-backed); Buy Again already renders current catalogue products. Campaign hero `[ASSET REQUIRED]`. |
+| **Help** | "Need help with this order?" → issue types (delivered product / rider / not received). Order already known. | Help opened from an order carries the id ("Help with order #…"). Issue-type routing `[BACKEND REQUIRED]` for tickets. |
+| **Third-party brand imagery** | Every reference card shows real branded packshots. | Tazzzo **will not** fabricate or borrow these. `[ASSET REQUIRED — PRODUCTION PHOTOGRAPHY]`. |
+
+**What the screenshots do NOT license:** pink/purple palettes, "9 minutes"
+headers, tipping by default, ad-labelled product slots, or a fifth bottom tab.
+Density is the lesson; the design system stays Tazzzo's.

@@ -1,6 +1,7 @@
 package com.tazzzo.app.theme
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
@@ -70,6 +71,9 @@ object TazIcons {
     val Plus: ImageVector = Icons.Default.Add
     val Minus: ImageVector = Icons.Default.Remove
     val Offer: ImageVector = Icons.Outlined.LocalOffer
+    /** Expand / collapse affordance for disclosure rows (savings breakdown, fee reasons). */
+    val ChevronDown: ImageVector = Icons.Default.KeyboardArrowDown
+    val ChevronUp: ImageVector = Icons.Default.KeyboardArrowUp
     val Store: ImageVector = Icons.Default.Storefront
     val Inventory: ImageVector = Icons.Outlined.Inventory2
     val Filter: ImageVector = Icons.Default.Tune

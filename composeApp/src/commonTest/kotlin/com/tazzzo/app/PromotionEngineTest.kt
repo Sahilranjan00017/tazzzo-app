@@ -210,7 +210,11 @@ class PromotionEngineTest {
         assertEquals(0, b.deliveryFee)          // ≥ ₹199
         assertEquals(5, b.handlingCharge)
         assertEquals(669 - 33 - 5 + 0 + 5, b.grandTotal)
-        assertEquals(38, b.realisedSavings)
+        // Realised = Club ₹33 + milk-5 ₹5 + WAIVED delivery ₹25 (₹669 ≥ ₹199).
+        // Delivery the customer did not pay is money kept, so it counts — and
+        // the bill carries the reason ("Free on orders above ₹199").
+        assertEquals(63, b.realisedSavings)
+        assertEquals(25, b.deliveryFeeWaivedRupees)
         // MRP savings stay a separate figure: (40−32)×20 + (30−29) = 161.
         assertEquals(161, b.saved)
     }

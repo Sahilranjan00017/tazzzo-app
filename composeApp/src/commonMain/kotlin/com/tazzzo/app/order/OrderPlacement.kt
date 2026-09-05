@@ -74,7 +74,9 @@ object OrderPlacement {
                 addressId = address.id,
                 addressText = address.label + " — " + address.line1,
                 slotId = slot.id,
-                payment = payment
+                payment = payment,
+                slot = slot,
+                instructionIds = session.instructionIds.toList()
             )
         )
 

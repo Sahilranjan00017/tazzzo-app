@@ -382,6 +382,24 @@ fun EmojiBox(
     ) { Text(emoji, fontSize = fontSize) }
 }
 
+/** Rupee-off badge — the exact saving, which is what a customer can verify. */
+@Composable
+fun SavingsBadge(rupeesOff: Int, modifier: Modifier = Modifier) {
+    if (rupeesOff > 0) {
+        Box(
+            modifier
+                .clip(RoundedCornerShape(topStart = TazRadius.cardDp, bottomEnd = TazRadius.chipDp))
+                .background(TazColors.Orange)
+                .padding(horizontal = TazSpace.sm, vertical = 3.dp)
+        ) {
+            Text(
+                "₹$rupeesOff OFF", color = TazColors.White, fontSize = TazType.microSize,
+                fontWeight = TazType.microWeight, maxLines = 1
+            )
+        }
+    }
+}
+
 @Composable
 fun DiscountBadge(percent: Int, modifier: Modifier = Modifier) {
     if (percent > 0) {
@@ -469,19 +487,26 @@ fun PriceColumn(price: Int, mrp: Int) {
  */
 @Composable
 private fun CardPriceBlock(price: Int, mrp: Int, modifier: Modifier = Modifier) {
-    Row(modifier, verticalAlignment = Alignment.Bottom) {
-        Text(
-            "₹$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
-            color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
-        )
-        if (mrp > price) {
-            Spacer(Modifier.width(6.dp))
+    // Commerce hierarchy on the card: PRICE leads (bold), MRP struck beside it,
+    // and the saving stated in RUPEES underneath — a ₹8 the customer can check
+    // beats a 20% they cannot. One savings signal per card; the orange badge
+    // on the image carries the same figure so the card never says it twice
+    // in two units.
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                "₹$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
-                textDecoration = TextDecoration.LineThrough,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
+                "₹$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
+                color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
+            if (mrp > price) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "₹$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                    textDecoration = TextDecoration.LineThrough,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
         }
     }
 }
@@ -759,6 +784,14 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
 
             // --- body ---------------------------------------------------------
             Column(Modifier.fillMaxWidth().padding(ProductCardPadding)) {
+                // Brand first, when the catalogue has one. Trust starts with
+                // "who made this"; a blank brand renders nothing rather than a gap.
+                if (product.brand.isNotBlank()) {
+                    Text(
+                        product.brand, fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        color = TazColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text(
                     product.name,
                     fontSize = TazType.productNameSize,
@@ -822,7 +855,7 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
             Modifier.fillMaxWidth().align(Alignment.TopStart),
             verticalAlignment = Alignment.Top
         ) {
-            DiscountBadge(product.discountPercent)
+            SavingsBadge(product.mrp - product.price)
             Spacer(Modifier.weight(1f))
             val stock = product.availability
             if (stock is Availability.LowStock) {

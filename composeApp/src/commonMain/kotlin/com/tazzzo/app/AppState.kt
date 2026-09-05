@@ -27,6 +27,8 @@ sealed interface Screen {
     data object Club : Screen
     /** Confirm + pay. Separate destination so back returns to the landing page. */
     data object ClubCheckout : Screen
+    /** Permanent receipt + service centre for one order. */
+    data class OrderDetail(val orderId: String) : Screen
 }
 
 /**
@@ -58,6 +60,7 @@ val Screen.stateKey: String
         is Screen.About -> "about"
         is Screen.Club -> "club"
         is Screen.ClubCheckout -> "clubCheckout"
+        is Screen.OrderDetail -> "order:$orderId"
     }
 
 /** Which way the customer is travelling. Drives the transition, nothing else. */
@@ -317,13 +320,17 @@ class TazzzoAppState(
      */
     var couponCode by mutableStateOf<String?>(null)
 
+    /** Set when Help is opened FROM an order, so support is order-scoped. */
+    var helpOrderId by mutableStateOf<String?>(null)
+
     /** Delegates to [com.tazzzo.app.config.BillCalculator] — the one place money maths lives. */
     fun bill(lines: List<CartLine>): BillSummary =
         com.tazzzo.app.config.BillCalculator.bill(
             lines = lines,
             isClubMember = isClubMember,
             clubCumulativeSpendRupees = membership.cumulativeSpendRupees,
-            couponCode = couponCode
+            couponCode = couponCode,
+            slot = checkout?.slot
         )
 
     fun clearCart() { cartEntries.clear(); store?.clearCart() }

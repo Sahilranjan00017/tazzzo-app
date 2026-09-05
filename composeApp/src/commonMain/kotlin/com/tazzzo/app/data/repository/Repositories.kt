@@ -30,7 +30,9 @@ interface OrderRepository {
         lines: List<CartLine>,
         bill: BillSummary,
         address: String,
-        payment: com.tazzzo.app.data.model.PaymentMethodKind? = null
+        payment: com.tazzzo.app.data.model.PaymentMethodKind? = null,
+        slot: com.tazzzo.app.data.model.DeliverySlot? = null,
+        instructionIds: List<String> = emptyList()
     ): Order
     suspend fun getOrders(): List<Order>
 }
@@ -127,13 +129,16 @@ class MockOrderRepository : OrderRepository {
         lines: List<CartLine>,
         bill: BillSummary,
         address: String,
-        payment: com.tazzzo.app.data.model.PaymentMethodKind?
+        payment: com.tazzzo.app.data.model.PaymentMethodKind?,
+        slot: com.tazzzo.app.data.model.DeliverySlot?,
+        instructionIds: List<String>
     ): Order {
         delay(600)
         val order = Order(
             id = "TZ${100483 + orders.size}",
             lines = lines, bill = bill, status = OrderStatus.PLACED,
-            placedAtLabel = "Just now", address = address, payment = payment
+            placedAtLabel = "Just now", address = address, payment = payment,
+            slot = slot, instructionIds = instructionIds
         )
         orders.add(0, order)
         return order

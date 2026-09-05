@@ -126,11 +126,14 @@ class CartPromotionJourneyTest {
         rule.onAllNodes(hasText("−₹42")).fetchSemanticsNodes().let {
             assert(it.isNotEmpty()) { "B2G1 should free one banana (₹42)" }
         }
-        rule.onAllNodes(hasText("You saved")).fetchSemanticsNodes().let {
-            assert(it.isNotEmpty()) { "realised 'You saved' line missing" }
+        // Realised savings appear twice by design: the header sentence at the
+        // top and the itemised "Extra savings today" line in the bill.
+        // ₹71 = Club ₹29 + B2G1 ₹42 (delivery is free above ₹199 → +₹25 waived).
+        rule.onAllNodes(hasText("You're saving ₹96 on this order")).fetchSemanticsNodes().let {
+            assert(it.isNotEmpty()) { "savings header missing or wrong (expected ₹96 = 29 + 42 + 25 waived delivery)" }
         }
-        rule.onAllNodes(hasText("₹71")).fetchSemanticsNodes().let {
-            assert(it.isNotEmpty()) { "You saved should be ₹71 = ₹29 Club + ₹42 B2G1" }
+        rule.onAllNodes(hasText("Extra savings today")).fetchSemanticsNodes().let {
+            assert(it.isNotEmpty()) { "realised savings line missing from bill" }
         }
         // No competing exclusive offer here, so no best-offer note may appear.
         assert(rule.onAllNodes(hasText("Best offer applied", substring = true)).fetchSemanticsNodes().isEmpty()) {
@@ -162,9 +165,9 @@ class CartPromotionJourneyTest {
         rule.onAllNodes(hasText("−₹50")).fetchSemanticsNodes().let {
             assert(it.isNotEmpty()) { "coupon ₹50 line missing" }
         }
-        // Realised = ₹50 coupon + ₹42 B2G1 = ₹92.
-        rule.onAllNodes(hasText("₹92")).fetchSemanticsNodes().let {
-            assert(it.isNotEmpty()) { "You saved should be ₹92 after the coupon won" }
+        // Realised = ₹50 coupon + ₹42 B2G1 + ₹25 waived delivery = ₹117.
+        rule.onAllNodes(hasText("You're saving ₹117 on this order")).fetchSemanticsNodes().let {
+            assert(it.isNotEmpty()) { "savings header should read ₹117 after the coupon won" }
         }
         snapshot("c1_03_cart_coupon_contest")
     }

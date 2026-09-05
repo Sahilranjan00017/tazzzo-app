@@ -5,6 +5,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -12,6 +15,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -82,6 +87,14 @@ class InteractionSemanticsTest {
 
     @Test
     fun add_control_transforms_into_a_stepper_in_place() {
+        // Home is a LazyColumn: the Bestsellers rail (and its ADD controls) is not
+        // composed until scrolled into range. Scroll first, then wait.
+        rule.waitUntil(timeoutMillis = 20_000) {
+            rule.onAllNodes(hasTestTag("homeFeed")).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag("homeFeed").performScrollToNode(
+            hasContentDescription("Add Fresh Onion to cart") or hasContentDescription("Increase quantity of Fresh Onion")
+        )
         rule.waitUntil(timeoutMillis = 20_000) {
             rule.onAllNodes(hasContentDescription("Add Fresh Onion to cart"))
                 .fetchSemanticsNodes().isNotEmpty()
@@ -97,15 +110,24 @@ class InteractionSemanticsTest {
         // The touch path was verified by hand on the emulator with screenshots
         // (docs/screenshots/e1-after/). Geometry assertions belong to E2's
         // scroll/continuity work, where that lazy nesting is revisited.
-        rule.onNodeWithContentDescription("Add Fresh Onion to cart")
+        // Filter on the ACTIONABLE node. After a lazy scroll a label can bind to a
+        // node without the click action (E1 finding) — every journey test already
+        // filters this way; this older test now does too.
+        rule.waitForIdle()
+        rule.onAllNodes(hasContentDescription("Add Fresh Onion to cart") and hasClickAction()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
         rule.waitUntil(timeoutMillis = 5_000) {
             rule.onAllNodes(hasContentDescription("Increase quantity of Fresh Onion"))
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        rule.onNodeWithContentDescription("Increase quantity of Fresh Onion").assertExists()
-        rule.onNodeWithContentDescription("Decrease quantity of Fresh Onion").assertExists()
-        rule.onNodeWithContentDescription("Add Fresh Onion to cart").assertDoesNotExist()
-        rule.onNode(hasText("1 item", substring = true)).assertExists()
+        // Counts, not singletons: MockOrderRepository is process-global, so a test
+        // that placed an order earlier in the run puts Fresh Onion in Home's
+        // "Order again" rail as well — two steppers for one product is correct
+        // UI, and onNodeWith… would throw on it.
+        fun count(m: androidx.compose.ui.test.SemanticsMatcher) = rule.onAllNodes(m).fetchSemanticsNodes().size
+        assert(count(hasContentDescription("Increase quantity of Fresh Onion")) >= 1) { "stepper + missing" }
+        assert(count(hasContentDescription("Decrease quantity of Fresh Onion")) >= 1) { "stepper − missing" }
+        assert(count(hasContentDescription("Add Fresh Onion to cart")) == 0) { "ADD should have transformed away" }
+        assert(count(hasText("1 item", substring = true)) >= 1) { "cart bar should report 1 item" }
     }
 }

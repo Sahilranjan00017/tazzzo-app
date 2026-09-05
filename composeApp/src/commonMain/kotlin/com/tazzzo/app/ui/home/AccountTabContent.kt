@@ -40,6 +40,7 @@ import com.tazzzo.app.Screen
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.config.MembershipConfig
+import com.tazzzo.app.ui.interaction.tazPressableCard
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -84,6 +85,17 @@ fun AccountTabContent() {
         }
 
         Spacer(Modifier.height(TazSpace.md))
+
+        // Club standing FIRST for a member: what they saved, how far the next
+        // milestone and reward are. This is the strongest thing Account can
+        // say to someone who paid ₹99 — and it is shown only to members.
+        if (app.isClubMember) {
+            com.tazzzo.app.ui.club.ClubProgressCard(
+                app.membership,
+                Modifier.tazPressableCard(onClick = { app.navigate(Screen.Club) }, shape = TazRadius.card)
+            )
+            Spacer(Modifier.height(TazSpace.md))
+        }
 
         // ------------------------------------------------------------------
         // Main menu — one card, hairline dividers inset to the text

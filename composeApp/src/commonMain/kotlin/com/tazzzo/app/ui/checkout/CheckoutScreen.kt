@@ -56,6 +56,7 @@ import com.tazzzo.app.data.model.CartIssue
 import com.tazzzo.app.data.model.PaymentMethodKind
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.order.OrderPlacement
+import androidx.compose.foundation.horizontalScroll
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -811,24 +812,50 @@ private fun SlotStep(session: CheckoutSession) {
             )
         }
     ) { list ->
+        // Grouped by when, with the fee on every row. A slot is a CHOICE with a
+        // price attached, not a label — so the price sits where the choice is
+        // made, and a recommended slot is tagged, never silently pre-selected.
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            list.forEach { slot ->
-                val selected = session.slot?.id == slot.id
-                SelectionRow(
-                    selected = selected,
-                    enabled = slot.available,
-                    onClick = { session.slot = slot },
-                    leading = TazIcons.Slot,
-                    trailing = if (!slot.available) {
-                        { StatusChip("Full", warning = true) }
-                    } else null
-                ) {
+            list.groupBy { it.group ?: "" }.forEach { (group, slots) ->
+                if (group.isNotBlank()) {
                     Text(
-                        slot.label,
-                        fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
-                        color = TazColors.TextPrimary,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        group.uppercase(), fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        letterSpacing = TazType.labelTracking, color = TazColors.TextTertiary,
+                        modifier = Modifier.padding(top = TazSpace.xs)
                     )
+                }
+                slots.forEach { slot ->
+                    val selected = session.slot?.id == slot.id
+                    SelectionRow(
+                        selected = selected,
+                        enabled = slot.available,
+                        onClick = { session.slot = slot },
+                        leading = TazIcons.Slot,
+                        trailing = {
+                            if (!slot.available) StatusChip("Full", warning = true)
+                            else Text(
+                                if (slot.feeRupees == 0) "Free" else "₹${slot.feeRupees}",
+                                fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
+                                color = if (slot.feeRupees == 0) TazColors.Success else TazColors.TextPrimary
+                            )
+                        }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                slot.label,
+                                fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
+                                color = TazColors.TextPrimary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            if (slot.recommended && slot.available) {
+                                Spacer(Modifier.width(TazSpace.sm))
+                                StatusChip("Recommended", warning = false)
+                            }
+                        }
+                        slot.feeReason?.takeIf { slot.available && slot.feeRupees > 0 }?.let {
+                            Text(it, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+                        }
+                    }
                 }
             }
         }
@@ -935,7 +962,9 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
             )
             Spacer(Modifier.height(TazSpace.xxs))
             Text(
-                session.slot?.label ?: "—",
+                session.slot?.let { s ->
+                    s.label + (if (s.feeRupees == 0) " · Free" else " · ₹${s.feeRupees}")
+                } ?: "—",
                 fontSize = TazType.captionSize, color = TazColors.TextSecondary
             )
         }
@@ -954,6 +983,35 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                 fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
                 color = TazColors.TextPrimary
             )
+        }
+
+        // ----- 3b. Delivery instructions (optional, market-configurable) -----
+        ReviewCard(title = "Delivery instructions") {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
+            ) {
+                com.tazzzo.app.config.defaultDeliveryInstructions.forEach { opt ->
+                    val on = opt.id in session.instructionIds
+                    Box(
+                        Modifier.height(TazSize.chipHeight).clip(TazRadius.pill)
+                            .background(if (on) TazColors.Green else TazColors.Surface)
+                            .border(BorderStroke(1.dp, if (on) TazColors.Green else TazColors.CardBorder), TazRadius.pill)
+                            .tazPressable(
+                                onClick = { session.toggleInstruction(opt.id) },
+                                pressScale = TazPress.compact, haptic = TazHaptic.Select,
+                                role = Role.Checkbox, selected = on
+                            )
+                            .padding(horizontal = TazSpace.md),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            opt.label, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+                            color = if (on) TazColors.White else TazColors.TextPrimary, maxLines = 1
+                        )
+                    }
+                }
+            }
         }
 
         // ----- 4. Bill -----

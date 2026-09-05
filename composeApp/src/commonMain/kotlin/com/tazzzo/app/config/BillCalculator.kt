@@ -4,6 +4,7 @@ import com.tazzzo.app.data.model.BillSummary
 import com.tazzzo.app.data.model.CartLine
 import com.tazzzo.app.data.model.MembershipPlan
 import com.tazzzo.app.data.model.Promotion
+import com.tazzzo.app.data.model.DeliverySlot
 
 /**
  * The single source of truth for order money maths.
@@ -25,7 +26,8 @@ object BillCalculator {
         clubCumulativeSpendRupees: Int = 0,
         promotions: List<Promotion> = PromotionConfig.active,
         couponCode: String? = null,
-        promotionPolicy: PromotionPolicy = PromotionConfig.policy
+        promotionPolicy: PromotionPolicy = PromotionConfig.policy,
+        slot: DeliverySlot? = null
     ): BillSummary {
         val itemTotal = lines.sumOf { it.lineTotal }
         val mrpTotal = lines.sumOf { it.lineMrp }
@@ -50,12 +52,24 @@ object BillCalculator {
         val clubDiscount = promo.clubDiscountRupees
         val promotionDiscount = promo.promotionDiscountRupees
 
-        val delivery = when {
-            itemTotal == 0 -> 0
-            promo.freeDelivery -> 0
-            itemTotal >= charges.freeDeliveryAboveRupees -> 0
-            else -> charges.deliveryFeeRupees
+        // Delivery: the chosen slot's own fee when one is chosen, else the flat
+        // rule. Whatever the fee WOULD have been, if it is not charged the
+        // difference is money the customer kept — reported as its own realised
+        // line with the reason, so "Delivery FREE" is never an unexplained gift.
+        val baseDeliveryFee = if (itemTotal == 0) 0 else (slot?.feeRupees ?: charges.deliveryFeeRupees)
+        val (delivery, deliveryReason) = when {
+            itemTotal == 0 -> 0 to null
+            promo.freeDelivery -> 0 to "Free delivery offer applied"
+            itemTotal >= charges.freeDeliveryAboveRupees ->
+                0 to "Free on orders above ₹${charges.freeDeliveryAboveRupees}"
+            slot != null && slot.feeRupees == 0 -> 0 to "Free for this slot"
+            slot != null -> slot.feeRupees to slot.feeReason
+            else -> charges.deliveryFeeRupees to null
         }
+        // What was waived: the flat fee is the honest reference when the slot is
+        // free or unknown; a paid slot waived by threshold/promo saves its own fee.
+        val referenceFee = if (slot != null && slot.feeRupees > 0) slot.feeRupees else charges.deliveryFeeRupees
+        val deliveryWaived = if (itemTotal > 0 && delivery == 0) referenceFee else 0
 
         // Coins redeem against what is left AFTER discounts, never against
         // rupees that were already taken off.
@@ -75,7 +89,9 @@ object BillCalculator {
             appliedPromotions = promo.applied,
             declinedPromotions = promo.declined,
             bestOfferNote = promo.bestOfferNote,
-            freeDeliveryByPromotion = promo.freeDelivery
+            freeDeliveryByPromotion = promo.freeDelivery,
+            deliveryFeeWaivedRupees = deliveryWaived,
+            deliveryFeeReason = deliveryReason
         )
     }
 

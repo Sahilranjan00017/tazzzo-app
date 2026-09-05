@@ -45,6 +45,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.defaultMinSize
 import com.tazzzo.app.ui.onboarding.tazFieldColors
 import com.tazzzo.app.data.model.BillSummary
+import androidx.compose.animation.AnimatedVisibility
+import com.tazzzo.app.ui.state.UiState
+import com.tazzzo.app.ui.state.rememberLoad
+import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -120,21 +124,11 @@ fun CartScreen() {
             ) {
                 Spacer(Modifier.height(TazSpace.md))
 
-                // ----- Delivery card -----
-                InfoStripCard(TazIcons.Delivery) {
-                    Text(
-                        DeliveryCopy.headline(AppConfig.deliveryPromise),
-                        fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
-                        color = TazColors.TextPrimary, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    // Total units (same figure the cart bar shows), not line count.
-                    Text(
-                        "Shipment of ${app.cartItemCount} item${if (app.cartItemCount > 1) "s" else ""}",
-                        fontSize = TazType.captionSize, color = TazColors.TextSecondary,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
-                }
+                // ----- Realised savings header: one number, explained below -----
+                SavingsHeader(bill)
+
+                // ----- Delivery: a CHOICE, previewed before purchase -----
+                DeliveryChoiceCard()
 
                 Spacer(Modifier.height(TazSpace.md))
 
@@ -220,7 +214,7 @@ fun CartScreen() {
                         )
                         Spacer(Modifier.width(TazSpace.sm))
                         Text(
-                            "You save ₹${bill.saved} on this order",
+                            "₹${bill.saved} below MRP on these items",
                             fontSize = TazType.savingsSize, fontWeight = TazType.savingsWeight,
                             color = TazColors.Success, maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -268,6 +262,14 @@ fun CartScreen() {
                                         color = TazColors.TextTertiary
                                     )
                                 }
+                            }
+                            if (bill.deliveryFee == 0 && bill.deliveryFeeWaivedRupees > 0) {
+                                Text(
+                                    "₹${bill.deliveryFeeWaivedRupees}",
+                                    fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                                    textDecoration = TextDecoration.LineThrough
+                                )
+                                Spacer(Modifier.width(TazSpace.xs))
                             }
                             if (bill.deliveryFee == 0) {
                                 Text(
@@ -368,7 +370,7 @@ fun CartScreen() {
                             Spacer(Modifier.height(TazSpace.sm))
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "You saved", fontSize = TazType.captionSize,
+                                    "Extra savings today", fontSize = TazType.captionSize,
                                     color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
                                 )
                                 Text(
@@ -593,8 +595,10 @@ private fun ClubCartPrompt() {
     val isMemberBenefit = eligibility.isMember && eligibility.isEligible && bill.clubDiscount > 0
 
     Row(
+        // No horizontal gutter here: this sits inside the cart's gutter-padded
+        // column. Adding its own made the Club and Offers cards visibly narrower
+        // than the delivery and bill cards above and below them (F8).
         Modifier.fillMaxWidth()
-            .padding(horizontal = TazSpace.gutter)
             .clip(TazRadius.card)
             .background(if (isMemberBenefit) TazColors.GreenSoft else TazColors.Surface)
             .border(
@@ -656,7 +660,7 @@ private fun PromotionsPanel(bill: BillSummary) {
     } ?: false
 
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = TazSpace.gutter)
+        Modifier.fillMaxWidth()
             .clip(TazRadius.card).background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
             .padding(TazSpace.lg)
@@ -730,6 +734,105 @@ private fun PromotionsPanel(bill: BillSummary) {
                 }
             }
         }
+    }
+    Spacer(Modifier.height(TazSpace.md))
+}
+
+/**
+ * The one number at the top of the cart, and what it is made of.
+ *
+ * Shown ONLY when realised savings are non-zero — money actually not paid:
+ * promotions, Club, and delivery that would have been charged and was not.
+ * MRP comparisons are deliberately excluded and live in their own labelled
+ * strip, so the two figures can never be mistaken for each other.
+ */
+@Composable
+private fun SavingsHeader(bill: BillSummary) {
+    if (bill.realisedSavings <= 0) return
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.GreenSoft)
+            .tazPressable(onClick = { open = !open }, pressScale = TazPress.row, shape = TazRadius.card)
+            .padding(horizontal = TazSpace.lg, vertical = TazSpace.md)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TazIcon(TazIcons.Offer, null, size = TazSize.iconSm, tint = TazColors.Green)
+            Spacer(Modifier.width(TazSpace.sm))
+            Text(
+                "You're saving ₹${bill.realisedSavings} on this order",
+                fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
+                color = TazColors.Green, modifier = Modifier.weight(1f)
+            )
+            TazIcon(
+                if (open) TazIcons.ChevronUp else TazIcons.ChevronDown, null,
+                size = TazSize.iconSm, tint = TazColors.Green
+            )
+        }
+        AnimatedVisibility(open) {
+            Column(Modifier.padding(top = TazSpace.sm)) {
+                bill.appliedPromotions.filter { it.discountRupees > 0 }.forEach {
+                    SavingsLine(it.title, it.discountRupees)
+                }
+                if (bill.clubDiscount > 0) SavingsLine("Tazzzo Club", bill.clubDiscount)
+                if (bill.deliveryFeeWaivedRupees > 0) {
+                    SavingsLine(bill.deliveryFeeReason ?: "Delivery fee", bill.deliveryFeeWaivedRupees)
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(TazSpace.md))
+}
+
+@Composable
+private fun SavingsLine(label: String, rupees: Int) {
+    Row(Modifier.fillMaxWidth().padding(vertical = TazSpace.xxs)) {
+        Text(label, fontSize = TazType.captionSize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
+        Text("₹$rupees", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Green)
+    }
+}
+
+/**
+ * Delivery previewed in the cart, chosen at checkout.
+ *
+ * Replaces the generic "Fast delivery" strip. Shows the next available slot
+ * and its fee from the SAME repository checkout uses, so what the customer
+ * sees here is what they will be offered. Until serviceability exists the
+ * slots are [MOCKED] and the card says nothing it cannot back.
+ */
+@Composable
+private fun DeliveryChoiceCard() {
+    val app = LocalAppState.current
+    // Default address is the first serviceable one; checkout lets them change it.
+    val slots = rememberLoad { 
+        val addr = ServiceLocator.addresses.getAddresses().firstOrNull { it.isServiceable }
+        if (addr == null) emptyList() else ServiceLocator.checkout.getSlots(addr.id)
+    }
+    val next = (slots.state as? UiState.Success)?.data?.firstOrNull { it.available }
+    Row(
+        Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface)
+            .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
+            .padding(TazSpace.lg),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TazIcon(TazIcons.Delivery, null, size = TazSize.iconMd, tint = TazColors.Green)
+        Spacer(Modifier.width(TazSpace.md))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Choose your delivery", fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
+                color = TazColors.TextPrimary
+            )
+            Text(
+                when {
+                    next != null -> "Next available · ${next.label}" +
+                        (if (next.feeRupees == 0) " · Free" else " · ₹${next.feeRupees}")
+                    slots.state is UiState.Loading -> "Checking slots…"
+                    else -> "Slots shown at checkout"
+                },
+                fontSize = TazType.captionSize, color = TazColors.TextSecondary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text("At checkout", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Green)
     }
     Spacer(Modifier.height(TazSpace.md))
 }

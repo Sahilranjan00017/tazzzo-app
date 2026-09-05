@@ -41,6 +41,12 @@ class CheckoutSession {
     var slot by mutableStateOf<DeliverySlot?>(null)
     var payment by mutableStateOf<PaymentMethodKind?>(null)
 
+    /** Optional delivery instructions chosen at review. Ids from AppConfig.deliveryInstructions. */
+    var instructionIds by mutableStateOf<Set<String>>(emptySet())
+    fun toggleInstruction(id: String) {
+        instructionIds = if (id in instructionIds) instructionIds - id else instructionIds + id
+    }
+
     /** Last revalidation result; null = not yet validated in this session. */
     var validation by mutableStateOf<CartValidation?>(null)
 

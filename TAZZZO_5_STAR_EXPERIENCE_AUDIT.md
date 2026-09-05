@@ -363,6 +363,10 @@ needs `[DEVICE]` hardware and is recorded as such.
 
 ## 8. LOG
 
+- **2026-09-06** — Commerce wave C2 (see `TAZZZO_COMMERCE_EXPERIENCE_AUDIT.md`
+  §2). **F8** double gutter on cart cards — found by eye, not by test. Two new
+  test-failure classes recorded in TESTING.md: process-global mock memory, and
+  post-reinstall cold start (fixed by warm-up, not by widening timeouts).
 - **2026-09-05** — Commerce wave C1 (see `TAZZZO_COMMERCE_EXPERIENCE_AUDIT.md`).
   Two more defects found by RUNNING, in the same family as F1–F5: **F6**
   "Start shopping" landed on the last-open tab in 7 files (stack reset, tab

@@ -151,7 +151,7 @@ fun HelpScreen() {
 
                 // ---- help with an order: real destinations ------------------
                 Spacer(Modifier.height(TazSpace.lg))
-                SectionHeader("Help with an order")
+                SectionHeader(app.helpOrderId?.let { "Help with order #$it" } ?: "Help with an order")
                 Column(
                     Modifier.padding(horizontal = TazSpace.gutter).fillMaxWidth()
                         .clip(TazRadius.card).background(TazColors.Surface)

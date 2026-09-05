@@ -40,6 +40,7 @@ import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.ui.interaction.TazHaptic
+import com.tazzzo.app.ui.interaction.tazPressableCard
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -269,6 +270,8 @@ private fun OrderCard(order: Order) {
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
+            // The whole card opens the receipt; the pills inside keep their own actions.
+            .tazPressableCard(onClick = { app.navigate(Screen.OrderDetail(order.id)) }, shape = TazRadius.card)
             .padding(TazSpace.lg)
     ) {
         OrderCardHeader(order)
@@ -289,11 +292,22 @@ private fun OrderCard(order: Order) {
 
         Spacer(Modifier.height(TazSpace.md))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
-                fontWeight = TazType.priceWeight, color = TazColors.TextPrimary,
-                modifier = Modifier.weight(1f)
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
+                    fontWeight = TazType.priceWeight, color = TazColors.TextPrimary
+                )
+                // What this order actually saved — realised, never MRP theatre.
+                if (order.bill.realisedSavings > 0) {
+                    Text(
+                        "Saved ₹${order.bill.realisedSavings}", fontSize = TazType.captionSize,
+                        fontWeight = FontWeight.SemiBold, color = TazColors.Green
+                    )
+                }
+                order.slot?.let {
+                    Text(it.label, fontSize = TazType.microSize, color = TazColors.TextTertiary, maxLines = 1)
+                }
+            }
             ReorderPill(order)
             Spacer(Modifier.width(TazSpace.xs))
             Box(

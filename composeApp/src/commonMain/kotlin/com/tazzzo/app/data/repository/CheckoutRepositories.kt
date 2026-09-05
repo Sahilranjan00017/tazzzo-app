@@ -102,20 +102,31 @@ class MockCheckoutRepository(
         delay(350)
         // Mock: slots exist only for serviceable addresses (addr-3 is not).
         if (addressId == "addr-3") return emptyList()
+        // [MOCKED] Real slots, fees and availability are [BACKEND REQUIRED]
+        // (serviceability). Shapes here are what the UI must render: grouped,
+        // fee per slot with a reason, one recommended, one sold out.
         return listOf(
-            DeliverySlot("slot-express", "Express — as soon as possible", available = true),
-            DeliverySlot("slot-morning", "Tomorrow, 7–9 AM", available = true),
-            DeliverySlot("slot-evening", "Tomorrow, 6–8 PM", available = true),
-            DeliverySlot("slot-full", "Today, 6–8 PM", available = false)
+            DeliverySlot("slot-next", "Next available", available = true, group = "Next available",
+                recommended = true, feeRupees = 0),
+            DeliverySlot("slot-today-eve", "Today, 6–8 PM", available = false, group = "Today",
+                feeRupees = 0),
+            DeliverySlot("slot-today-late", "Today, 8–10 PM", available = true, group = "Today",
+                feeRupees = 15, feeReason = "Late-evening slot"),
+            DeliverySlot("slot-tmrw-am", "Tomorrow, 7–9 AM", available = true, group = "Tomorrow",
+                feeRupees = 0),
+            DeliverySlot("slot-tmrw-pm", "Tomorrow, 6–8 PM", available = true, group = "Tomorrow",
+                feeRupees = 0)
         )
     }
 
     override suspend fun getPaymentMethods(): List<PaymentMethod> {
         delay(200)
         return listOf(
-            PaymentMethod(PaymentMethodKind.COD, "Cash on Delivery", enabled = true),
+            // India-first hierarchy: UPI leads. `enabled` stays server-decided;
+            // UPI/Card remain honest "Coming soon" until a gateway exists.
             PaymentMethod(PaymentMethodKind.UPI, "UPI", enabled = false, note = "Coming soon"),
-            PaymentMethod(PaymentMethodKind.CARD, "Credit / Debit Card", enabled = false, note = "Coming soon")
+            PaymentMethod(PaymentMethodKind.CARD, "Credit / Debit Card", enabled = false, note = "Coming soon"),
+            PaymentMethod(PaymentMethodKind.COD, "Cash on Delivery", enabled = true)
         )
     }
 
@@ -161,7 +172,10 @@ class MockCheckoutRepository(
         val validation = validateCart(request.lines)
         if (!validation.ok) return PlaceOrderResult.Rejected(validation)
 
-        val order = orders.placeOrder(request.lines, request.bill, request.addressText, request.payment)
+        val order = orders.placeOrder(
+            request.lines, request.bill, request.addressText, request.payment,
+            slot = request.slot, instructionIds = request.instructionIds
+        )
         placedByKey[request.idempotencyKey] = order
         return PlaceOrderResult.Placed(order, replayed = false)
     }

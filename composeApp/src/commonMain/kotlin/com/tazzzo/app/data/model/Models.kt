@@ -138,7 +138,15 @@ data class BillSummary(
     /** One sentence when the engine chose between competing offers. */
     val bestOfferNote: String? = null,
     /** True when a promotion waived the delivery fee. */
-    val freeDeliveryByPromotion: Boolean = false
+    val freeDeliveryByPromotion: Boolean = false,
+    /**
+     * Delivery fee the customer would have paid and did not — because of the
+     * free-delivery threshold, a promotion, a free slot, or a Club benefit.
+     * Money genuinely not charged, so it counts toward realised savings; the
+     * reason is carried so the bill can say WHY it was free.
+     */
+    val deliveryFeeWaivedRupees: Int = 0,
+    val deliveryFeeReason: String? = null
 ) {
     /** MRP savings only — a list-price comparison, not money taken off the payable. */
     val saved: Int get() = itemMrpTotal - itemTotal
@@ -149,7 +157,7 @@ data class BillSummary(
      * excluded — blending a strike-through comparison with a real discount is
      * how a "you saved ₹60" is born that the customer cannot find on the bill.
      */
-    val realisedSavings: Int get() = promotionDiscount + clubDiscount
+    val realisedSavings: Int get() = promotionDiscount + clubDiscount + deliveryFeeWaivedRupees
 }
 
 @Serializable
@@ -164,7 +172,10 @@ data class Order(
     val placedAtLabel: String,
     val address: String,
     /** How the customer paid. Nullable so historical/mock orders stay valid. */
-    val payment: PaymentMethodKind? = null
+    val payment: PaymentMethodKind? = null,
+    /** The delivery slot the customer chose. Echoed on confirmation, orders and detail. */
+    val slot: DeliverySlot? = null,
+    val instructionIds: List<String> = emptyList()
 )
 
 @Serializable

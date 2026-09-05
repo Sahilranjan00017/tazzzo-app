@@ -21,6 +21,7 @@ import com.tazzzo.app.ui.home.OrdersScreen
 import com.tazzzo.app.ui.home.CoinsScreen
 import com.tazzzo.app.ui.home.HelpScreen
 import com.tazzzo.app.ui.home.AddressesScreen
+import com.tazzzo.app.ui.home.OrderDetailScreen
 import com.tazzzo.app.ui.home.AboutScreen
 import com.tazzzo.app.ui.club.ClubScreen
 import com.tazzzo.app.ui.club.ClubCheckoutScreen
@@ -88,6 +89,7 @@ fun App() {
                         is Screen.About -> AboutScreen()
                         is Screen.Club -> ClubScreen()
                         is Screen.ClubCheckout -> ClubCheckoutScreen()
+                        is Screen.OrderDetail -> OrderDetailScreen(screen.orderId)
                     }
                     }
                 }

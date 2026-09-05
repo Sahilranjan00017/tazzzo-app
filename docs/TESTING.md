@@ -14,6 +14,12 @@
   **Rule:** every instrumented class calls `TestState.reset()` in its `init`
   block (before the ActivityScenarioRule launches the activity) so it starts
   from an empty store regardless of what ran before it.
+  **Second rule:** `TestState.reset()` clears the STORE, not process memory.
+  `MockOrderRepository` keeps orders in a process-global list, so a test that
+  places an order changes Home's "Order again" rail for every later test in the
+  same instrumentation run. Assert product controls with `onAllNodes(...)`
+  counts, never `onNodeWith…` singletons — a product legitimately appears in
+  more than one rail.
 
 Never widen a timeout to make an environment failure disappear. A long timeout
 hides a real hang.
@@ -38,8 +44,14 @@ adb shell am instrument -w -r \
   com.tazzzo.app.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-## On-device — REGRESSION (≈6 min, run before a commit that touches navigation/cart)
+## On-device — REGRESSION (≈2 min warm, run before a commit that touches navigation/cart)
+**Warm up first after any reinstall.** A freshly installed APK has no ART/JIT
+profile; on the 2-core software-GL emulator its first launch can exceed the
+60 s waits and fail whichever test happens to run first. Launch once, let Home
+load, stop — then run. This is an environment fix, not a timeout hack.
 ```bash
+adb shell am start -n com.tazzzo.app/.MainActivity --ez taz_start_home true; sleep 45
+adb shell am force-stop com.tazzzo.app
 adb shell pm clear com.tazzzo.app
 adb shell am instrument -w -r com.tazzzo.app.test/androidx.test.runner.AndroidJUnitRunner
 ```

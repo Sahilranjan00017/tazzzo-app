@@ -3,10 +3,13 @@ package com.tazzzo.app
 import android.content.Intent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
@@ -56,6 +59,11 @@ class CartRowRegressionTest {
         // after a test that added the onion. Test-state leak, not environment.)
         val add = hasContentDescription("Add Fresh Onion to cart")
         val inCart = hasContentDescription("Increase quantity of Fresh Onion")
+        // Scroll the lazy feed so the Bestsellers rail is composed at all.
+        rule.waitUntil(timeoutMillis = 20_000) {
+            rule.onAllNodes(hasTestTag("homeFeed")).fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithTag("homeFeed").performScrollToNode(add or inCart)
         rule.waitUntil(timeoutMillis = 30_000) {
             rule.onAllNodes(add).fetchSemanticsNodes().isNotEmpty() ||
                 rule.onAllNodes(inCart).fetchSemanticsNodes().isNotEmpty()

@@ -64,6 +64,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -202,6 +204,9 @@ private fun HomeFeedList(data: HomeFeed) {
 
         // ------------------------------------ 4. bestsellers + order again
         item { Spacer(Modifier.height(SectionGap)) }
+        // Coupons that exist in config, with their thresholds stated. A coupon
+        // card that hides its minimum is a disappointment waiting in the cart.
+        item { CouponRail() }
         item { ProductRail("Bestsellers", data.rails["Bestsellers"] ?: emptyList()) }
         if (data.orderAgain.isNotEmpty()) {
             item { Spacer(Modifier.height(SectionGap)) }
@@ -565,4 +570,44 @@ private fun RestoreNoticeBanner() {
                 .wrapContentHeight()
         )
     }
+}
+
+@Composable
+private fun CouponRail() {
+    val coupons = com.tazzzo.app.config.PromotionConfig.active.filter { it.isCoupon }
+    if (coupons.isEmpty()) return
+    val app = LocalAppState.current
+    SectionHeader("Coupons & offers")
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .padding(horizontal = TazSpace.gutter),
+        horizontalArrangement = Arrangement.spacedBy(TazSpace.md)
+    ) {
+        coupons.forEach { c ->
+            Column(
+                Modifier.width(150.dp).clip(TazRadius.card).background(TazColors.GreenSoft)
+                    .border(BorderStroke(1.dp, TazColors.Green.copy(alpha = 0.25f)), TazRadius.card)
+                    .tazPressableCard(
+                        onClick = { app.couponCode = c.couponCode; app.navigate(Screen.Cart) },
+                        shape = TazRadius.card
+                    )
+                    .padding(TazSpace.md)
+            ) {
+                Text(
+                    c.flatRupees?.let { "FLAT ₹$it OFF" } ?: c.percent?.let { "$it% OFF" } ?: c.title,
+                    fontSize = TazType.titleSize, fontWeight = TazType.titleWeight, color = TazColors.Green
+                )
+                Spacer(Modifier.height(TazSpace.xxs))
+                Text(
+                    if (c.minOrderRupees > 0) "above ₹${c.minOrderRupees}" else "no minimum",
+                    fontSize = TazType.captionSize, color = TazColors.TextSecondary
+                )
+                Spacer(Modifier.height(TazSpace.sm))
+                Box(Modifier.clip(TazRadius.chip).background(TazColors.Surface).padding(horizontal = TazSpace.sm, vertical = TazSpace.xxs)) {
+                    Text(c.couponCode ?: "", fontSize = TazType.microSize, fontWeight = TazType.microWeight, color = TazColors.TextPrimary)
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(TazSpace.lg))
 }
