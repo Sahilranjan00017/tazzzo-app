@@ -128,10 +128,28 @@ data class BillSummary(
      * existing positional BillSummary(...) fixture keeps compiling and every
      * value it constructs keeps meaning what it always meant.
      */
-    val clubDiscount: Int = 0
+    val clubDiscount: Int = 0,
+    /** Rupees off from promotions/coupons on THIS order. 0 when none applied. */
+    val promotionDiscount: Int = 0,
+    /** Each promotion that applied, with its customer-facing explanation. */
+    val appliedPromotions: List<AppliedPromotion> = emptyList(),
+    /** Offers the customer could see but did not get, and why. */
+    val declinedPromotions: List<DeclinedPromotion> = emptyList(),
+    /** One sentence when the engine chose between competing offers. */
+    val bestOfferNote: String? = null,
+    /** True when a promotion waived the delivery fee. */
+    val freeDeliveryByPromotion: Boolean = false
 ) {
-    /** MRP savings only. Club discount is shown separately — never blended into one "saved" figure. */
+    /** MRP savings only — a list-price comparison, not money taken off the payable. */
     val saved: Int get() = itemMrpTotal - itemTotal
+
+    /**
+     * Money ACTUALLY taken off the payable amount: promotions + Club. This is
+     * the honest "You saved ₹X" for the cart. MRP savings are deliberately
+     * excluded — blending a strike-through comparison with a real discount is
+     * how a "you saved ₹60" is born that the customer cannot find on the bill.
+     */
+    val realisedSavings: Int get() = promotionDiscount + clubDiscount
 }
 
 @Serializable

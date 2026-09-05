@@ -296,12 +296,20 @@ class TazzzoAppState(
             cumulativeSpendRupees = membership.cumulativeSpendRupees
         )
 
+    /**
+     * Coupon the customer typed. Cart context, not transient UI, so it lives
+     * here rather than in a screen's `remember` — leaving the cart and coming
+     * back must not silently drop a code the customer entered.
+     */
+    var couponCode by mutableStateOf<String?>(null)
+
     /** Delegates to [com.tazzzo.app.config.BillCalculator] — the one place money maths lives. */
     fun bill(lines: List<CartLine>): BillSummary =
         com.tazzzo.app.config.BillCalculator.bill(
             lines = lines,
             isClubMember = isClubMember,
-            clubCumulativeSpendRupees = membership.cumulativeSpendRupees
+            clubCumulativeSpendRupees = membership.cumulativeSpendRupees,
+            couponCode = couponCode
         )
 
     fun clearCart() { cartEntries.clear(); store?.clearCart() }

@@ -74,8 +74,11 @@ class MembershipTest {
 
     @Test fun bill_applies_club_discount_only_for_members() {
         val lines = listOf(CartLine(product(700), 1))
-        val guest = BillCalculator.bill(lines, isClubMember = false)
-        val member = BillCalculator.bill(lines, isClubMember = true)
+        // No promotions: this test is about Club alone. With the default set,
+        // the dairy offer (₹40) legitimately out-competes Club (₹35) and sets
+        // it aside — correct behaviour, separately tested in PromotionEngineTest.
+        val guest = BillCalculator.bill(lines, isClubMember = false, promotions = emptyList())
+        val member = BillCalculator.bill(lines, isClubMember = true, promotions = emptyList())
         assertEquals(0, guest.clubDiscount)
         assertEquals(35, member.clubDiscount)                       // 5% of 700
         assertEquals(guest.grandTotal - 35, member.grandTotal)
@@ -83,7 +86,7 @@ class MembershipTest {
 
     @Test fun club_discount_is_reported_separately_from_mrp_savings() {
         val lines = listOf(CartLine(product(700), 1))
-        val member = BillCalculator.bill(lines, isClubMember = true)
+        val member = BillCalculator.bill(lines, isClubMember = true, promotions = emptyList())
         // `saved` is MRP savings only; blending the two would overstate either.
         assertEquals(10, member.saved)
         assertEquals(35, member.clubDiscount)

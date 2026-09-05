@@ -6,6 +6,11 @@
   on a lazy grid; a matcher hitting two nodes).
 - **Environment failure**: the emulator was OOM-killed or CPU-starved. Symptom:
   a *different* test times out each run while every test passes alone.
+- **Test-state leak** (a test failure, easy to misread as environment): the cart,
+  session and membership are PERSISTED, and `pm clear` runs once per suite, not
+  per test. A test that assumes an empty cart will time out after any test that
+  added to it. Symptom: passes alone, fails deterministically after a specific
+  other test. Fix the test's assumptions; do not widen its timeout.
 
 Never widen a timeout to make an environment failure disappear. A long timeout
 hides a real hang.

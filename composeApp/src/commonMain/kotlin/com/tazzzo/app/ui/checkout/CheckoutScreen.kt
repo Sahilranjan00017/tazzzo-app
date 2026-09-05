@@ -976,6 +976,46 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                     fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary
                 )
             }
+            // ---- discounts, each on its own line, before the customer commits ----
+            // The review is the last place a total can surprise someone. Every
+            // rupee taken off is itemised here exactly as on the cart; nothing
+            // is folded into "item total".
+            bill.appliedPromotions.filter { it.discountRupees > 0 }.forEach { promo ->
+                Spacer(Modifier.height(TazSpace.md))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(promo.title, fontSize = TazType.bodySize, color = TazColors.TextSecondary)
+                        Text(
+                            promo.explanation, fontSize = TazType.microSize,
+                            lineHeight = TazType.microLine, color = TazColors.TextTertiary
+                        )
+                    }
+                    Text(
+                        "−₹${promo.discountRupees}", fontSize = TazType.bodySize,
+                        fontWeight = FontWeight.SemiBold, color = TazColors.Green
+                    )
+                }
+            }
+            if (bill.clubDiscount > 0) {
+                Spacer(Modifier.height(TazSpace.md))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Tazzzo Club savings", fontSize = TazType.bodySize,
+                        color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "−₹${bill.clubDiscount}", fontSize = TazType.bodySize,
+                        fontWeight = FontWeight.SemiBold, color = TazColors.Green
+                    )
+                }
+            }
+            bill.bestOfferNote?.let { note ->
+                Spacer(Modifier.height(TazSpace.sm))
+                Text(
+                    note, fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
+                    color = TazColors.TextSecondary
+                )
+            }
             Spacer(Modifier.height(TazSpace.md))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(

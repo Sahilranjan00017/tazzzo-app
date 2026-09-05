@@ -45,17 +45,25 @@ class CartRowRegressionTest {
 
     @Test
     fun cart_row_shows_the_product_name_and_price_beside_the_stepper() {
-        // Generous: this is the first test in the suite, so it pays for the
-        // app's cold start on an emulator that is already CPU-starved.
-        rule.waitUntil(timeoutMillis = 60_000) {
-            rule.onAllNodes(hasContentDescription("Add Fresh Onion to cart"))
-                .fetchSemanticsNodes().isNotEmpty()
+        // The cart is PERSISTED and `pm clear` runs once per suite, not per
+        // test — so if an earlier test added this product, the control already
+        // reads "Increase quantity…" and "Add … to cart" will never appear.
+        // Wait for EITHER state, then add only if not already in the cart.
+        // (Found as a real suite failure: this test passed alone and timed out
+        // after a test that added the onion. Test-state leak, not environment.)
+        val add = hasContentDescription("Add Fresh Onion to cart")
+        val inCart = hasContentDescription("Increase quantity of Fresh Onion")
+        rule.waitUntil(timeoutMillis = 30_000) {
+            rule.onAllNodes(add).fetchSemanticsNodes().isNotEmpty() ||
+                rule.onAllNodes(inCart).fetchSemanticsNodes().isNotEmpty()
         }
-        rule.onNodeWithContentDescription("Add Fresh Onion to cart")
-            .performSemanticsAction(SemanticsActions.OnClick)
+        if (rule.onAllNodes(add).fetchSemanticsNodes().isNotEmpty()) {
+            rule.onNodeWithContentDescription("Add Fresh Onion to cart")
+                .performSemanticsAction(SemanticsActions.OnClick)
+        }
 
         // Open the cart from the cart bar.
-        rule.waitUntil(timeoutMillis = 30_000) {
+        rule.waitUntil(timeoutMillis = 20_000) {
             rule.onAllNodes(hasText("View cart")).fetchSemanticsNodes().isNotEmpty()
         }
         rule.onNode(hasText("View cart")).performSemanticsAction(SemanticsActions.OnClick)

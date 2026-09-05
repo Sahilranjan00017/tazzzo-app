@@ -31,6 +31,20 @@ import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.config.MembershipConfig
 import com.tazzzo.app.ui.interaction.TazHaptic
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.layout.defaultMinSize
+import com.tazzzo.app.ui.onboarding.tazFieldColors
+import com.tazzzo.app.data.model.BillSummary
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -188,6 +202,9 @@ fun CartScreen() {
                 // ----- Tazzzo Club: context-aware, never nagging -----
                 ClubCartPrompt()
 
+                // ----- Offers: what applied, what didn't, and why -----
+                PromotionsPanel(bill)
+
                 // ----- Savings strip -----
                 if (bill.saved > 0) {
                     Spacer(Modifier.height(TazSpace.md))
@@ -263,6 +280,17 @@ fun CartScreen() {
                         }
                         Spacer(Modifier.height(TazSpace.md))
 
+                        // Why a choice was made between competing offers. The
+                        // total never changes without this sentence.
+                        bill.bestOfferNote?.let { note ->
+                            Text(
+                                note,
+                                fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
+                                color = TazColors.TextSecondary
+                            )
+                            Spacer(Modifier.height(TazSpace.md))
+                        }
+
                         // Handling charge
                         BillRow(label = "Handling charge") {
                             BillValue("₹${bill.handlingCharge}")
@@ -272,6 +300,21 @@ fun CartScreen() {
                         // Club savings — only ever shown when a real discount
                         // was applied to THIS bill. Never an estimate, never a
                         // "what you could have saved" figure on a real bill.
+                        // Each applied promotion on its own line, with its own
+                        // explanation. Only ever rendered when it actually
+                        // reduced this bill — never an estimate.
+                        bill.appliedPromotions.filter { it.discountRupees > 0 }.forEach { promo ->
+                            BillRow(label = promo.title, sublabel = promo.explanation) {
+                                Text(
+                                    "−₹${promo.discountRupees}",
+                                    fontSize = TazType.bodySize,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TazColors.Green
+                                )
+                            }
+                            Spacer(Modifier.height(TazSpace.md))
+                        }
+
                         if (bill.clubDiscount > 0) {
                             BillRow(label = "Tazzzo Club savings") {
                                 Text(
@@ -315,6 +358,24 @@ fun CartScreen() {
                                 "₹${bill.grandTotal}", fontSize = TazType.titleSize,
                                 fontWeight = FontWeight.Bold, color = TazColors.TextPrimary
                             )
+                        }
+
+                        // Honest total: promotions + Club only — money actually
+                        // taken off what the customer pays. MRP savings stay in
+                        // their own strip above; blending them here is how a
+                        // "you saved ₹60" appears that no bill line supports.
+                        if (bill.realisedSavings > 0) {
+                            Spacer(Modifier.height(TazSpace.sm))
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "You saved", fontSize = TazType.captionSize,
+                                    color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    "₹${bill.realisedSavings}", fontSize = TazType.bodySize,
+                                    fontWeight = FontWeight.Bold, color = TazColors.Green
+                                )
+                            }
                         }
                     }
                 }
@@ -460,12 +521,19 @@ private fun InfoStripCard(
 }
 
 @Composable
-private fun BillRow(label: String, value: @Composable RowScope.() -> Unit) {
+private fun BillRow(label: String, sublabel: String? = null, value: @Composable RowScope.() -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            label, fontSize = TazType.bodySize, color = TazColors.TextSecondary,
-            modifier = Modifier.weight(1f)
-        )
+        Column(Modifier.weight(1f)) {
+            Text(label, fontSize = TazType.bodySize, color = TazColors.TextSecondary)
+            // The explanation lives on the bill line itself — "10% off dairy,
+            // capped at ₹40" — so the number is never a mystery.
+            if (sublabel != null) {
+                Text(
+                    sublabel, fontSize = TazType.microSize, lineHeight = TazType.microLine,
+                    color = TazColors.TextTertiary
+                )
+            }
+        }
         value()
     }
 }
@@ -555,6 +623,105 @@ private fun ClubCartPrompt() {
                 "See Club", fontSize = TazType.captionSize,
                 fontWeight = FontWeight.SemiBold, color = TazColors.Green
             )
+        }
+    }
+    Spacer(Modifier.height(TazSpace.md))
+}
+
+/**
+ * Offers the customer can act on: a coupon field, and every offer that was
+ * NOT applied with the reason in plain words. What DID apply is on the bill
+ * itself (each applied promotion is its own bill line), so this panel never
+ * repeats a number the bill already shows.
+ *
+ * Rendering rule: declined offers appear only when the engine produced a
+ * customer-facing reason (a typed coupon below its minimum, an offer the cart
+ * nearly qualifies for, a loser in a best-offer contest). Silent misses —
+ * members-only offers to a guest, un-entered coupons — are not nagged about.
+ */
+@Composable
+private fun PromotionsPanel(bill: BillSummary) {
+    val app = LocalAppState.current
+    if (app.cartItemCount == 0) return
+    var draft by rememberSaveable { mutableStateOf(app.couponCode ?: "") }
+    val applied = app.couponCode?.let { code ->
+        bill.appliedPromotions.any { it.promotionId.equals(code, ignoreCase = true) || it.title.equals(code, ignoreCase = true) }
+    } ?: false
+
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = TazSpace.gutter)
+            .clip(TazRadius.card).background(TazColors.Surface)
+            .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
+            .padding(TazSpace.lg)
+    ) {
+        Text(
+            "Offers", fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
+            color = TazColors.TextPrimary
+        )
+        Spacer(Modifier.height(TazSpace.sm))
+
+        // ---- coupon entry ----
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it.uppercase().take(20) },
+                modifier = Modifier.weight(1f).semantics { contentDescription = "Coupon code" },
+                singleLine = true,
+                placeholder = { Text("Coupon code", fontSize = TazType.bodySize, color = TazColors.TextTertiary) },
+                textStyle = LocalTextStyle.current.copy(fontSize = TazType.bodySize, color = TazColors.TextPrimary),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
+                colors = tazFieldColors()
+            )
+            Spacer(Modifier.width(TazSpace.sm))
+            PillButton(
+                text = if (app.couponCode != null) "Remove" else "Apply",
+                onClick = {
+                    if (app.couponCode != null) { app.couponCode = null; draft = "" }
+                    else if (draft.isNotBlank()) app.couponCode = draft.trim()
+                },
+                filled = false,
+                enabled = app.couponCode != null || draft.isNotBlank(),
+                disabledHint = "Enter a coupon code first",
+                modifier = Modifier.defaultMinSize(minHeight = TazSize.buttonHeightSm)
+            )
+        }
+        // Immediate, honest feedback on the code that was typed.
+        app.couponCode?.let { code ->
+            Spacer(Modifier.height(TazSpace.xs))
+            val declined = bill.declinedPromotions.firstOrNull {
+                it.promotionId.equals(code, ignoreCase = true) || it.title.equals(code, ignoreCase = true)
+            }
+            val (msg, tone) = when {
+                applied -> "Applied" to TazColors.Green
+                declined != null -> declined.reason to TazColors.Warning
+                else -> "This code isn't valid." to TazColors.Danger
+            }
+            Text(msg, fontSize = TazType.captionSize, lineHeight = TazType.captionLine, color = tone)
+        }
+
+        // ---- offers not applied, and why ----
+        val others = bill.declinedPromotions.filter { d ->
+            app.couponCode?.let { !d.promotionId.equals(it, true) && !d.title.equals(it, true) } ?: true
+        }
+        if (others.isNotEmpty()) {
+            Spacer(Modifier.height(TazSpace.md))
+            others.forEach { d ->
+                Column(Modifier.fillMaxWidth().padding(vertical = TazSpace.xs)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            d.title, fontSize = TazType.bodySize, fontWeight = FontWeight.Medium,
+                            color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
+                        )
+                        d.wouldHaveSavedRupees?.let {
+                            Text("₹$it", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+                        }
+                    }
+                    Text(
+                        d.reason, fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
+                        color = TazColors.TextSecondary
+                    )
+                }
+            }
         }
     }
     Spacer(Modifier.height(TazSpace.md))

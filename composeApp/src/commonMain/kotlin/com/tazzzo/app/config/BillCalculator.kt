@@ -3,6 +3,7 @@ package com.tazzzo.app.config
 import com.tazzzo.app.data.model.BillSummary
 import com.tazzzo.app.data.model.CartLine
 import com.tazzzo.app.data.model.MembershipPlan
+import com.tazzzo.app.data.model.Promotion
 
 /**
  * The single source of truth for order money maths.
@@ -21,27 +22,60 @@ object BillCalculator {
         redeemCoins: Int = 0,
         isClubMember: Boolean = false,
         clubPlan: MembershipPlan = MembershipConfig.plan,
-        clubCumulativeSpendRupees: Int = 0
+        clubCumulativeSpendRupees: Int = 0,
+        promotions: List<Promotion> = PromotionConfig.active,
+        couponCode: String? = null,
+        promotionPolicy: PromotionPolicy = PromotionConfig.policy
     ): BillSummary {
         val itemTotal = lines.sumOf { it.lineTotal }
         val mrpTotal = lines.sumOf { it.lineMrp }
-        val delivery =
-            if (itemTotal >= charges.freeDeliveryAboveRupees || itemTotal == 0) 0
-            else charges.deliveryFeeRupees
         val handling = if (itemTotal == 0) 0 else charges.handlingFeeRupees
         val earned = if (coins.enabled) coins.coinsFor(itemTotal) else 0
-        val redemption = redeemableValue(redeemCoins, itemTotal, coins)
-        val clubDiscount = if (itemTotal == 0) 0 else
+
+        // Club's candidate discount, BEFORE stacking. The engine decides whether
+        // it survives against a competing non-stackable promotion.
+        val clubCandidate = if (itemTotal == 0) 0 else
             MembershipCalculator.evaluate(itemTotal, isClubMember, clubPlan, clubCumulativeSpendRupees)
                 .discountRupees
+
+        // One resolution, one place. Screens render it; nothing recomputes it.
+        val promo = PromotionEngine.evaluate(
+            lines = lines,
+            promotions = promotions,
+            isMember = isClubMember,
+            couponCode = couponCode,
+            clubDiscountRupees = clubCandidate,
+            policy = promotionPolicy
+        )
+        val clubDiscount = promo.clubDiscountRupees
+        val promotionDiscount = promo.promotionDiscountRupees
+
+        val delivery = when {
+            itemTotal == 0 -> 0
+            promo.freeDelivery -> 0
+            itemTotal >= charges.freeDeliveryAboveRupees -> 0
+            else -> charges.deliveryFeeRupees
+        }
+
+        // Coins redeem against what is left AFTER discounts, never against
+        // rupees that were already taken off.
+        val discountedItems = (itemTotal - clubDiscount - promotionDiscount).coerceAtLeast(0)
+        val redemption = redeemableValue(redeemCoins, discountedItems, coins)
+
         return BillSummary(
             itemTotal = itemTotal,
             itemMrpTotal = mrpTotal,
             deliveryFee = delivery,
             handlingCharge = handling,
             coinsEarned = earned,
-            grandTotal = itemTotal + delivery + handling - redemption - clubDiscount,
-            clubDiscount = clubDiscount
+            // Items can be discounted to zero; fees are never discounted below zero.
+            grandTotal = discountedItems + delivery + handling - redemption,
+            clubDiscount = clubDiscount,
+            promotionDiscount = promotionDiscount,
+            appliedPromotions = promo.applied,
+            declinedPromotions = promo.declined,
+            bestOfferNote = promo.bestOfferNote,
+            freeDeliveryByPromotion = promo.freeDelivery
         )
     }
 
