@@ -101,7 +101,7 @@ object OrderPlacement {
                 app.clearCart()
                 app.checkout = null
                 if (navigate) {
-                    app.resetTo(Screen.Home)
+                    app.goHome()
                     app.navigate(Screen.OrderSuccess(result.order.id))
                 }
             }

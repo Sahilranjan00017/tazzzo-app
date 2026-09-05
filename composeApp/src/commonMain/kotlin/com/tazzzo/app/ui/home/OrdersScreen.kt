@@ -134,7 +134,7 @@ private fun EmptyOrdersState() {
             color = TazColors.TextSecondary, textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(TazSpace.xl))
-        PillButton("Start Shopping", onClick = { app.resetTo(Screen.Home) })
+        PillButton("Start Shopping", onClick = { app.goHome() })
     }
 }
 

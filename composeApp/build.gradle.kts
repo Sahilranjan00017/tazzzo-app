@@ -58,6 +58,8 @@ kotlin {
             implementation("androidx.test.ext:junit:1.2.1")
             implementation("androidx.test:runner:1.6.2")
             implementation("androidx.test:core:1.6.1")
+            // For TestState.reset(): clears the default SharedPreferences the app persists into.
+            implementation("androidx.preference:preference-ktx:1.2.1")
         }
     }
 }

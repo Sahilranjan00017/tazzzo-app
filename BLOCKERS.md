@@ -44,6 +44,15 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       placeholders; attribution in docs/IMAGE_ATTRIBUTIONS.md).
 
 ## P1 — visual ceiling (new, Phase 6)
+- [ ] **Promotions are [MOCKED] (2026-09-05).** A deterministic promotion engine now
+      exists (config/PromotionEngine.kt, 22 unit tests) but the promotion SET,
+      usage counters per user and real validity windows are [BACKEND REQUIRED].
+      PromotionConfig.active is fixture data. PromotionPolicy.clubStacksWithPromotions
+      = false is a [BUSINESS DECISION] default, same standing as D4/D5/D6.
+- [x] F6 FIXED 2026-09-05 — "Start shopping" / "Continue shopping" landed on
+      whichever bottom tab was last open (resetTo(Home) reset the stack, not the
+      tab). Found by the on-device journey test after joining Club from Account.
+      Same bug in 7 files; all now go through AppState.goHome(). GoHomeTest pins it.
 - [ ] **5/5 EXPERIENCE PASS (opened 2026-09-01).** Four structural gaps found by
       source audit, none visible in a screenshot: (S1) no component has a
       designed pressed state — `collectIsPressedAsState` appears zero times

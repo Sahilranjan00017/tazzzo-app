@@ -42,6 +42,7 @@ import org.junit.runner.RunWith
 class InteractionSemanticsTest {
 
     init {
+        TestState.reset()                      // clean persisted store per class
         MotionSettings.ambientEnabled = false
     }
 

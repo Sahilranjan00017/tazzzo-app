@@ -40,7 +40,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NavigationJourneyTest {
 
-    init { MotionSettings.ambientEnabled = false }
+    init {
+        TestState.reset()                      // clean persisted store per class
+        MotionSettings.ambientEnabled = false
+    }
 
     @get:Rule(order = 0)
     val rule = createEmptyComposeRule()

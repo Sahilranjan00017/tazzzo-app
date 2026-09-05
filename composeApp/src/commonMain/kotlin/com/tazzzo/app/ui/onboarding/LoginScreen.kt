@@ -342,7 +342,7 @@ fun LoginScreen() {
                                                     if (profile != null) {
                                                         app.user = profile
                                                         app.requestGuidedTourIfFirstTime()
-                                                        app.resetTo(Screen.Home)
+                                                        app.goHome()
                                                     } else {
                                                         error = "Invalid OTP, try again"
                                                     }
@@ -393,7 +393,7 @@ fun LoginScreen() {
                     .defaultMinSize(minHeight = 48.dp)
                     .clip(TazRadius.card)
                     .tazPressable(onClick = { app.requestGuidedTourIfFirstTime()
-                        app.resetTo(Screen.Home) }, pressScale = TazPress.compact),
+                        app.goHome() }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

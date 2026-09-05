@@ -457,7 +457,7 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                             if (u != null) {
                                                 app.user = u
                                                 app.requestGuidedTourIfFirstTime()
-                                                app.resetTo(Screen.Home)
+                                                app.goHome()
                                             } else {
                                                 errorText = "Invalid OTP, try again"
                                             }
@@ -488,7 +488,7 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                     .defaultMinSize(minHeight = 48.dp)
                     .clip(TazRadius.card)
                     .tazPressable(onClick = { app.requestGuidedTourIfFirstTime()
-                        app.resetTo(Screen.Home) }, pressScale = TazPress.compact),
+                        app.goHome() }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

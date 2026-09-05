@@ -127,7 +127,7 @@ fun ClubCheckoutScreen() {
                 priceRupees = plan.priceRupees,
                 onPay = ::pay,
                 onDone = {
-                    app.resetTo(Screen.Home)
+                    app.goHome()
                 },
                 onBackToClub = { app.back() }
             )

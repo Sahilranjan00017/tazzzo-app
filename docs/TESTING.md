@@ -11,6 +11,9 @@
   per test. A test that assumes an empty cart will time out after any test that
   added to it. Symptom: passes alone, fails deterministically after a specific
   other test. Fix the test's assumptions; do not widen its timeout.
+  **Rule:** every instrumented class calls `TestState.reset()` in its `init`
+  block (before the ActivityScenarioRule launches the activity) so it starts
+  from an empty store regardless of what ran before it.
 
 Never widen a timeout to make an environment failure disappear. A long timeout
 hides a real hang.

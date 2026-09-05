@@ -108,7 +108,7 @@ fun CartScreen() {
                     Spacer(Modifier.height(TazSpace.xl))
                     PillButton(
                         "Start shopping",
-                        onClick = { app.resetTo(Screen.Home) },
+                        onClick = { app.goHome() },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -567,9 +567,16 @@ private fun ClubCartPrompt() {
     // Nothing useful to say about an empty cart.
     if (app.cartItemCount == 0) return
 
+    // Read the BILL, not the isolated Club evaluation. After stacking, a
+    // competing offer may have out-saved Club and set it aside; a card that
+    // still says "Club savings applied ₹29" while the bill applied ₹0 is the
+    // contradiction that makes a customer stop trusting every number on screen.
+    val bill = app.bill(app.cartLines())
     val (title, body) = when {
-        eligibility.isMember && eligibility.isEligible ->
-            "Club savings applied" to "₹${eligibility.discountRupees} off this order."
+        eligibility.isMember && eligibility.isEligible && bill.clubDiscount > 0 ->
+            "Club savings applied" to "₹${bill.clubDiscount} off this order."
+        eligibility.isMember && eligibility.isEligible && bill.bestOfferNote != null ->
+            "Club discount set aside for this order" to "A better offer applied — see your bill."
         eligibility.isMember ->
             "Add ₹${eligibility.amountToUnlockRupees} more to unlock Club savings" to
                 "${plan.discountRule.percent}% off eligible orders ₹${plan.discountRule.minOrderValueRupees}+."
@@ -583,7 +590,7 @@ private fun ClubCartPrompt() {
                 "${plan.discountRule.percent}% off eligible orders ₹${plan.discountRule.minOrderValueRupees}+, plus rewards."
     }
 
-    val isMemberBenefit = eligibility.isMember && eligibility.isEligible
+    val isMemberBenefit = eligibility.isMember && eligibility.isEligible && bill.clubDiscount > 0
 
     Row(
         Modifier.fillMaxWidth()

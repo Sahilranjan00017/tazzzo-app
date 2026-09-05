@@ -63,6 +63,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -173,7 +174,9 @@ private fun HomeFeedList(data: HomeFeed) {
     // Home scroll survives a trip into a product and back.
     val homeScroll = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        // Tagged so the journey suite can scroll rails into composition —
+        // ADD controls below the fold do not exist in semantics until then.
+        modifier = Modifier.fillMaxSize().testTag("homeFeed"),
         state = homeScroll,
         contentPadding = PaddingValues(bottom = TazSpace.cartBarClearance)
     ) {

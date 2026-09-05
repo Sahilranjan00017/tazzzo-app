@@ -136,6 +136,20 @@ class TazzzoAppState(
         backStack.add(screen)
     }
 
+    /**
+     * "Start shopping" / "Continue shopping": the Home FEED, every time.
+     *
+     * Found by the on-device journey test (F6): a customer who reached Tazzzo
+     * Club via the Account tab, paid, and tapped "Start shopping" was dropped
+     * back on the Account tab — `resetTo(Screen.Home)` resets the back stack
+     * but the shell's selected tab is separate state, and it was still
+     * ACCOUNT. A button that says "shopping" must land on shopping.
+     */
+    fun goHome() {
+        homeTab = HomeTab.HOME
+        resetTo(Screen.Home)
+    }
+
     // --- session ---
     private val _user = mutableStateOf(
         UserProfile(name = "Guest", phone = "", isGuest = true, coinBalance = 40,

@@ -363,6 +363,12 @@ needs `[DEVICE]` hardware and is recorded as such.
 
 ## 8. LOG
 
+- **2026-09-05** — Commerce wave C1 (see `TAZZZO_COMMERCE_EXPERIENCE_AUDIT.md`).
+  Two more defects found by RUNNING, in the same family as F1–F5: **F6**
+  "Start shopping" landed on the last-open tab in 7 files (stack reset, tab
+  not); **F7** the cart's Club card contradicted the bill after a coupon won.
+  Test environment right-sized (§41): smoke suite 340 s/never-green → 18.6 s
+  green. Promotion engine added with 22 deterministic money tests.
 - **2026-09-01** — E2 executed. Directional navigation, per-destination state
   retention, double-nav guard, overlay-first back. Two further a11y defects
   found by test (F4 MicButton unactivatable + 36dp target, F5 unlabelled search).

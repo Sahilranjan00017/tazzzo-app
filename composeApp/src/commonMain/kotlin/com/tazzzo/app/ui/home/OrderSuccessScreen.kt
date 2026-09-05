@@ -173,7 +173,7 @@ fun OrderSuccessScreen(orderId: String) {
             PillButton(
                 text = "Track order",
                 onClick = {
-                    app.resetTo(Screen.Home)
+                    app.goHome()
                     app.navigate(Screen.Orders)
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = TazSize.buttonHeight)
@@ -181,7 +181,7 @@ fun OrderSuccessScreen(orderId: String) {
             Spacer(Modifier.height(TazSpace.md))
             Box(
                 Modifier.fillMaxWidth().clip(TazRadius.pill)
-                    .tazPressable(onClick = { app.resetTo(Screen.Home) }, pressScale = TazPress.compact)
+                    .tazPressable(onClick = { app.goHome() }, pressScale = TazPress.compact)
                     .defaultMinSize(minHeight = 48.dp),
                 contentAlignment = Alignment.Center
             ) {
