@@ -1,6 +1,7 @@
 package com.tazzzo.app.data.local
 
 import com.russhwolf.settings.Settings
+import com.tazzzo.app.data.model.MembershipState
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -74,6 +75,30 @@ class PersistentStore(private val settings: Settings = Settings()) {
 
     fun loadRecentSearches(): List<String> = decodeList(KEY_SEARCHES)
 
+    // ---- Tazzzo Club membership -------------------------------------------
+
+    /**
+     * The customer's club standing.
+     *
+     * Stored as the domain model directly (it is already `@Serializable`)
+     * rather than a private DTO, because unlike the cart there is no
+     * "re-resolve against the live catalogue" step — but it carries the same
+     * caveat as coins: this is a LOCAL MIRROR, not the authority. Cumulative
+     * spend, savings, order counts and reward unlocks must become
+     * server-authoritative before launch, for exactly the reason coin
+     * crediting must (BLOCKERS.md P0). A customer who can edit their own
+     * preferences file can otherwise grant themselves a discount tier.
+     */
+    fun saveMembership(state: MembershipState) =
+        settings.putString(KEY_MEMBERSHIP, json.encodeToString(state))
+
+    fun loadMembership(): MembershipState? =
+        settings.getStringOrNull(KEY_MEMBERSHIP)?.let {
+            runCatching { json.decodeFromString<MembershipState>(it) }.getOrNull()
+        }
+
+    fun clearMembership() = settings.remove(KEY_MEMBERSHIP)
+
     // ---- one-time flags ----------------------------------------------------
 
     var tourSeen: Boolean
@@ -103,5 +128,6 @@ class PersistentStore(private val settings: Settings = Settings()) {
         const val KEY_SEARCHES = "tazzzo.searches.v1"
         const val KEY_TOUR_SEEN = "tazzzo.tourSeen.v1"
         const val KEY_ONBOARDED = "tazzzo.onboarded.v1"
+        const val KEY_MEMBERSHIP = "tazzzo.membership.v1"
     }
 }

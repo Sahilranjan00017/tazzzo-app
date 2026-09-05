@@ -23,6 +23,31 @@ object AnalyticsEvents {
     const val ORDER_FAILURE = "order_failure"
     const val REORDER = "reorder"
     const val COIN_VIEW = "coin_view"
+
+    // ---- Tazzzo Club membership ------------------------------------------
+    // Payment-related events carry only a plan id, a stage and a test-mode
+    // flag. No payment reference, no amount tied to a person, no PII — a
+    // payment funnel is exactly where over-collection becomes a compliance
+    // problem (see the raw-search-query decision still open in BLOCKERS.md).
+    const val MEMBERSHIP_VIEW = "membership_view"
+    const val MEMBERSHIP_BENEFIT_VIEW = "membership_benefit_view"
+    const val MEMBERSHIP_JOIN_TAP = "membership_join_tap"
+    const val MEMBERSHIP_PAYMENT_STARTED = "membership_payment_started"
+    const val MEMBERSHIP_PAYMENT_SUCCESS = "membership_payment_success"
+    const val MEMBERSHIP_PAYMENT_FAILED = "membership_payment_failed"
+    const val MEMBERSHIP_PAYMENT_CANCELLED = "membership_payment_cancelled"
+    const val MEMBERSHIP_PAYMENT_PENDING = "membership_payment_pending"
+    const val MEMBERSHIP_ACTIVATED = "membership_activated"
+    const val CLUB_DISCOUNT_VIEW = "club_discount_view"
+    const val CLUB_DISCOUNT_APPLIED = "club_discount_applied"
+    const val CLUB_PROGRESS_VIEW = "club_progress_view"
+    const val MILESTONE_REACHED = "milestone_reached"
+    const val REWARD_UNLOCKED = "reward_unlocked"
+    const val REWARD_REDEEMED = "reward_redeemed"
+    const val DELIVERY_SLOT_VIEW = "delivery_slot_view"
+    const val DELIVERY_SLOT_SELECTED = "delivery_slot_selected"
+    const val FESTIVAL_IMPRESSION = "festival_impression"
+    const val FESTIVAL_CTA_TAP = "festival_cta_tap"
 }
 
 interface AnalyticsSink {

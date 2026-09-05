@@ -166,4 +166,17 @@ object ServiceLocator {
     val addresses: AddressRepository = MockAddressRepository()
     val checkout: CheckoutRepository = MockCheckoutRepository(catalog, orders)
     val support: SupportRepository = MockSupportRepository()
+
+    /**
+     * Club membership. Local today; the same interface fronts the backend
+     * later, where the idempotency guarantees must be enforced server-side.
+     */
+    val membership: MembershipRepository =
+        LocalMembershipRepository(com.tazzzo.app.data.local.PersistentStore())
+
+    /**
+     * Payment. [MockPaymentGateway] until Razorpay + a backend exist — it is
+     * a TEST gateway and says so on every order and result it produces.
+     */
+    val payments: PaymentGateway = MockPaymentGateway()
 }

@@ -121,8 +121,16 @@ data class BillSummary(
     val deliveryFee: Int,
     val handlingCharge: Int,
     val coinsEarned: Int,
-    val grandTotal: Int
+    val grandTotal: Int,
+    /**
+     * Rupees off from Tazzzo Club for THIS order. 0 for non-members and
+     * ineligible orders. Placed AFTER grandTotal and defaulted so every
+     * existing positional BillSummary(...) fixture keeps compiling and every
+     * value it constructs keeps meaning what it always meant.
+     */
+    val clubDiscount: Int = 0
 ) {
+    /** MRP savings only. Club discount is shown separately — never blended into one "saved" figure. */
     val saved: Int get() = itemMrpTotal - itemTotal
 }
 
