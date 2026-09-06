@@ -235,6 +235,21 @@ object MockCatalog {
     fun productsFor(categoryId: String, subcategoryId: String? = null) =
         products.filter { it.categoryId == categoryId && (subcategoryId == null || it.subcategoryId == subcategoryId) }
 
+    /**
+     * How many SKUs each category and sub-category actually holds, keyed by id.
+     *
+     * The supplied mockups print a count on every category tile ("340+",
+     * "1,840 Items"). Those figures were invented for the comp. These are
+     * counted from the catalogue, so a tile can never advertise depth the aisle
+     * does not have — and the number shrinks honestly when a SKU goes away.
+     */
+    fun counts(): Map<String, Int> = buildMap {
+        products.forEach { p ->
+            put(p.categoryId, (get(p.categoryId) ?: 0) + 1)
+            p.subcategoryId?.let { put(it, (get(it) ?: 0) + 1) }
+        }
+    }
+
     fun bestsellers() = products.filter { "Bestseller" in it.tags }
 
     /**

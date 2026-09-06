@@ -179,3 +179,62 @@ under Household & Lifestyle with 2 sub-categories and 9 verticals
 (TZV-000225..TZV-000233), and §3 of the same document lists it. What does not
 exist is *festive as a seasonal grouping*, which the document's own three-plane
 rule correctly places in collections. The app now mirrors the real shape.
+
+## UI redesign — decisions and defects (2026-09-06)
+
+Raised while implementing the six supplied screen mockups. The redesign itself
+is built and green; these are the things it cannot decide for you.
+
+### Founder decisions
+- [ ] **Tip `[BUSINESS DECISION]`.** Built and wired into the bill as its own
+      row, added to the payable and never netted against savings. But there is
+      **no payout rail**: nothing routes a tip to a delivery partner, and on
+      Cash on Delivery it is cash handed to a person the app cannot account to.
+      Copy states only that the amount is added to this order — the mockup's
+      "100% of your tip goes directly to your rider" is a promise nobody can
+      keep today. **Do not ship to production until a payout rail exists.**
+- [ ] **Delivery promise (D4).** `AppConfig.deliveryPromise` is `Unknown`, so
+      the Home delivery chip, the cart items-header ETA and the mockups' "10
+      MINS" / per-item "8 MINS" all render **nothing**. The components are
+      built and light up the moment a verified window per pincode exists.
+- [ ] **Store hours.** The mockup's "24x7 STORE" chip is an operational
+      commitment. Nothing models store hours, so it is not drawn.
+- [ ] **Support SLA (D6).** The mockup's "Quick Resolution Promise — instant
+      refund within 2 minutes" is not drawn. No refund pipeline, no ticketing,
+      no signed SLA.
+- [ ] **Privacy policy and terms.** No document exists at any URL the app
+      knows. The Account row is not drawn. This is an independent launch
+      blocker for an Indian consumer app, not a redesign item.
+- [ ] **Bottom nav label.** The mockups rename the fifth tab "Order Again" →
+      "Orders". Kept as "Order Again": the label feeds both the visible text
+      and the contentDescription, and `InteractionSemanticsTest` asserts it.
+      Changing it is one line plus one test — say the word.
+- [ ] **`BrandCopy.savingsClaim` "SAVE 8–20%" (D6, pre-existing).** Still live
+      on marketing surfaces with no substantiating dataset in the repo.
+
+### Backend required before these screens can be finished
+- [ ] **Payment gateway.** Until one exists: UPI and Card stay `Coming soon`,
+      there are **no Google Pay / PhonePe / Paytm rows** (third-party trade
+      dress), no saved-card vault, and **no CVV field in Tazzzo's own UI** —
+      taking a CVV outside the gateway's checkout is a PCI violation. The card
+      row says where card details are actually entered.
+- [ ] **Refunds, e-gift cards, payment management** (Account). Each needs a
+      backend that does not exist. Rows are not drawn rather than leading
+      nowhere.
+- [ ] **Rupee wallet.** The mockup's "Tazzzo Wallet · Add Balance · 5%
+      cashback" is stored value — a regulated prepaid-instrument product in
+      India. The card renders **Tazzzo Coins** instead.
+- [ ] **WhatsApp transport.** Every Help contact route still ends in an
+      "Opening WhatsApp… (demo)" dialog; there is no URL-opening
+      expect/actual in commonMain. The redesign makes Help look considerably
+      more capable, which widens the gap between what it offers and what it
+      does.
+
+### Defect found while reviewing, NOT introduced by this work
+- [ ] **Coin balance has two sources that can disagree.** Account's balance
+      card and Home's `CoinChip` read `app.user.coinBalance` (advanced by
+      `OrderPlacement`); `CoinsScreen` reads `ServiceLocator.coins.getBalance()`,
+      which only `credit()` moves. The two can show different balances for the
+      same customer. Not fixed here — fixing it means choosing which is
+      authoritative, which is a data decision, and doing it inside a UI wave
+      would bury it.

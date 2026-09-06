@@ -37,6 +37,9 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material.icons.filled.Toll
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -96,6 +99,10 @@ object TazIcons {
     // status
     val Success: ImageVector = Icons.Default.CheckCircle
     val Check: ImageVector = Icons.Default.Check
+    val Bell: ImageVector = Icons.Outlined.Notifications
+    val Globe: ImageVector = Icons.Outlined.Language
+    val Edit: ImageVector = Icons.Outlined.Edit
+
     val Error: ImageVector = Icons.Default.ErrorOutline
     val Offline: ImageVector = Icons.Default.WifiOff
     val Info: ImageVector = Icons.Default.Info

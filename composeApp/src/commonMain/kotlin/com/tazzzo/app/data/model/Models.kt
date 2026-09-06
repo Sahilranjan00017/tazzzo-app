@@ -182,7 +182,15 @@ data class BillSummary(
      * reason is carried so the bill can say WHY it was free.
      */
     val deliveryFeeWaivedRupees: Int = 0,
-    val deliveryFeeReason: String? = null
+    val deliveryFeeReason: String? = null,
+    /**
+     * A voluntary amount added to this order.
+     *
+     * Kept out of [realisedSavings] and out of every discount line: a tip is
+     * money the customer ADDS, and folding it anywhere near savings would make
+     * the bill unreadable. It is added to [grandTotal] and shown on its own row.
+     */
+    val tip: Int = 0
 ) {
     /** MRP savings only — a list-price comparison, not money taken off the payable. */
     val saved: Int get() = itemMrpTotal - itemTotal

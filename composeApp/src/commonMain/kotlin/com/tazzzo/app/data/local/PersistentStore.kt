@@ -114,6 +114,18 @@ class PersistentStore(private val settings: Settings = Settings()) {
         get() = settings.getBoolean(KEY_ONBOARDED, false) || tourSeen
         set(v) = settings.putBoolean(KEY_ONBOARDED, v)
 
+    /**
+     * Whether the customer wants order and offer notifications.
+     *
+     * Defaults to TRUE, matching what a fresh install would send today, so the
+     * switch reflects reality on first open instead of showing "off" beside a
+     * system that is in fact on. Turning it off is a real preference and it
+     * persists; nothing else reads it yet, which is why the row says so.
+     */
+    var notificationsEnabled: Boolean
+        get() = settings.getBoolean(KEY_NOTIFICATIONS, true)
+        set(v) = settings.putBoolean(KEY_NOTIFICATIONS, v)
+
     // ---- helpers -----------------------------------------------------------
 
     private inline fun <reified T> decodeList(key: String): List<T> =
@@ -123,6 +135,7 @@ class PersistentStore(private val settings: Settings = Settings()) {
 
     private companion object {
         const val KEY_CART = "tazzzo.cart.v1"
+        const val KEY_NOTIFICATIONS = "tazzzo.prefs.notifications.v1"
         const val KEY_SESSION = "tazzzo.session.v1"
         const val KEY_ADDRESSES = "tazzzo.addresses.v1"
         const val KEY_SEARCHES = "tazzzo.searches.v1"

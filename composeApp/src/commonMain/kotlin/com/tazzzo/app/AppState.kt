@@ -201,6 +201,35 @@ class TazzzoAppState(
         store?.onboarded = true
     }
 
+    /**
+     * Notification preference. Reading is cheap and observable; writing also
+     * persists, so the switch survives a relaunch.
+     *
+     * One property rather than a val plus a setter function: the pair compiled
+     * to two JVM methods with the same signature and broke the Android build.
+     */
+    private var notificationsState by mutableStateOf(store?.notificationsEnabled ?: true)
+    var notificationsEnabled: Boolean
+        get() = notificationsState
+        set(value) {
+            notificationsState = value
+            store?.notificationsEnabled = value
+        }
+
+    /**
+     * "No carry bag needed", chosen in the cart.
+     *
+     * Lives here rather than on [CheckoutSession] because the cart is open long
+     * before a session exists; the session seeds itself from this value so the
+     * choice is not silently dropped between the two screens.
+     *
+     * It is a packing preference and nothing more. The mockup pairs it with
+     * "earn 5 Eco Karma points"; no such ledger exists, and inventing a reward
+     * to sell a choice the customer was already making is the kind of claim
+     * D5 exists to stop.
+     */
+    var noCarryBag by mutableStateOf(false)
+
     /** Returning customers skip the login wall; logout resets this. */
     val isOnboarded: Boolean get() = store?.onboarded == true
 
@@ -340,7 +369,10 @@ class TazzzoAppState(
             isClubMember = isClubMember,
             clubCumulativeSpendRupees = membership.cumulativeSpendRupees,
             couponCode = couponCode,
-            slot = checkout?.slot
+            slot = checkout?.slot,
+            // Zero until a session exists, so the cart's bill and the checkout
+            // bill agree until the customer actually chooses a tip.
+            tipRupees = checkout?.tipRupees ?: 0
         )
 
     fun clearCart() { cartEntries.clear(); store?.clearCart() }

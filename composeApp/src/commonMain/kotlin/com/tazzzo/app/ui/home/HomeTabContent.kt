@@ -89,6 +89,10 @@ import com.tazzzo.app.ui.common.VoiceCommerceBannerV3
 import com.tazzzo.app.ui.common.guidedTarget
 import com.tazzzo.app.ui.state.rememberLoad
 import kotlinx.coroutines.delay
+import androidx.compose.ui.text.font.FontWeight
+import com.tazzzo.app.config.priceBandLabel
+import com.tazzzo.app.theme.TazMotion
+import com.tazzzo.app.ui.common.ProductCard
 
 private val RAIL_ORDER = listOf(
     "Bestsellers",
@@ -124,7 +128,9 @@ private data class HomeFeed(
     /** Distinct products from real past orders — empty when no order history. */
     val orderAgain: List<Product>,
     /** Largest MRP-vs-price savings among the loaded rails. Data, not a claim. */
-    val deals: List<Product> = emptyList()
+    val deals: List<Product> = emptyList(),
+    /** Everyday staples for the two-up grid. Real, purchasable, deduped. */
+    val essentials: List<Product> = emptyList()
 )
 
 /**
@@ -150,6 +156,10 @@ fun HomeTabContent() {
             "Sweet Tooth" to catalog.getProducts("sweet"),
             "Cleaning Essentials" to catalog.getProducts("cleaning")
         )
+        val deals = rails.values.flatten().distinctBy { it.id }
+            .filter { it.mrp > it.price && it.isPurchasable }
+            .sortedByDescending { it.mrp - it.price }
+            .take(10)
         HomeFeed(
             banners = catalog.getBanners(),
             categories = Taxonomy.categories(catalog),
@@ -159,10 +169,22 @@ fun HomeTabContent() {
                 .map { it.product }
                 .distinctBy { it.id }
                 .take(8),
-            deals = rails.values.flatten().distinctBy { it.id }
-                .filter { it.mrp > it.price && it.isPurchasable }
-                .sortedByDescending { it.mrp - it.price }
-                .take(10)
+            deals = deals,
+            essentials = run {
+                // Deduplicate against everything else the feed already draws.
+                // A product shown twice on one screen is worse than a shorter
+                // section: it wastes the slot, and two controls announcing
+                // "Add Fresh Onion to cart" are indistinguishable to a screen
+                // reader — the same accessibility defect the hero tiles hit.
+                val alreadyShown = (
+                    rails.values.flatten() +
+                        pastOrders.flatMap { it.lines }.map { it.product }
+                    ).map { it.id }.toSet() + deals.map { it.id }
+                (catalog.getProducts("fruits") + catalog.getProducts("atta"))
+                    .distinctBy { it.id }
+                    .filter { it.isPurchasable && it.id !in alreadyShown }
+                    .take(8)
+            }
         )
     }
 
@@ -220,9 +242,15 @@ private fun HomeFeedList(data: HomeFeed) {
         item { CouponRail() }
         // Data-backed: the biggest rupee savings among products already loaded
         // for this feed. No historical price claims — just MRP vs price today.
-        item { ProductRail("Today's deals", data.deals) }
+        item { PriceBandDealsPanel(data.deals) }
         item { Spacer(Modifier.height(SectionGap)) }
         item { ProductRail("Bestsellers", data.rails["Bestsellers"] ?: emptyList()) }
+        // Everyday staples, two-up, so the densest part of the basket is
+        // reachable without opening an aisle.
+        if (data.essentials.isNotEmpty()) {
+            item { Spacer(Modifier.height(SectionGap)) }
+            item { EssentialsGrid(data.essentials) }
+        }
         if (data.orderAgain.isNotEmpty()) {
             item { Spacer(Modifier.height(SectionGap)) }
             item {
@@ -401,14 +429,7 @@ private fun HomeSearchBar() {
     ) {
         TazIcon(TazIcons.Search, null, size = TazSize.iconSm, tint = TazColors.TextTertiary)
         Spacer(Modifier.width(TazSpace.sm))
-        Text(
-            "Search \"milk\", \"atta\", \"soap\"…",
-            fontSize = TazType.bodySize,
-            color = TazColors.TextTertiary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        RotatingSearchHint(Modifier.weight(1f))
         MicButton(TazSize.avatar) { app.showVoiceSheet = true }
     }
 }
@@ -709,4 +730,153 @@ private fun CampaignHero() {
         }
     }
     Spacer(Modifier.height(SectionGap))
+}
+
+private val SearchHints = listOf(
+    "Search \"milk\", \"atta\", \"soap\"…",
+    "Search \"onion\", \"tomato\", \"palak\"…",
+    "Search \"agarbatti\", \"diya\", \"ghee\"…",
+    "Search \"biscuits\", \"chips\", \"tea\"…"
+)
+
+/**
+ * The search field's cycling hint.
+ *
+ * Gated on [MotionSettings.ambientEnabled], like every other perpetual
+ * animation in the app. An ungated `while (true) { delay(…) }` never lets
+ * Compose reach idle, and the instrumented suite waits on idle — one rotating
+ * placeholder would hang all six journey tests rather than fail them, which is
+ * far harder to diagnose than a red assertion.
+ */
+@Composable
+private fun RotatingSearchHint(modifier: Modifier = Modifier) {
+    var index by remember { mutableStateOf(0) }
+    val rotating = MotionSettings.ambientEnabled
+    LaunchedEffect(rotating) {
+        if (!rotating) return@LaunchedEffect
+        while (true) {
+            delay(3_200)
+            index = (index + 1) % SearchHints.size
+        }
+    }
+    Crossfade(SearchHints[index], animationSpec = tween(TazMotion.normal), label = "searchHint") {
+        Text(
+            it, fontSize = TazType.bodySize, color = TazColors.TextTertiary,
+            maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * Deals, grouped four to a row with the price band each item genuinely falls in.
+ *
+ * The mockup shows "₹9 STORE" / "₹19 STORE" ribbons. Tazzzo runs no price-point
+ * store and nothing sells at ₹9, so those bands would label empty shelves. The
+ * band here is read off the item's own price, which makes it both accurate and
+ * impossible to leave empty.
+ *
+ * No countdown. `Campaign` carries display copy, not an end timestamp, and the
+ * client does not gate merchandising on its own clock.
+ */
+@Composable
+private fun PriceBandDealsPanel(deals: List<Product>) {
+    if (deals.isEmpty()) return
+    val app = LocalAppState.current
+    val shown = deals.take(8)
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = TazSpace.screenEdge)
+            .clip(TazRadius.card).background(TazColors.OrangeSoft)
+            .padding(vertical = TazSpace.md)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = TazSpace.md, vertical = TazSpace.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TazIcon(TazIcons.Offer, null, size = TazSize.iconSm, tint = TazColors.Orange)
+            Spacer(Modifier.width(TazSpace.sm))
+            Text(
+                "Today's deals", fontSize = TazType.h2Size, fontWeight = TazType.h2Weight,
+                color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
+            )
+            Text(
+                "See all", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+                color = TazColors.Orange,
+                modifier = Modifier
+                    .semantics(mergeDescendants = true) { contentDescription = "See all deals" }
+                    .tazPressable(
+                        onClick = { app.homeTab = HomeTab.DEALS },
+                        pressScale = TazPress.compact
+                    )
+                    .padding(TazSpace.xs)
+            )
+        }
+        shown.chunked(4).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth().padding(
+                    horizontal = TazSpace.sm, vertical = TazSpace.xs
+                ),
+                horizontalArrangement = Arrangement.spacedBy(TazSpace.xs)
+            ) {
+                row.forEach { product ->
+                    Box(Modifier.weight(1f)) {
+                        ProductCard(
+                            product,
+                            width = null,
+                            compact = true,
+                            ribbon = priceBandLabel(product.price),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/**
+ * Everyday staples, two to a row.
+ *
+ * The count is the size of the list actually drawn — the mockup's "42 Items"
+ * was a comp value, and a header that overstates the section it introduces is
+ * the same defect as a category tile overstating its aisle.
+ */
+@Composable
+private fun EssentialsGrid(products: List<Product>) {
+    if (products.isEmpty()) return
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(
+                horizontal = TazSpace.screenEdge, vertical = TazSpace.sm
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Fresh & daily essentials", fontSize = TazType.h2Size,
+                fontWeight = TazType.h2Weight, color = TazColors.TextPrimary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            )
+            Text(
+                if (products.size == 1) "1 item" else "${products.size} items",
+                fontSize = TazType.captionSize, color = TazColors.TextTertiary, maxLines = 1
+            )
+        }
+        products.chunked(2).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth().padding(
+                    horizontal = TazSpace.screenEdge, vertical = TazSpace.xs
+                ),
+                horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
+            ) {
+                row.forEach { product ->
+                    Box(Modifier.weight(1f)) {
+                        ProductCard(
+                            product, width = null, modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
 }

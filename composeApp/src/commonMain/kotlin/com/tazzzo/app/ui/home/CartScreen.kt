@@ -62,6 +62,20 @@ import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.ui.common.TazTopBar
 import com.tazzzo.app.config.AppConfig
 import com.tazzzo.app.config.DeliveryCopy
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Arrangement
+import com.tazzzo.app.config.freeDeliveryProgress
+import com.tazzzo.app.data.model.Availability
+import com.tazzzo.app.theme.TazMotion
+import com.tazzzo.app.ui.common.ChipTone
+import com.tazzzo.app.ui.common.ProductCard
+import com.tazzzo.app.ui.common.ProductImage
+import com.tazzzo.app.ui.common.TazChip
+import com.tazzzo.app.ui.common.TazGroupedCard
+import com.tazzzo.app.ui.common.TazListRow
 
 /** Product art well in a cart row. The emoji is CONTENT; the well is design. */
 private val RowImageWell = 56.dp
@@ -127,6 +141,9 @@ fun CartScreen() {
                 // ----- Realised savings header: one number, explained below -----
                 SavingsHeader(bill)
 
+                // ----- How close this basket is to free delivery -----
+                FreeDeliveryMilestone(bill)
+
                 // ----- Delivery: a CHOICE, previewed before purchase -----
                 DeliveryChoiceCard()
 
@@ -134,14 +151,37 @@ fun CartScreen() {
 
                 // ----- Items card -----
                 CartCard {
+                    // What is in the basket, counted. The mockup pairs this
+                    // with a delivery ETA; no verified promise exists (D4), so
+                    // the right-hand slot stays empty rather than inventing one.
+                    Row(
+                        Modifier.fillMaxWidth().padding(
+                            start = TazSpace.md, end = TazSpace.md, top = TazSpace.md
+                        ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (lines.size == 1) "1 item" else "${lines.size} items",
+                            fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
+                            color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
+                        )
+                        DeliveryCopy.short(AppConfig.deliveryPromise)?.let {
+                            Text(
+                                it, fontSize = TazType.captionSize,
+                                fontWeight = FontWeight.SemiBold, color = TazColors.Green,
+                                maxLines = 1
+                            )
+                        }
+                    }
                     lines.forEachIndexed { index, line ->
                         Row(
                             Modifier.fillMaxWidth().padding(TazSpace.md),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            EmojiBox(
-                                line.product.emoji, RowEmojiSize, TazColors.SurfaceSunken,
-                                Modifier.size(RowImageWell)
+                            ProductImage(
+                                line.product,
+                                Modifier.size(RowImageWell).clip(TazRadius.chip),
+                                glyphSize = RowEmojiSize, contentPadding = TazSpace.xs
                             )
                             Spacer(Modifier.width(TazSpace.md))
                             Column(Modifier.weight(1f)) {
@@ -192,6 +232,12 @@ fun CartScreen() {
                         }
                     }
                 }
+
+                // ----- Add for less: real discounts, not yet in the basket -----
+                CartUpsellRail(lines.map { it.product.id }.toSet())
+
+                // ----- How this order should be packed -----
+                CarryBagRow()
 
                 // ----- Tazzzo Club: context-aware, never nagging -----
                 ClubCartPrompt()
@@ -351,11 +397,20 @@ fun CartScreen() {
                         Spacer(Modifier.height(TazSpace.md))
 
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Grand total", fontSize = TazType.titleSize,
-                                fontWeight = FontWeight.Bold, color = TazColors.TextPrimary,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "To Pay", fontSize = TazType.titleSize,
+                                    fontWeight = FontWeight.Bold, color = TazColors.TextPrimary
+                                )
+                                // The mockup says "Incl. all taxes". No line on
+                                // this bill is a tax and no tax model exists, so
+                                // the sub-line states only what the rows above
+                                // actually show.
+                                Text(
+                                    "Includes delivery and handling",
+                                    fontSize = TazType.microSize, color = TazColors.TextTertiary
+                                )
+                            }
                             Text(
                                 "₹${bill.grandTotal}", fontSize = TazType.titleSize,
                                 fontWeight = FontWeight.Bold, color = TazColors.TextPrimary
@@ -435,6 +490,14 @@ fun CartScreen() {
                             color = TazColors.TextSecondary
                         )
                         Spacer(Modifier.weight(1f))
+                        // Money genuinely taken off the payable — promotions,
+                        // Club and waived delivery. Never the MRP comparison,
+                        // which has its own labelled strip and would produce a
+                        // saving no bill line supports.
+                        if (bill.realisedSavings > 0) {
+                            TazChip("Saved ₹${bill.realisedSavings}", ChipTone.Savings, standalone = true)
+                            Spacer(Modifier.width(TazSpace.sm))
+                        }
                         Text(
                             "₹${bill.grandTotal}", fontSize = TazType.titleSize,
                             fontWeight = FontWeight.Bold, color = TazColors.TextPrimary
@@ -835,4 +898,143 @@ private fun DeliveryChoiceCard() {
         Text("At checkout", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Green)
     }
     Spacer(Modifier.height(TazSpace.md))
+}
+
+/**
+ * Progress toward free delivery.
+ *
+ * Every figure comes from [freeDeliveryProgress], which reads the live charge
+ * rules — there is no rupee literal in this composable. The mockup's "Shop for
+ * ₹176 more to unlock FREE delivery" against a ₹499 target belongs to no Tazzzo
+ * bill, and hard-coding either number would start lying the first time
+ * operations moved the threshold.
+ *
+ * When delivery is already free the card says so and names the reason, rather
+ * than inventing a hurdle the customer has already cleared.
+ */
+@Composable
+private fun FreeDeliveryMilestone(bill: BillSummary) {
+    if (bill.itemTotal <= 0) return
+    val progress = freeDeliveryProgress(bill)
+    val width by animateFloatAsState(
+        targetValue = progress.fraction,
+        animationSpec = tween(TazMotion.normal),
+        label = "freeDeliveryTrack"
+    )
+
+    Spacer(Modifier.height(TazSpace.md))
+    Column(
+        Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface)
+            .padding(TazSpace.lg)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(24.dp).clip(CircleShape)
+                    .background(if (progress.alreadyFree) TazColors.SuccessSoft else TazColors.OrangeSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                TazIcon(
+                    TazIcons.Delivery, null, size = TazSize.iconXs,
+                    tint = if (progress.alreadyFree) TazColors.Success else TazColors.Orange
+                )
+            }
+            Spacer(Modifier.width(TazSpace.sm))
+            Text(
+                if (progress.alreadyFree)
+                    progress.reason?.let { "Free delivery · $it" } ?: "Delivery is free on this order"
+                else "Add ₹${progress.remainingRupees} more for free delivery",
+                fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+                lineHeight = TazType.captionLine, color = TazColors.TextPrimary,
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(TazSpace.sm))
+        Box(
+            Modifier.fillMaxWidth().height(6.dp).clip(TazRadius.pill)
+                .background(TazColors.SurfaceSunken)
+        ) {
+            Box(
+                Modifier.fillMaxWidth(width).height(6.dp).clip(TazRadius.pill)
+                    .background(if (progress.alreadyFree) TazColors.Success else TazColors.Green)
+            )
+        }
+        Spacer(Modifier.height(TazSpace.xs))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "₹${bill.itemTotal}", fontSize = TazType.microSize,
+                fontWeight = TazType.microWeight, color = TazColors.TextSecondary
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "₹${progress.thresholdRupees} · free delivery",
+                fontSize = TazType.microSize,
+                color = if (progress.alreadyFree) TazColors.Success else TazColors.TextTertiary
+            )
+        }
+    }
+}
+
+/**
+ * "Add for less" — genuinely discounted items the basket does not already hold.
+ *
+ * Reuses [ProductCard] untouched. The mockup draws a "₹16 OFF" ribbon on the
+ * artwork, but the card already prints its saving in rupees in the body, and
+ * two savings signals on one card read as two offers.
+ *
+ * The mockup's "Limited Stock" chip is rendered only when something in the rail
+ * genuinely reports low stock — a scarcity claim asserted unconditionally is
+ * the same fabricated urgency as the countdown this redesign already refused.
+ */
+@Composable
+private fun CartUpsellRail(inCart: Set<String>) {
+    val deals = rememberLoad { ServiceLocator.catalog.getDeals() }
+    val list = (deals.state as? UiState.Success)?.data
+        ?.filter { it.id !in inCart && it.isPurchasable }
+        ?.take(8)
+        ?: return
+    if (list.isEmpty()) return
+
+    val scarce = list.any { it.availability is Availability.LowStock }
+    Spacer(Modifier.height(TazSpace.md))
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = TazSpace.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TazIcon(TazIcons.Offer, null, size = TazSize.iconSm, tint = TazColors.Orange)
+        Spacer(Modifier.width(TazSpace.sm))
+        Text(
+            "Add for less", fontSize = TazType.h2Size, fontWeight = TazType.h2Weight,
+            color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
+        )
+        if (scarce) TazChip("Low stock", ChipTone.Warning, standalone = true)
+    }
+    LazyRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
+    ) {
+        items(list, key = { it.id }) { product -> ProductCard(product) }
+    }
+}
+
+/**
+ * The packing preference.
+ *
+ * A real choice that travels to the store as a delivery instruction. The
+ * mockup's "earn 5 Eco Karma points" sub-line is not written: no such ledger,
+ * earn rate or balance exists, and attaching an invented reward to a choice the
+ * customer was already making is exactly what D5 gates.
+ */
+@Composable
+private fun CarryBagRow() {
+    val app = LocalAppState.current
+    Spacer(Modifier.height(TazSpace.md))
+    TazGroupedCard {
+        TazListRow(
+            icon = TazIcons.Bag,
+            title = "No carry bag needed",
+            subtitle = "We'll pack this order without one",
+            checked = app.noCarryBag,
+            onCheckedChange = { app.noCarryBag = it }
+        )
+    }
 }

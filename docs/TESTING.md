@@ -105,3 +105,22 @@ Rule: **screenshots are documentation, assertions are the verdict.** Every
 `snapshot()` helper catches and logs instead of throwing. Do not respond to this
 by widening a timeout; the capture is not what the test is for. If evidence
 PNGs are genuinely missing from a run, re-run on an idle device.
+
+### Failure class: contention under full-suite load
+
+Symptom: a journey test times out in the full suite (`ComposeTimeoutException`)
+and passes when run alone, repeatedly.
+
+Seen 2026-09-06 on `NavigationJourneyTest.category_scroll_position_…`: one
+timeout in a 15-test run, then two clean passes in isolation. Cause was suite
+load on the 2-core software-GL emulator, not the app.
+
+Diagnosis order, and it matters:
+1. **Re-run the test alone, twice.** Two clean passes means environment.
+2. **Check whether its wait is an outlier.** This class defaulted to 20s while
+   every other class used 60s; aligning the straggler is consistency.
+3. Only then consider the app.
+
+What NOT to do: raise a timeout because something went red. The rule against
+open-ended timeout inflation still stands — a wait may be aligned to the suite's
+established value once, after the isolation check says environment.

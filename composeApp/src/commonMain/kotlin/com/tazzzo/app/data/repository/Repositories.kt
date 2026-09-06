@@ -19,6 +19,8 @@ interface CatalogRepository {
     /** Genuinely discounted SKUs, deepest rupee saving first. Maps to a
      *  `sort=discount&has_discount=true` listing query once one exists. */
     suspend fun getDeals(): List<Product>
+    /** SKU counts per category and sub-category id. Derived, never authored. */
+    suspend fun getCounts(): Map<String, Int>
     suspend fun getProducts(categoryId: String, subcategoryId: String? = null): List<Product>
     suspend fun search(query: String): List<Product>
 }
@@ -68,6 +70,7 @@ class MockCatalogRepository : CatalogRepository {
     override suspend fun getBanners(): List<PromoBanner> { maybeFailForDemo(); delay(FAKE_LATENCY_MS / 2); return MockCatalog.banners }
     override suspend fun getBestsellers(): List<Product> { delay(FAKE_LATENCY_MS); return MockCatalog.bestsellers() }
     override suspend fun getDeals(): List<Product> { delay(FAKE_LATENCY_MS); return MockCatalog.deals() }
+    override suspend fun getCounts(): Map<String, Int> { delay(FAKE_LATENCY_MS / 2); return MockCatalog.counts() }
     override suspend fun getProducts(categoryId: String, subcategoryId: String?): List<Product> {
         delay(FAKE_LATENCY_MS); return MockCatalog.productsFor(categoryId, subcategoryId)
     }

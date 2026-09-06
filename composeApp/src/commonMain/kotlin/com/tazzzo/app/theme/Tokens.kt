@@ -69,6 +69,11 @@ object TazType {
     val buttonSize: TextUnit = 15.sp
     val buttonWeight = FontWeight.SemiBold
     val navLabelSize: TextUnit = 11.sp
+
+    /** The number inside a quantity stepper. Heavier than body at the same size
+     *  so the count reads at a glance while the − and + stay quiet. */
+    val stepperCountSize: TextUnit = 14.sp
+    val stepperCountWeight = FontWeight.Bold
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +93,17 @@ object TazSpace {
 
     /** Standard horizontal page gutter. */
     val gutter: Dp = 16.dp
+
+    /**
+     * Tighter page gutter for DENSE merchandising surfaces — the 4-up category
+     * grid, the 4-up deals grid, the 2-up product grid.
+     *
+     * 12dp, not [gutter]. At four columns a 16dp gutter costs 8dp of cell width
+     * on each side, which is the difference between a product name wrapping to
+     * two lines and fitting on one. Reserved for grids; text screens keep 16dp
+     * so body copy never runs to the screen edge.
+     */
+    val screenEdge: Dp = 12.dp
 
     /** Bottom padding on scrollable content so the floating cart bar never covers it. */
     val cartBarClearance: Dp = 96.dp

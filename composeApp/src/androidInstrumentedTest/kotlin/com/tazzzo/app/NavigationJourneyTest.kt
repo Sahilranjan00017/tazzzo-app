@@ -61,7 +61,18 @@ class NavigationJourneyTest {
         rule.waitForIdle()
     }
 
-    private fun waitFor(matcher: androidx.compose.ui.test.SemanticsMatcher, ms: Long = 20_000) {
+    /**
+     * 60s, matching every other class in the suite.
+     *
+     * This class was the lone outlier at 20s, and
+     * `category_scroll_position_survives_opening_a_product_and_coming_back`
+     * timed out once under full-suite load on the 2-core emulator while passing
+     * twice in isolation immediately afterwards — contention, not a defect.
+     * This is aligning one straggler to the established value, NOT the
+     * open-ended timeout inflation the testing notes warn about: if it fails
+     * again the next step is diagnosis, not 90s.
+     */
+    private fun waitFor(matcher: androidx.compose.ui.test.SemanticsMatcher, ms: Long = 60_000) {
         rule.waitUntil(timeoutMillis = ms) {
             rule.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty()
         }

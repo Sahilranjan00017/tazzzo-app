@@ -22,7 +22,11 @@ import kotlin.random.Random
  * this session — including retries after failure — submits the same key, so
  * the backend can never create two orders for one intent.
  */
-class CheckoutSession {
+class CheckoutSession(
+    /** Instructions already chosen in the cart, e.g. "no carry bag". Defaults
+     *  to none so every existing caller — and every test — keeps compiling. */
+    initialInstructionIds: Set<String> = emptySet(),
+) {
 
     enum class Step(val title: String, val n: Int) {
         ADDRESS("Address", 1),
@@ -42,7 +46,16 @@ class CheckoutSession {
     var payment by mutableStateOf<PaymentMethodKind?>(null)
 
     /** Optional delivery instructions chosen at review. Ids from AppConfig.deliveryInstructions. */
-    var instructionIds by mutableStateOf<Set<String>>(emptySet())
+    var instructionIds by mutableStateOf<Set<String>>(initialInstructionIds)
+
+    /**
+     * Tip for this order, in rupees. Zero means none chosen.
+     *
+     * Transient like the rest of the session: a tip is a decision about THIS
+     * order, and silently carrying it into the next one would take money
+     * nobody offered again.
+     */
+    var tipRupees by mutableStateOf(0)
     fun toggleInstruction(id: String) {
         instructionIds = if (id in instructionIds) instructionIds - id else instructionIds + id
     }

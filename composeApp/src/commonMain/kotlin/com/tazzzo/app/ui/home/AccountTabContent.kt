@@ -1,9 +1,6 @@
 package com.tazzzo.app.ui.home
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -31,28 +27,72 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
-import com.tazzzo.app.ui.interaction.TazPress
-import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.config.MembershipConfig
-import com.tazzzo.app.ui.interaction.tazPressableCard
+import com.tazzzo.app.data.model.OrderStatus
+import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
 import com.tazzzo.app.theme.TazSize
 import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
+import com.tazzzo.app.ui.common.ChipTone
+import com.tazzzo.app.ui.common.TazChip
+import com.tazzzo.app.ui.common.TazGroupedCard
 import com.tazzzo.app.ui.common.TazIcon
+import com.tazzzo.app.ui.common.TazListRow
+import com.tazzzo.app.ui.common.TazRowDivider
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.tazPressableCard
+import com.tazzzo.app.ui.state.UiState
+import com.tazzzo.app.ui.state.rememberLoad
 
-/** "Account" bottom tab — profile, quick stats and the settings menu. */
+/**
+ * "Account" bottom tab.
+ *
+ * Follows the supplied redesign: profile card, three quick actions, a balance
+ * card, then grouped setting sections and a log-out.
+ *
+ * Two departures from the mockup, both deliberate and both recorded in
+ * `TAZZZO_UI_REDESIGN_SPEC.md`:
+ *
+ *  - The mockup's balance card is a **rupee wallet** with "Add Balance" and a
+ *    cashback rate. Stored value is a regulated prepaid-instrument product in
+ *    India, not a screen. The card renders **Tazzzo Coins**, the currency that
+ *    actually exists, and links to its real ledger.
+ *  - Its "Your Refunds", "E-Gift Cards" and "Payment Management" rows have no
+ *    data and no destination behind them. A row that leads nowhere is worse
+ *    than an absent row, so they are not drawn until something backs them.
+ *
+ * Every count here — active orders, saved addresses, coins, Club standing — is
+ * read from real state. The mockup's "2 Active" and "12 Items" were comp values.
+ */
 @Composable
 fun AccountTabContent() {
     val app = LocalAppState.current
+
+    // Secondary data: each drives one chip. If a load fails the chip is simply
+    // absent — a count nobody can verify must never be guessed at.
+    val orders = rememberLoad { ServiceLocator.orders.getOrders() }
+    val addresses = rememberLoad { ServiceLocator.addresses.getAddresses() }
+    val orderList = (orders.state as? UiState.Success)?.data
+    // Null means "say nothing": either still loading, or there are no orders at
+    // all. "All delivered" to somebody who has never ordered is wrong copy, not
+    // a reassuring one.
+    val orderStatus = orderList?.takeIf { it.isNotEmpty() }?.let { list ->
+        val active = list.count { it.status != OrderStatus.DELIVERED }
+        if (active > 0) "$active active" else "All delivered"
+    }
+    val addressCount = (addresses.state as? UiState.Success)?.data?.size
 
     Column(
         Modifier.fillMaxSize().background(TazColors.Cream)
@@ -62,33 +102,44 @@ fun AccountTabContent() {
             .padding(top = TazSpace.lg, bottom = TazSpace.cartBarClearance)
     ) {
         ProfileHeaderCard()
-
         Spacer(Modifier.height(TazSpace.md))
 
-        // ------------------------------------------------------------------
-        // Quick stats
-        // ------------------------------------------------------------------
+        // ---- three quick actions -----------------------------------------
         Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(TazSpace.md)
         ) {
-            QuickStatCard(
-                TazIcons.Coin, TazColors.CoinInk,
-                "${app.user.coinBalance}", "Coins"
-            ) { app.navigate(Screen.Coins) }
-            QuickStatCard(
-                TazIcons.Receipt, TazColors.Green, null, "Orders"
-            ) { app.navigate(Screen.Orders) }
-            QuickStatCard(
-                TazIcons.Help, TazColors.Green, null, "Help"
-            ) { app.navigate(Screen.Help) }
+            QuickActionTile(
+                icon = TazIcons.Receipt,
+                label = "Orders",
+                status = orderStatus,
+                statusTone = if (orderStatus?.endsWith("active") == true) ChipTone.Brand else ChipTone.Neutral,
+                onClick = { app.navigate(Screen.Orders) }
+            )
+            QuickActionTile(
+                icon = TazIcons.Help,
+                label = "Help & care",
+                // No chip. A tile chip is for a COUNT or a STATE; a description
+                // at this width truncates ("FAQs and sup…") and leaves one tile
+                // taller than the two beside it.
+                status = null,
+                onClick = { app.navigate(Screen.Help) }
+            )
+            QuickActionTile(
+                icon = TazIcons.Location,
+                label = "Addresses",
+                status = addressCount?.let { if (it == 1) "1 saved" else "$it saved" },
+                onClick = { app.navigate(Screen.Addresses) }
+            )
         }
-
         Spacer(Modifier.height(TazSpace.md))
 
-        // Club standing FIRST for a member: what they saved, how far the next
-        // milestone and reward are. This is the strongest thing Account can
-        // say to someone who paid ₹99 — and it is shown only to members.
+        CoinBalanceCard()
+        Spacer(Modifier.height(TazSpace.md))
+
+        // Club standing, for members only: what they saved and how far the next
+        // milestone is. The strongest thing this screen can say to someone who
+        // paid ₹99 — and meaningless to anyone who has not.
         if (app.isClubMember) {
             com.tazzzo.app.ui.club.ClubProgressCard(
                 app.membership,
@@ -97,58 +148,60 @@ fun AccountTabContent() {
             Spacer(Modifier.height(TazSpace.md))
         }
 
-        // ------------------------------------------------------------------
-        // Main menu — one card, hairline dividers inset to the text
-        // ------------------------------------------------------------------
-        Column(
-            Modifier.fillMaxWidth()
-                .clip(TazRadius.card)
-                .background(TazColors.Surface)
-                .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-        ) {
-            // Club sits first: for a member it is the most valuable thing on
-            // this screen, and for everyone else it is the offer.
-            MenuRow(
-                TazIcons.Coin,
-                if (app.isClubMember) "${MembershipConfig.plan.name} ✓"
-                else MembershipConfig.plan.name,
-                if (app.isClubMember)
+        // ---- preferences & perks -----------------------------------------
+        SectionLabel("Preferences & perks")
+        TazGroupedCard {
+            TazListRow(
+                icon = TazIcons.Coin,
+                title = MembershipConfig.plan.name,
+                subtitle = if (app.isClubMember)
                     "₹${app.membership.cumulativeSavingsRupees} saved · ${app.membership.eligibleOrderCount} eligible orders"
-                else "₹${MembershipConfig.plan.priceRupees} · ${MembershipConfig.plan.discountRule.percent}% off eligible orders"
-            ) {
-                app.navigate(Screen.Club)
-            }
-            MenuDivider()
-            MenuRow(TazIcons.Receipt, "Your orders", "Track and reorder") {
-                app.navigate(Screen.Orders)
-            }
-            MenuDivider()
-            MenuRow(TazIcons.Coin, "Tazzzo Coins", "Balance and rewards ledger") {
-                app.navigate(Screen.Coins)
-            }
-            MenuDivider()
-            MenuRow(TazIcons.Location, "Saved addresses", "Your delivery addresses") {
-                app.navigate(Screen.Addresses)
-            }
-            MenuDivider()
-            MenuRow(TazIcons.Mic, "Voice shopping", "Coming soon") {
-                app.showVoiceSheet = true
-            }
-            MenuDivider()
-            MenuRow(TazIcons.Help, "Need help", "FAQs and support") {
-                app.navigate(Screen.Help)
-            }
-            MenuDivider()
-            MenuRow(TazIcons.Info, "About Tazzzo", "Who we are") {
-                app.navigate(Screen.About)
-            }
+                else "₹${MembershipConfig.plan.priceRupees} · ${MembershipConfig.plan.discountRule.percent}% off eligible orders",
+                titleChip = if (app.isClubMember) "Active" else null,
+                titleChipTone = ChipTone.Success,
+                onClick = { app.navigate(Screen.Club) }
+            )
+            TazRowDivider()
+            TazListRow(
+                icon = TazIcons.Bell,
+                title = "Notifications",
+                subtitle = "Order updates and offers",
+                checked = app.notificationsEnabled,
+                onCheckedChange = { app.notificationsEnabled = it }
+            )
+            TazRowDivider()
+            // Voice is deliberately unchanged — same row, same copy, same sheet.
+            TazListRow(
+                icon = TazIcons.Mic,
+                title = "Voice shopping",
+                subtitle = "Coming soon",
+                onClick = { app.showVoiceSheet = true }
+            )
+            TazRowDivider()
+            // The mockup lists Hindi and Kannada as if selectable. Nothing is
+            // translated yet, so offering them would be a promise the app
+            // cannot keep the moment somebody taps one.
+            TazListRow(
+                icon = TazIcons.Globe,
+                title = "Language",
+                subtitle = "English · more coming soon",
+                trailingText = "English"
+            )
+        }
+
+        Spacer(Modifier.height(TazSpace.lg))
+        SectionLabel("About")
+        TazGroupedCard {
+            TazListRow(
+                icon = TazIcons.Info,
+                title = "About Tazzzo",
+                subtitle = "Who we are and how we source",
+                onClick = { app.navigate(Screen.About) }
+            )
         }
 
         Spacer(Modifier.height(TazSpace.lg))
 
-        // ------------------------------------------------------------------
-        // Log out + version
-        // ------------------------------------------------------------------
         if (!app.user.isGuest) {
             Row(
                 Modifier.fillMaxWidth()
@@ -184,136 +237,171 @@ fun AccountTabContent() {
 // ---------------------------------------------------------------------------
 
 @Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+        color = TazColors.TextSecondary,
+        modifier = Modifier.padding(start = TazSpace.xs, bottom = TazSpace.sm)
+    )
+}
+
+/**
+ * Profile card: who is signed in, their standing, and one way to edit it.
+ *
+ * The Club chip and the priority line render only for members. Showing a "VIP"
+ * badge to someone who has not joined — as the mockup does — sells the tier and
+ * devalues it in the same breath.
+ */
+@Composable
 private fun ProfileHeaderCard() {
     val app = LocalAppState.current
     Row(
-        Modifier.fillMaxWidth()
-            .clip(TazRadius.tile)
-            .background(TazColors.Surface)
-            .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.tile)
-            .padding(TazSpace.xl),
+        Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface)
+            .padding(TazSpace.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            Modifier.size(56.dp).clip(CircleShape).background(TazColors.GreenSoft),
-            contentAlignment = Alignment.Center
-        ) {
-            TazIcon(TazIcons.Account, null, size = 26.dp, tint = TazColors.Green)
-        }
-        Spacer(Modifier.width(TazSpace.lg))
-        Column(Modifier.weight(1f)) {
-            Text(
-                if (app.user.isGuest) "Welcome, Guest" else app.user.name,
-                fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
-                lineHeight = TazType.titleLine, color = TazColors.TextPrimary,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(TazSpace.xxs))
-            Text(
-                if (app.user.isGuest) "Login for a personalised experience"
-                else app.user.phone,
-                fontSize = TazType.bodySize, lineHeight = TazType.bodyLine,
-                color = TazColors.TextSecondary, maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        if (app.user.isGuest) {
-            Spacer(Modifier.width(TazSpace.sm))
+        Box(contentAlignment = Alignment.BottomEnd) {
             Box(
-                Modifier
-                    .defaultMinSize(minHeight = TazSize.touchTarget)
-                    .clip(TazRadius.pill)
-                    .tazPressable(onClick = { app.navigate(Screen.Login) }, pressScale = TazPress.compact)
-                    .padding(horizontal = TazSpace.md),
+                Modifier.size(56.dp).clip(CircleShape).background(TazColors.GreenSoft),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Log in", fontSize = TazType.bodySize, lineHeight = TazType.bodyLine,
-                    fontWeight = FontWeight.SemiBold, color = TazColors.Green, maxLines = 1
+                    app.user.name.trim().take(1).uppercase().ifBlank { "T" },
+                    fontSize = TazType.h2Size, fontWeight = TazType.h2Weight,
+                    color = TazColors.Green
                 )
             }
+            if (app.isClubMember) {
+                Box(
+                    Modifier.size(20.dp).clip(CircleShape).background(TazColors.Green),
+                    contentAlignment = Alignment.Center
+                ) { TazIcon(TazIcons.Check, null, size = 12.dp, tint = TazColors.White) }
+            }
         }
-    }
-}
-
-@Composable
-private fun RowScope.QuickStatCard(
-    icon: ImageVector,
-    tint: Color,
-    value: String?,
-    label: String,
-    onClick: () -> Unit
-) {
-    Column(
-        Modifier.weight(1f)
-            .fillMaxHeight()
-            .clip(TazRadius.card)
-            .background(TazColors.Surface)
-            .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact)
-            .defaultMinSize(minHeight = TazSize.touchTarget)
-            .padding(vertical = TazSpace.md, horizontal = TazSpace.sm),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        TazIcon(icon, null, size = TazSize.iconSm, tint = tint)
-        Spacer(Modifier.height(TazSpace.xs))
-        if (value != null) {
-            Text(
-                value, fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
-                lineHeight = TazType.titleLine, color = TazColors.TextPrimary, maxLines = 1
-            )
-        }
-        Text(
-            label, fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
-            color = TazColors.TextSecondary, maxLines = 1,
-            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center
-        )
-    }
-}
-
-@Composable
-private fun MenuRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String?,
-    onClick: () -> Unit
-) {
-    Row(
-        Modifier.fillMaxWidth()
-            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact)
-            .heightIn(min = 56.dp)
-            .padding(horizontal = TazSpace.lg, vertical = TazSpace.sm),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TazIcon(icon, null, size = TazSize.iconSm, tint = TazColors.TextSecondary)
         Spacer(Modifier.width(TazSpace.md))
         Column(Modifier.weight(1f)) {
-            Text(
-                title, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine,
-                fontWeight = FontWeight.Medium, color = TazColors.TextPrimary,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            if (subtitle != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    subtitle, fontSize = TazType.captionSize,
-                    lineHeight = TazType.captionLine, color = TazColors.TextTertiary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    app.user.name, fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
+                    color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (app.isClubMember) {
+                    Spacer(Modifier.width(TazSpace.sm))
+                    TazChip(MembershipConfig.plan.name, ChipTone.Brand)
+                }
+            }
+            if (app.user.phone.isNotBlank()) {
+                Text(
+                    "+91 ${app.user.phone}", fontSize = TazType.captionSize,
+                    lineHeight = TazType.captionLine, color = TazColors.TextTertiary, maxLines = 1
+                )
+            }
+            if (app.isClubMember) {
+                Text(
+                    "${MembershipConfig.plan.discountRule.percent}% off every eligible order",
+                    fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
+                    color = TazColors.Green, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
             }
         }
         Spacer(Modifier.width(TazSpace.sm))
-        TazIcon(TazIcons.Chevron, null, size = TazSize.iconXs, tint = TazColors.TextTertiary)
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).background(TazColors.SurfaceSunken)
+                .semantics { contentDescription = "Edit profile" }
+                .tazPressable(onClick = { app.navigate(Screen.Addresses) }, pressScale = TazPress.compact),
+            contentAlignment = Alignment.Center
+        ) { TazIcon(TazIcons.Edit, null, size = TazSize.iconSm, tint = TazColors.TextSecondary) }
     }
 }
 
-/** Hairline inset to the text column, so the icon rail reads as one edge. */
+/**
+ * The mockup's balance card, mapped onto the currency Tazzzo actually issues.
+ *
+ * Coins are earned on orders and spent at checkout, so "balance" is honest here
+ * in a way a rupee wallet would not be.
+ */
 @Composable
-private fun MenuDivider() {
-    Box(
-        Modifier.fillMaxWidth()
-            .padding(start = TazSpace.lg + TazSize.iconSm + TazSpace.md)
-            .height(1.dp)
-            .background(TazColors.CardBorder)
-    )
+private fun CoinBalanceCard() {
+    val app = LocalAppState.current
+    Column(
+        Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface)
+            .tazPressableCard(onClick = { app.navigate(Screen.Coins) }, shape = TazRadius.card)
+            .padding(TazSpace.lg)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(36.dp).clip(TazRadius.chip).background(TazColors.CoinSoft),
+                contentAlignment = Alignment.Center
+            ) { TazIcon(TazIcons.Coin, null, size = TazSize.iconSm, tint = TazColors.CoinInk) }
+            Spacer(Modifier.width(TazSpace.md))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Tazzzo Coins", fontSize = TazType.bodySize, fontWeight = FontWeight.Medium,
+                    color = TazColors.TextPrimary
+                )
+                Text(
+                    "Earned on orders, spent at checkout", fontSize = TazType.captionSize,
+                    lineHeight = TazType.captionLine, color = TazColors.TextTertiary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+            TazIcon(TazIcons.Chevron, null, size = TazSize.iconXs, tint = TazColors.TextTertiary)
+        }
+        Spacer(Modifier.height(TazSpace.md))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder))
+        Spacer(Modifier.height(TazSpace.md))
+        Text(
+            "Balance", fontSize = TazType.captionSize, color = TazColors.TextTertiary
+        )
+        Text(
+            "${app.user.coinBalance} coins", fontSize = TazType.h1Size,
+            fontWeight = TazType.h1Weight, lineHeight = TazType.h1Line, color = TazColors.CoinInk
+        )
+    }
+}
+
+/**
+ * One of the three quick actions.
+ *
+ * [status] is nullable on purpose: while its count is still loading, or if the
+ * load failed, the tile shows its label alone rather than a placeholder number.
+ */
+@Composable
+private fun RowScope.QuickActionTile(
+    icon: ImageVector,
+    label: String,
+    status: String?,
+    statusTone: ChipTone = ChipTone.Neutral,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier.weight(1f).fillMaxHeight().clip(TazRadius.card).background(TazColors.Surface)
+            // Merged before the press so the tile is ONE node carrying its
+            // label — a tile whose icon, title and chip each announce
+            // separately reads as three controls to a screen reader.
+            // The merge collapses the chip into this node, so the status has
+            // to be part of the label or it is announced nowhere.
+            .semantics(mergeDescendants = true) {
+                contentDescription = if (status != null) "$label, $status" else label
+            }
+            .tazPressableCard(onClick = onClick, shape = TazRadius.card)
+            .padding(vertical = TazSpace.md, horizontal = TazSpace.sm),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).background(TazColors.SurfaceSunken),
+            contentAlignment = Alignment.Center
+        ) { TazIcon(icon, null, size = TazSize.iconMd, tint = TazColors.Green) }
+        Spacer(Modifier.height(TazSpace.sm))
+        Text(
+            label, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+            color = TazColors.TextPrimary, textAlign = TextAlign.Center,
+            maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+        if (status != null) {
+            Spacer(Modifier.height(TazSpace.xxs))
+            TazChip(status, statusTone)
+        }
+    }
 }

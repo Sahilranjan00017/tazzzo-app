@@ -93,7 +93,11 @@ import kotlinx.coroutines.launch
 fun CheckoutScreen() {
     val app = LocalAppState.current
     if (app.checkout == null) {
-        app.checkout = CheckoutSession()
+        app.checkout = CheckoutSession(
+            // Carried over from the cart, so a choice made there is not lost
+            // the moment checkout begins.
+            initialInstructionIds = if (app.noCarryBag) setOf("no-bag") else emptySet()
+        )
         Analytics.track(AnalyticsEvents.CHECKOUT_STARTED)
     }
     val session = app.checkout!!
@@ -902,6 +906,18 @@ private fun PaymentStep(session: CheckoutSession) {
                         Text(
                             "Pay when your order arrives",
                             fontSize = TazType.captionSize, color = TazColors.TextSecondary,
+                            lineHeight = TazType.captionLine
+                        )
+                    }
+                    // Where the mockup put a CVV box. Card and UPI details are
+                    // entered inside the provider's own secure checkout and
+                    // never in a Tazzzo view — taking a CVV in app-owned UI is
+                    // a PCI violation, and there is no gateway behind it yet.
+                    if (method.kind == PaymentMethodKind.CARD) {
+                        Spacer(Modifier.height(TazSpace.xxs))
+                        Text(
+                            "Card details are entered on your bank's secure page, never in Tazzzo",
+                            fontSize = TazType.captionSize, color = TazColors.TextTertiary,
                             lineHeight = TazType.captionLine
                         )
                     }

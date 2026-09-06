@@ -42,6 +42,9 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -766,12 +769,39 @@ private fun StepperTouchTarget(
 }
 
 @Composable
-fun ProductCard(product: Product, modifier: Modifier = Modifier) {
+fun ProductCard(
+    product: Product,
+    modifier: Modifier = Modifier,
+    /**
+     * Fixed cell width, or null to let the caller size the card.
+     *
+     * Applied BEFORE [modifier] so a caller's `weight(1f)` or `fillMaxWidth()`
+     * wins — with the width applied after, every grid cell would silently
+     * collapse back to the rail width and the two-up and four-up grids would
+     * render as one narrow column.
+     */
+    width: Dp? = ProductCardWidth,
+    /**
+     * Drops the per-unit price line and holds the name to one line.
+     *
+     * For four-up grids, where the full body would wrap the name to three lines
+     * and squeeze the price out of the cell. Nothing that is a price CLAIM is
+     * dropped — the saving in rupees and the struck MRP both survive.
+     */
+    compact: Boolean = false,
+    /**
+     * Optional band label drawn on the artwork, e.g. "Under ₹29".
+     *
+     * When set, the low-stock chip moves to the opposite corner so the two never
+     * overlap — stock is the more important of the two and must stay visible.
+     */
+    ribbon: String? = null,
+) {
     val app = LocalAppState.current
     val inCart = app.quantityOf(product) > 0
     Box(
-        modifier = modifier
-            .width(ProductCardWidth)
+        modifier = (if (width != null) Modifier.width(width) else Modifier)
+            .then(modifier)
             .shadow(2.dp, TazRadius.card, spotColor = Color.Black.copy(alpha = 0.18f))
             .clip(TazRadius.card)
             .background(TazColors.Surface)
@@ -792,22 +822,45 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(topStart = TazRadius.cardDp, topEnd = TazRadius.cardDp)),
                     aspectRatio = ProductCardImageAspect,
-                    glyphSize = 40.sp,
+                    glyphSize = if (compact) 26.sp else 40.sp,
                     dimmed = !product.isPurchasable
                 )
                 // ADD sits bottom-end; once in the cart the stepper spans the
                 // stage so − and + have room. Same control, same place.
-                QuantityStepper(
-                    product,
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(TazSpace.xs + TazSpace.xxs)
-                        .then(if (inCart || !product.isPurchasable) Modifier.fillMaxWidth() else Modifier)
-                )
+                // At rail width the control floats on the artwork, which is
+                // what lets three cards fit a screen. At four-up width there is
+                // no room to float anything: the pill covered the product it
+                // was selling, so a compact cell moves it under the body.
+                if (!compact) {
+                    QuantityStepper(
+                        product,
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(TazSpace.xs + TazSpace.xxs)
+                            .then(
+                                if (inCart || !product.isPurchasable) Modifier.fillMaxWidth()
+                                else Modifier
+                            )
+                    )
+                }
+                if (ribbon != null) {
+                    Box(
+                        Modifier.align(Alignment.TopStart).padding(TazSpace.xs + TazSpace.xxs)
+                            .clip(TazRadius.chip).background(TazColors.Green)
+                            .padding(horizontal = 6.dp, vertical = TazSpace.xxs)
+                    ) {
+                        Text(
+                            ribbon, color = TazColors.White, fontSize = TazType.microSize,
+                            fontWeight = TazType.microWeight, maxLines = 1
+                        )
+                    }
+                }
                 val stock = product.availability
                 if (stock is Availability.LowStock) {
                     Box(
-                        Modifier.align(Alignment.TopStart).padding(TazSpace.xs + TazSpace.xxs)
+                        (if (ribbon == null) Modifier.align(Alignment.TopStart)
+                         else Modifier.align(Alignment.TopEnd))
+                            .padding(TazSpace.xs + TazSpace.xxs)
                             .clip(TazRadius.chip).background(TazColors.WarningSoft)
                             .padding(horizontal = 6.dp, vertical = TazSpace.xxs)
                     ) {
@@ -826,7 +879,12 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
                         "₹${product.price}", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
                         color = TazColors.TextPrimary, maxLines = 1
                     )
-                    if (product.mrp > product.price) {
+                    // The struck MRP is dropped in compact cells. At four-up
+                    // width it truncated mid-number — "₹699" rendered as "₹69" —
+                    // and a clipped price is a WRONG price, not a cosmetic
+                    // flaw. The saving below still states the difference in
+                    // rupees, so nothing is hidden.
+                    if (!compact && product.mrp > product.price) {
                         Spacer(Modifier.width(TazSpace.xs))
                         Text(
                             "₹${product.mrp}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
@@ -847,8 +905,9 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
                     product.name,
                     fontSize = TazType.productNameSize, fontWeight = TazType.productNameWeight,
                     lineHeight = TazType.productNameLine, color = TazColors.TextPrimary,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = ProductNameBlockHeight)
+                    maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                        .then(if (compact) Modifier else Modifier.heightIn(min = ProductNameBlockHeight))
                 )
                 // The customer's own word for the item, where a verified one
                 // exists. Never transliterated at render time — a wrong word in
@@ -869,12 +928,16 @@ fun ProductCard(product: Product, modifier: Modifier = Modifier) {
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
-                    product.unitPriceLabel?.let { perUnit ->
+                    if (!compact) product.unitPriceLabel?.let { perUnit ->
                         Text(
                             "  \u00b7  " + perUnit, fontSize = TazType.unitSize,
                             color = TazColors.TextTertiary, maxLines = 1
                         )
                     }
+                }
+                if (compact) {
+                    Spacer(Modifier.height(TazSpace.xs))
+                    QuantityStepper(product, Modifier.fillMaxWidth())
                 }
             }
         }
@@ -1061,6 +1124,14 @@ fun Modifier.guidedTarget(key: String): Modifier = composed {
 fun CategoryTile(
     category: Category,
     size: Dp = TazSize.categoryTile,
+    /**
+     * How many SKUs this aisle holds. Rendered as a badge on the artwork.
+     *
+     * Null hides the badge, which is the correct behaviour for an empty aisle:
+     * a tile must not advertise depth it does not have. Counts come from
+     * `MockCatalog.counts()`, never from a literal.
+     */
+    count: Int? = null,
     onClick: () -> Unit
 ) {
     Column(
@@ -1098,6 +1169,18 @@ fun CategoryTile(
                     )
                 )
             )
+            if (count != null && count > 0) {
+                Box(
+                    Modifier.align(Alignment.TopStart).padding(TazSpace.xs)
+                        .clip(TazRadius.chip).background(TazColors.White.copy(alpha = 0.92f))
+                        .padding(horizontal = TazSpace.xs, vertical = 1.dp)
+                ) {
+                    Text(
+                        "$count", fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        color = TazColors.Green, maxLines = 1
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(TazSpace.xs))
         Text(
@@ -1430,5 +1513,195 @@ fun VoiceCommerceBannerV3() {
                 )
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Grouped settings rows
+//
+// Account and Help each carried a private, byte-identical `MenuRow` and
+// divider. One shared row now serves both, with the anatomy the redesign asks
+// for: the icon sits in a tinted well rather than bare, the title can carry a
+// status chip, and the trailing slot takes a chevron, a switch or a chip.
+// ---------------------------------------------------------------------------
+
+/** Semantic colouring for a [TazChip]. Tone carries meaning; never decoration. */
+enum class ChipTone { Neutral, Brand, Savings, Success, Warning }
+
+private fun ChipTone.ink(): Color = when (this) {
+    ChipTone.Neutral -> TazColors.TextSecondary
+    ChipTone.Brand -> TazColors.Green
+    ChipTone.Savings -> TazColors.Orange
+    ChipTone.Success -> TazColors.Success
+    ChipTone.Warning -> TazColors.Warning
+}
+
+private fun ChipTone.ground(): Color = when (this) {
+    ChipTone.Neutral -> TazColors.SurfaceSunken
+    ChipTone.Brand -> TazColors.GreenSoft
+    ChipTone.Savings -> TazColors.OrangeSoft
+    ChipTone.Success -> TazColors.SuccessSoft
+    ChipTone.Warning -> TazColors.WarningSoft
+}
+
+/**
+ * Small status chip — "2 Saved", "Active", "SAVED ₹50", "Recommended".
+ *
+ * Decorative by default: the chip repeats or qualifies text that is already in
+ * the row, so announcing it again would make a screen reader read the same fact
+ * twice. Pass [standalone] when the chip is the ONLY place a fact appears.
+ */
+@Composable
+fun TazChip(
+    text: String,
+    tone: ChipTone = ChipTone.Neutral,
+    modifier: Modifier = Modifier,
+    standalone: Boolean = false,
+) {
+    Box(
+        modifier.clip(TazRadius.chip).background(tone.ground())
+            .padding(horizontal = TazSpace.sm, vertical = TazSpace.xxs)
+            .then(if (standalone) Modifier else Modifier.clearAndSetSemantics { })
+    ) {
+        Text(
+            text, fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+            color = tone.ink(), maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * A card that groups related rows, separated by hairlines inset past the icon
+ * rail so the icons read as one continuous edge.
+ *
+ * Place [TazRowDivider] between rows. The card owns the rounding and the ground
+ * so no caller repeats them and drifts.
+ */
+@Composable
+fun TazGroupedCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface),
+        content = content
+    )
+}
+
+/** Hairline between two [TazListRow]s, inset to clear the icon well. */
+@Composable
+fun TazRowDivider() {
+    Box(
+        Modifier.fillMaxWidth()
+            .padding(start = TazSpace.lg + IconWellSize + TazSpace.md)
+            .height(1.dp).background(TazColors.CardBorder)
+    )
+}
+
+private val IconWellSize: Dp = 36.dp
+
+/**
+ * One row in a [TazGroupedCard].
+ *
+ * Exactly one of [onClick] and [checked] may be set. A row that both navigates
+ * and toggles is two controls wearing one label, which is precisely the defect
+ * that put two "Vegetables & Fruits" nodes on Home — a screen reader cannot tell
+ * the caller which one it activated.
+ *
+ * The whole row is the control, not the switch inside it: a 36dp switch is below
+ * the 44dp touch target, and a settings row whose label is not tappable is a
+ * needlessly small hit area.
+ */
+@Composable
+fun TazListRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    iconTint: Color = TazColors.Green,
+    titleChip: String? = null,
+    titleChipTone: ChipTone = ChipTone.Neutral,
+    trailingText: String? = null,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    require(onClick == null || checked == null) {
+        "a row either navigates or toggles, never both"
+    }
+    val base = Modifier.fillMaxWidth().heightIn(min = TazSize.touchTarget + TazSpace.md)
+    val interactive = when {
+        checked != null && onCheckedChange != null ->
+            base.toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            ).semantics {
+                contentDescription = title
+                stateDescription = if (checked) "On" else "Off"
+            }
+        onClick != null ->
+            base.semantics(mergeDescendants = true) {
+                contentDescription = if (titleChip != null) "$title, $titleChip" else title
+            }.tazPressable(onClick = onClick, pressScale = TazPress.compact)
+        else -> base
+    }
+    Row(
+        interactive.padding(horizontal = TazSpace.lg, vertical = TazSpace.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(IconWellSize).clip(TazRadius.chip).background(TazColors.SurfaceSunken),
+            contentAlignment = Alignment.Center
+        ) { TazIcon(icon, null, size = TazSize.iconSm, tint = iconTint) }
+        Spacer(Modifier.width(TazSpace.md))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine,
+                    fontWeight = FontWeight.Medium, color = TazColors.TextPrimary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (titleChip != null) {
+                    Spacer(Modifier.width(TazSpace.sm))
+                    TazChip(titleChip, titleChipTone)
+                }
+            }
+            if (subtitle != null) {
+                Text(
+                    subtitle, fontSize = TazType.captionSize,
+                    lineHeight = TazType.captionLine, color = TazColors.TextTertiary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Spacer(Modifier.width(TazSpace.sm))
+        when {
+            checked != null -> TazSwitchTrack(checked)
+            trailingText != null -> Text(
+                trailingText, fontSize = TazType.captionSize,
+                fontWeight = FontWeight.SemiBold, color = TazColors.TextSecondary, maxLines = 1
+            )
+            onClick != null -> TazIcon(
+                TazIcons.Chevron, null, size = TazSize.iconXs, tint = TazColors.TextTertiary
+            )
+        }
+    }
+}
+
+/**
+ * The switch's appearance only. It carries no semantics and no click of its own
+ * — [TazListRow] owns both, so the control is one node, not two.
+ */
+@Composable
+private fun TazSwitchTrack(checked: Boolean) {
+    val ground by animateColorAsState(
+        if (checked) TazColors.Green else TazColors.BorderStrong,
+        tween(TazMotion.fast), label = "switchTrack"
+    )
+    Box(
+        Modifier.width(44.dp).height(26.dp).clip(TazRadius.pill).background(ground)
+            .padding(3.dp),
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
+    ) {
+        Box(Modifier.size(20.dp).clip(CircleShape).background(TazColors.White))
     }
 }
