@@ -93,6 +93,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.tazzzo.app.config.priceBandLabel
 import com.tazzzo.app.theme.TazMotion
 import com.tazzzo.app.ui.common.ProductCard
+import androidx.compose.ui.text.style.TextAlign
 
 private val RAIL_ORDER = listOf(
     "Bestsellers",
@@ -712,8 +713,16 @@ private fun CampaignHero() {
                     }
                     Spacer(Modifier.height(TazSpace.xs))
                     Text(
-                        cat.name.substringBefore(","), fontSize = TazType.microSize, fontWeight = TazType.microWeight,
-                        color = TazColors.White, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        // Two lines, not one. `substringBefore(",")` only
+                        // shortens names that HAVE a comma — "Dairy, Bread &
+                        // Eggs" becomes "Dairy", but "Vegetables & Fruits" and
+                        // "Sweet Tooth" have none and were chopped mid-word on
+                        // a 384dp screen ("Vegetabl", "Sweet To"). Verified on a
+                        // Galaxy S24 FE, which is narrower than the emulator.
+                        cat.name.substringBefore(","), fontSize = TazType.microSize,
+                        fontWeight = TazType.microWeight, lineHeight = TazType.microLine,
+                        textAlign = TextAlign.Center,
+                        color = TazColors.White, maxLines = 2, overflow = TextOverflow.Ellipsis
                     )
                 }
             }

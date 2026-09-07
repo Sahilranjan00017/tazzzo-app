@@ -886,7 +886,11 @@ private fun DeliveryChoiceCard() {
             )
             Text(
                 when {
-                    next != null -> "Next available · ${next.label}" +
+                    // No "Next available ·" prefix: the first slot's own label
+                    // IS "Next available", so the prefix rendered "Next
+                    // available · Next available · Free" and then truncated.
+                    // Caught on a real phone, not the emulator.
+                    next != null -> next.label +
                         (if (next.feeRupees == 0) " · Free" else " · ₹${next.feeRupees}")
                     slots.state is UiState.Loading -> "Checking slots…"
                     else -> "Slots shown at checkout"
@@ -990,6 +994,12 @@ private fun CartUpsellRail(inCart: Set<String>) {
     val deals = rememberLoad { ServiceLocator.catalog.getDeals() }
     val list = (deals.state as? UiState.Success)?.data
         ?.filter { it.id !in inCart && it.isPurchasable }
+        // Cheapest first, NOT deepest discount. `getDeals()` ranks by rupees
+        // off, which puts ₹2,199 protein powder at the top of a section headed
+        // "Add for less" — the opposite of what the heading promises. The items
+        // still carry a genuine discount; they are simply ordered by what this
+        // section is actually offering.
+        ?.sortedBy { it.price }
         ?.take(8)
         ?: return
     if (list.isEmpty()) return
