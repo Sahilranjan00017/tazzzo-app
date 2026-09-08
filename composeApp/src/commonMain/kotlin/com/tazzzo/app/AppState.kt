@@ -22,6 +22,8 @@ sealed interface Screen {
     data object Coins : Screen
     data object Help : Screen
     data object Addresses : Screen
+    /** Your regulars, built from real order history, with one tap to add them all. */
+    data object MasterList : Screen
     data object About : Screen
     /** Tazzzo Club landing — the value proposition, before any payment. */
     data object Club : Screen
@@ -57,6 +59,7 @@ val Screen.stateKey: String
         is Screen.Coins -> "coins"
         is Screen.Help -> "help"
         is Screen.Addresses -> "addresses"
+        is Screen.MasterList -> "masterList"
         is Screen.About -> "about"
         is Screen.Club -> "club"
         is Screen.ClubCheckout -> "clubCheckout"

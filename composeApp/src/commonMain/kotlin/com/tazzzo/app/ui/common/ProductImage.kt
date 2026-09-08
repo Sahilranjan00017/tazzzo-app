@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tazzzo.app.data.model.Product
 import com.tazzzo.app.theme.TazColors
+import org.jetbrains.compose.resources.painterResource
 
 /**
  * The ONE way a product image is rendered anywhere in Tazzzo.
@@ -103,6 +104,30 @@ fun ProductImage(
     dimmed: Boolean = false,
     overlay: @Composable BoxScope.() -> Unit = {}
 ) {
+    // Bundled photography first. It needs no network and cannot fail, which
+    // is what every card on Home wants. A backend URL, when a product has one,
+    // is preferred over the bundle because it is the live packshot.
+    val bundled = if (product.imageUrl.isNullOrBlank()) productArtFor(product.id) else null
+    if (bundled != null) {
+        Box(
+            modifier.aspectRatio(aspectRatio).background(background),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(bundled),
+                contentDescription = product.name,
+                modifier = Modifier.fillMaxSize(),
+                // Crop, unlike the URL path: these are square studio-style
+                // photographs already framed to fill, and a Fit would leave a
+                // margin of well colour around every one.
+                contentScale = ContentScale.Crop,
+                alpha = if (dimmed) 0.45f else 1f
+            )
+            overlay()
+        }
+        return
+    }
+
     val loader = LocalProductImageLoader.current
     val url = product.imageUrl
 

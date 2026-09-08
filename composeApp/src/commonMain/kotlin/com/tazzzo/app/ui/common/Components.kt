@@ -99,7 +99,6 @@ import tazzzo.resources.banner_coins
 import tazzzo.resources.cat_fruits
 import tazzzo.resources.cat_dairy
 import tazzzo.resources.cat_atta
-import tazzzo.resources.cat_oil
 import tazzzo.resources.cat_meat
 import tazzzo.resources.cat_munchies
 import tazzzo.resources.cat_drinks
@@ -108,13 +107,43 @@ import tazzzo.resources.cat_instant
 import tazzzo.resources.cat_sweet
 import tazzzo.resources.cat_bakery
 import tazzzo.resources.cat_personal
-import tazzzo.resources.cat_skincare
 import tazzzo.resources.cat_pharma
-import tazzzo.resources.cat_baby
-import tazzzo.resources.cat_cleaning
 import tazzzo.resources.cat_home
 import tazzzo.resources.cat_pet
 import tazzzo.resources.cat_pooja
+import tazzzo.resources.prod_p1
+import tazzzo.resources.prod_p2
+import tazzzo.resources.prod_p3
+import tazzzo.resources.prod_p4
+import tazzzo.resources.prod_p5
+import tazzzo.resources.prod_p6
+import tazzzo.resources.prod_p7
+import tazzzo.resources.prod_p9
+import tazzzo.resources.prod_p10
+import tazzzo.resources.prod_p12
+import tazzzo.resources.prod_p13
+import tazzzo.resources.prod_p14
+import tazzzo.resources.prod_p17
+import tazzzo.resources.prod_p18
+import tazzzo.resources.prod_p20
+import tazzzo.resources.prod_p21
+import tazzzo.resources.prod_p24
+import tazzzo.resources.prod_p25
+import tazzzo.resources.prod_p26
+import tazzzo.resources.prod_p27
+import tazzzo.resources.prod_p28
+import tazzzo.resources.prod_p29
+import tazzzo.resources.prod_p33
+import tazzzo.resources.prod_p35
+import tazzzo.resources.prod_p39
+import tazzzo.resources.prod_p40
+import tazzzo.resources.prod_p41
+import tazzzo.resources.prod_p42
+import tazzzo.resources.prod_p45
+import tazzzo.resources.prod_p47
+import tazzzo.resources.prod_p60
+import tazzzo.resources.prod_p61
+import tazzzo.resources.prod_p63
 import tazzzo.resources.cat_paan
 import com.tazzzo.app.config.freeDeliveryProgress
 
@@ -1105,11 +1134,28 @@ data class CategoryArtTile(
     val art: DrawableResource
 )
 
+/**
+ * Photographic tiles, for the categories that have a usable photograph.
+ *
+ * Deliberately a PARTIAL cover of the taxonomy. Four tiles were withdrawn on
+ * 2026-09-08 after an audit of all twenty:
+ *
+ *  - `cleaning`, `oil`, `skincare` showed third-party product packaging —
+ *    Jif, Oleina on a priced shop shelf, Wardah. That is competitors' trade
+ *    dress sitting inside Tazzzo, and it is barred however the file is licensed.
+ *  - `oil` and `skincare` additionally shipped with UNVERIFIED licences; their
+ *    attribution lines read "metadata fetch failed", which means nobody ever
+ *    confirmed they were free to use.
+ *  - `baby` was a photograph of an identifiable infant, not a product.
+ *
+ * A category with no entry here renders the tinted emoji tile, which
+ * [categoryArtFor] already returns null for and every caller already handles.
+ * An honest blank beats a borrowed photograph.
+ */
 val categoryArtTiles: List<CategoryArtTile> = listOf(
     CategoryArtTile("fruits", "Vegetables & Fruits", 0xFFE8F5E9, Res.drawable.cat_fruits),
     CategoryArtTile("dairy", "Dairy, Bread & Eggs", 0xFFFFF8E1, Res.drawable.cat_dairy),
     CategoryArtTile("atta", "Atta, Rice & Dal", 0xFFFFF3E0, Res.drawable.cat_atta),
-    CategoryArtTile("oil", "Oil, Masala & Dry Fruits", 0xFFFFFDE7, Res.drawable.cat_oil),
     CategoryArtTile("meat", "Chicken, Meat & Fish", 0xFFFFEBEE, Res.drawable.cat_meat),
     CategoryArtTile("munchies", "Munchies & Snacks", 0xFFFFF3E0, Res.drawable.cat_munchies),
     CategoryArtTile("drinks", "Cold Drinks & Juices", 0xFFE3F2FD, Res.drawable.cat_drinks),
@@ -1118,15 +1164,66 @@ val categoryArtTiles: List<CategoryArtTile> = listOf(
     CategoryArtTile("sweet", "Sweet Tooth", 0xFFF3E5F5, Res.drawable.cat_sweet),
     CategoryArtTile("bakery", "Bakery & Biscuits", 0xFFFFF8E1, Res.drawable.cat_bakery),
     CategoryArtTile("personal", "Bath & Body", 0xFFE0F7FA, Res.drawable.cat_personal),
-    CategoryArtTile("skincare", "Skin & Face Care", 0xFFFCE4EC, Res.drawable.cat_skincare),
     CategoryArtTile("pharma", "Pharma & Wellness", 0xFFE8F5E9, Res.drawable.cat_pharma),
-    CategoryArtTile("baby", "Baby Care", 0xFFE3F2FD, Res.drawable.cat_baby),
-    CategoryArtTile("cleaning", "Cleaning Essentials", 0xFFE8F5E9, Res.drawable.cat_cleaning),
     CategoryArtTile("home", "Home & Office", 0xFFFFF3E0, Res.drawable.cat_home),
     CategoryArtTile("pet", "Pet Care", 0xFFEFEBE9, Res.drawable.cat_pet),
     CategoryArtTile("pooja", "Pooja & Religious Needs", 0xFFFFF3E0, Res.drawable.cat_pooja),
     CategoryArtTile("paan", "Paan Corner", 0xFFE8F5E9, Res.drawable.cat_paan)
 )
+
+/**
+ * Bundled product photography, keyed by product id.
+ *
+ * Every entry passed two checks on 2026-09-08: it is the right product, and no
+ * third-party brand is visible. Thirty-three of seventy-two SKUs have one. The
+ * rest render the emoji well, because the openly-licensed sources that cover
+ * fresh produce and raw commodities well cover packaged branded goods badly —
+ * and where they do, the photograph shows the brand, which is barred.
+ *
+ * Bundled, not fetched: the pre-auth and offline surfaces must render with no
+ * network and no failure state, the same reasoning as [categoryArtTiles]. A
+ * backend image URL, when one exists, still wins — see [ProductImage].
+ */
+private val productArt: Map<String, DrawableResource> = mapOf(
+    "p1" to Res.drawable.prod_p1,
+    "p2" to Res.drawable.prod_p2,
+    "p3" to Res.drawable.prod_p3,
+    "p4" to Res.drawable.prod_p4,
+    "p5" to Res.drawable.prod_p5,
+    "p6" to Res.drawable.prod_p6,
+    "p7" to Res.drawable.prod_p7,
+    "p9" to Res.drawable.prod_p9,
+    "p10" to Res.drawable.prod_p10,
+    "p12" to Res.drawable.prod_p12,
+    "p13" to Res.drawable.prod_p13,
+    "p14" to Res.drawable.prod_p14,
+    "p17" to Res.drawable.prod_p17,
+    "p18" to Res.drawable.prod_p18,
+    "p20" to Res.drawable.prod_p20,
+    "p21" to Res.drawable.prod_p21,
+    "p24" to Res.drawable.prod_p24,
+    "p25" to Res.drawable.prod_p25,
+    "p26" to Res.drawable.prod_p26,
+    "p27" to Res.drawable.prod_p27,
+    "p28" to Res.drawable.prod_p28,
+    "p29" to Res.drawable.prod_p29,
+    "p33" to Res.drawable.prod_p33,
+    "p35" to Res.drawable.prod_p35,
+    "p39" to Res.drawable.prod_p39,
+    "p40" to Res.drawable.prod_p40,
+    "p41" to Res.drawable.prod_p41,
+    "p42" to Res.drawable.prod_p42,
+    "p45" to Res.drawable.prod_p45,
+    "p47" to Res.drawable.prod_p47,
+    "p60" to Res.drawable.prod_p60,
+    "p61" to Res.drawable.prod_p61,
+    "p63" to Res.drawable.prod_p63,
+)
+
+fun productArtFor(productId: String): DrawableResource? = productArt[productId]
+
+/** Ids with bundled photography, for tests that must not hardcode the set. */
+val bundledProductArtIds: Set<String> get() = productArt.keys
 
 private val categoryArt: Map<String, DrawableResource> =
     categoryArtTiles.associate { it.id to it.art }

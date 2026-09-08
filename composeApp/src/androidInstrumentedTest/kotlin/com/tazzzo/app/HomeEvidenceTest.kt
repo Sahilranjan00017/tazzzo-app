@@ -24,6 +24,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import com.tazzzo.app.data.MockCatalog
 
 /**
  * C3 on device: Home reads as a commerce destination, and the merchandising
@@ -78,15 +79,23 @@ class HomeEvidenceTest {
     @Test
     fun home_is_a_commerce_destination_and_duplicate_category_tiles_stay_distinct() {
         val campaign = requireNotNull(CampaignConfig.current) { "this evidence run documents a live campaign; none is configured" }
+        // Derived from the campaign, not hardcoded. The collection changes with
+        // the festival — it was Janmashtami's dairy and fruit, it is Ganesh
+        // Chaturthi's pooja and sweets now — and a test that names one category
+        // fails on the next festival rather than on a defect.
+        val heroCategoryId = campaign.categoryIds.first()
+        val heroCategoryName = MockCatalog.categories.first { it.id == heroCategoryId }.name
         val gridTile = hasContentDescription("Vegetables & Fruits") and hasClickAction()
-        val heroTile = hasContentDescription("${campaign.title}: Vegetables & Fruits") and hasClickAction()
+        val heroTile = hasContentDescription("${campaign.title}: $heroCategoryName") and hasClickAction()
 
         waitFor(hasContentDescription("Home"))
         waitFor(gridTile)
 
         // ---- Festival hero above the fold, with its own distinct tile label ----
         waitFor(hasText(campaign.title, substring = true))
-        assert(count(heroTile) == 1) { "hero tile for the campaign category missing or duplicated: ${count(heroTile)}" }
+        assert(count(heroTile) == 1) {
+            "hero tile for '$heroCategoryName' missing or duplicated: ${count(heroTile)}"
+        }
         // The SAME category in the grid must remain exactly one actionable node.
         // (Regression: the hero once reused the grid label → 2 identical nodes.)
         assert(count(gridTile) == 1) { "expected exactly one actionable 'Vegetables & Fruits', found ${count(gridTile)}" }

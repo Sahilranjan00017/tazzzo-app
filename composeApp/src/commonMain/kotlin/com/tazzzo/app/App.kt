@@ -28,6 +28,7 @@ import com.tazzzo.app.ui.club.ClubCheckoutScreen
 import com.tazzzo.app.ui.onboarding.LoginScreen
 import com.tazzzo.app.ui.onboarding.OnboardingScreen
 import com.tazzzo.app.ui.splash.SplashScreen
+import com.tazzzo.app.ui.home.MasterListScreen
 
 @Composable
 fun App() {
@@ -86,6 +87,7 @@ fun App() {
                         is Screen.Coins -> CoinsScreen()
                         is Screen.Help -> HelpScreen()
                         is Screen.Addresses -> AddressesScreen()
+                        is Screen.MasterList -> MasterListScreen()
                         is Screen.About -> AboutScreen()
                         is Screen.Club -> ClubScreen()
                         is Screen.ClubCheckout -> ClubCheckoutScreen()
