@@ -29,8 +29,7 @@ brand-free photography exists.
 
 ## Product photography (bundled 2026-09-08)
 All from Wikimedia Commons under a free licence. Each was checked to be the
-right product with no third-party brand visible; 39 SKUs that failed either
-check render the emoji well instead.
+right product with no third-party brand visible.
 
 - `prod_p1.jpg` — [Red Onion on White.JPG](https://commons.wikimedia.org/wiki/File:Red_Onion_on_White.JPG) — Colin — CC BY-SA 3.0
 - `prod_p2.jpg` — [Tomato je.jpg](https://commons.wikimedia.org/wiki/File:Tomato_je.jpg) — Softeis — CC BY-SA 3.0
@@ -41,9 +40,11 @@ check render the emoji well instead.
 - `prod_p7.jpg` — [Fresh Spinach leaves.jpg](https://commons.wikimedia.org/wiki/File:Fresh_Spinach_leaves.jpg) — Charipearl — CC BY-SA 4.0
 - `prod_p9.jpg` — [Milk glass.jpg](https://commons.wikimedia.org/wiki/File:Milk_glass.jpg) — Stefan Kühn — CC BY-SA 3.0
 - `prod_p10.jpg` — [Breadindia.jpg](https://commons.wikimedia.org/wiki/File:Breadindia.jpg) — kspoddar — CC BY-SA 2.0
+- `prod_p11.jpg` — [2020-05-05 18 22 46 Six eggs in an open carton of a dozen Large Grade A Chicken Eggs from Egg-land's Best in the Franklin Farm section of Oak Hill, Fairfax County, Virginia.jpg](https://commons.wikimedia.org/wiki/File:2020-05-05_18_22_46_Six_eggs_in_an_open_carton_of_a_dozen_Large_Grade_A_Chicken_Eggs_from_Egg-land%27s_Best_in_the_Franklin_Farm_section_of_Oak_Hill,_Fairfax_County,_Virginia.jpg) — Famartin — CC BY-SA 4.0
 - `prod_p12.jpg` — [Homemade Paneer cottage cheese cut into cubes.JPG](https://commons.wikimedia.org/wiki/File:Homemade_Paneer_cottage_cheese_cut_into_cubes.JPG) — Nithyasrm — CC BY-SA 4.0
 - `prod_p13.jpg` — [Yoghurt in bowl.jpg](https://commons.wikimedia.org/wiki/File:Yoghurt_in_bowl.jpg) — Kris Miller from Issaquah — CC BY 2.0
 - `prod_p14.jpg` — [All-Purpose Flour (4107895947).jpg](https://commons.wikimedia.org/wiki/File:All-Purpose_Flour_(4107895947).jpg) — Veganbaking.net from USA — CC BY-SA 2.0
+- `prod_p15.jpg` — [Ricegrains1500ppx.jpg](https://commons.wikimedia.org/wiki/File:Ricegrains1500ppx.jpg) — FASTILY (TALK) — CC BY-SA 3.0
 - `prod_p17.jpg` — [Salt shaker on white background.jpg](https://commons.wikimedia.org/wiki/File:Salt_shaker_on_white_background.jpg) — Dubravko Sorić SoraZG on Flickr — CC BY 2.0
 - `prod_p18.jpg` — [Sunflower oil.jpg](https://commons.wikimedia.org/wiki/File:Sunflower_oil.jpg) — Tiia Monto — CC BY-SA 4.0
 - `prod_p20.jpg` — [Chilli Powder1.JPG](https://commons.wikimedia.org/wiki/File:Chilli_Powder1.JPG) — Kurinjikathambam — CC BY-SA 4.0
@@ -56,12 +57,18 @@ check render the emoji well instead.
 - `prod_p29.jpg` — [Orange juice 1 edit1.jpg](https://commons.wikimedia.org/wiki/File:Orange_juice_1_edit1.jpg) — Agency of the United States Department of Agriculture Edited Version by: Arad — Public domain
 - `prod_p33.jpg` — [Cocoa powder.jpg](https://commons.wikimedia.org/wiki/File:Cocoa_powder.jpg) — blair — CC BY-SA 2.0
 - `prod_p35.jpg` — [Frozen peas.JPG](https://commons.wikimedia.org/wiki/File:Frozen_peas.JPG) — Photo by and (c) 2007 Jina Lee — CC BY-SA 3.0
+- `prod_p36.jpg` — [Creamy Lentils (Dal Makhani) (2239000538).jpg](https://commons.wikimedia.org/wiki/File:Creamy_Lentils_(Dal_Makhani)_(2239000538).jpg) — rovingI — CC BY 2.0
+- `prod_p37.jpg` — [Cooking chocolate, broken bar.jpg](https://commons.wikimedia.org/wiki/File:Cooking_chocolate,_broken_bar.jpg) — SKopp — CC BY-SA 3.0
 - `prod_p39.jpg` — [Bowl of Gulab Jamuns.jpg](https://commons.wikimedia.org/wiki/File:Bowl_of_Gulab_Jamuns.jpg) — Upendra Kanda — CC BY 2.0
 - `prod_p40.jpg` — [Very chocolate chip-filled cookies (10483478504).jpg](https://commons.wikimedia.org/wiki/File:Very_chocolate_chip-filled_cookies_(10483478504).jpg) — Ruth Hartnup from Vancouver, Canada — CC BY 2.0
 - `prod_p41.jpg` — [Sea salt peanut butter oatmeal chocolate chip cookies (6985490577).jpg](https://commons.wikimedia.org/wiki/File:Sea_salt_peanut_butter_oatmeal_chocolate_chip_cookies_(6985490577).jpg) — kae71463 — CC BY 2.0
 - `prod_p42.jpg` — [Plain vanilla muffin in Tuntorp.jpg](https://commons.wikimedia.org/wiki/File:Plain_vanilla_muffin_in_Tuntorp.jpg) — W.carter — CC BY-SA 4.0
+- `prod_p43.jpg` — [Albahaka Rose Soap.jpg](https://commons.wikimedia.org/wiki/File:Albahaka_Rose_Soap.jpg) — Albahaka — CC BY-SA 4.0
+- `prod_p44.jpg` — [All the toothpaste you actually need (412580888).jpg](https://commons.wikimedia.org/wiki/File:All_the_toothpaste_you_actually_need_(412580888).jpg) — Kenneth Lu from San Francisco, CA — CC BY 2.0
 - `prod_p45.jpg` — [Shampoo Bottle made of PLA-Blend Bio-Flex.jpg](https://commons.wikimedia.org/wiki/File:Shampoo_Bottle_made_of_PLA-Blend_Bio-Flex.jpg) — F. Kesselring, FKuR Willich — CC BY-SA 3.0 de
 - `prod_p47.jpg` — [Electric hair clipper (1).jpg](https://commons.wikimedia.org/wiki/File:Electric_hair_clipper_(1).jpg) — Batholith (talk) — Public domain
+- `prod_p50.jpg` — [500 mg calcium supplements with vitamin D.jpg](https://commons.wikimedia.org/wiki/File:500_mg_calcium_supplements_with_vitamin_D.jpg) — Ragesoss — CC BY-SA 4.0
 - `prod_p60.jpg` — [Pile of Kibble Dog Food (51049786351).jpg](https://commons.wikimedia.org/wiki/File:Pile_of_Kibble_Dog_Food_(51049786351).jpg) — Megan Marrs — CC BY 2.0
 - `prod_p61.jpg` — [Dry cat food 02.jpg](https://commons.wikimedia.org/wiki/File:Dry_cat_food_02.jpg) — Anne Jea. — CC BY-SA 4.0
+- `prod_p62.jpg` — [Cardamom (Elaichi) from India.jpg](https://commons.wikimedia.org/wiki/File:Cardamom_(Elaichi)_from_India.jpg) — Libreravi — CC BY-SA 4.0
 - `prod_p63.jpg` — [Candle.jpg](https://commons.wikimedia.org/wiki/File:Candle.jpg) — User:Paolostefano1412 — CC BY 2.5

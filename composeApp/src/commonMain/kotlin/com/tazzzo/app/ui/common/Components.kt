@@ -111,6 +111,14 @@ import tazzzo.resources.cat_pharma
 import tazzzo.resources.cat_home
 import tazzzo.resources.cat_pet
 import tazzzo.resources.cat_pooja
+import tazzzo.resources.prod_p62
+import tazzzo.resources.prod_p50
+import tazzzo.resources.prod_p44
+import tazzzo.resources.prod_p43
+import tazzzo.resources.prod_p37
+import tazzzo.resources.prod_p36
+import tazzzo.resources.prod_p15
+import tazzzo.resources.prod_p11
 import tazzzo.resources.prod_p1
 import tazzzo.resources.prod_p2
 import tazzzo.resources.prod_p3
@@ -1194,9 +1202,11 @@ private val productArt: Map<String, DrawableResource> = mapOf(
     "p7" to Res.drawable.prod_p7,
     "p9" to Res.drawable.prod_p9,
     "p10" to Res.drawable.prod_p10,
+    "p11" to Res.drawable.prod_p11,
     "p12" to Res.drawable.prod_p12,
     "p13" to Res.drawable.prod_p13,
     "p14" to Res.drawable.prod_p14,
+    "p15" to Res.drawable.prod_p15,
     "p17" to Res.drawable.prod_p17,
     "p18" to Res.drawable.prod_p18,
     "p20" to Res.drawable.prod_p20,
@@ -1209,14 +1219,20 @@ private val productArt: Map<String, DrawableResource> = mapOf(
     "p29" to Res.drawable.prod_p29,
     "p33" to Res.drawable.prod_p33,
     "p35" to Res.drawable.prod_p35,
+    "p36" to Res.drawable.prod_p36,
+    "p37" to Res.drawable.prod_p37,
     "p39" to Res.drawable.prod_p39,
     "p40" to Res.drawable.prod_p40,
     "p41" to Res.drawable.prod_p41,
     "p42" to Res.drawable.prod_p42,
+    "p43" to Res.drawable.prod_p43,
+    "p44" to Res.drawable.prod_p44,
     "p45" to Res.drawable.prod_p45,
     "p47" to Res.drawable.prod_p47,
+    "p50" to Res.drawable.prod_p50,
     "p60" to Res.drawable.prod_p60,
     "p61" to Res.drawable.prod_p61,
+    "p62" to Res.drawable.prod_p62,
     "p63" to Res.drawable.prod_p63,
 )
 
