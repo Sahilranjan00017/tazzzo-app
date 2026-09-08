@@ -343,7 +343,12 @@ private fun HomeHeader() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
         ) {
-            LogoImage(height = 26.dp)
+            // The logo is deliberately absent from this header. Home's most
+            // valuable row is the address and the search field; a wordmark on
+            // the screen someone opens twenty times a week earns nothing and
+            // costs ~26dp of the fold. It still leads the splash, the login and
+            // the footer below, so the brand is not weakened — it is placed
+            // where it is doing work.
             Spacer(Modifier.weight(1f))
             Box(Modifier.guidedTarget("coins")) {
                 CoinChip(app.user.coinBalance) { app.navigate(Screen.Coins) }

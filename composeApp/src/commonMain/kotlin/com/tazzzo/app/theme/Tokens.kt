@@ -137,9 +137,12 @@ object TazRadius {
 // ---------------------------------------------------------------------------
 
 object TazElevation {
+    // The design system's instruction is to "depart from muddy shadows" and
+    // rely on structural 1px borders with a targeted, tiny ambient shadow.
+    // Heavier shadows also cost more to render on every scroll frame.
     val flat: Dp = 0.dp
-    val raised: Dp = 3.dp     // cards at rest
-    val floating: Dp = 8.dp   // banners, cart bar
+    val raised: Dp = 1.dp     // cards at rest — the BORDER does the work
+    val floating: Dp = 6.dp   // cart bar, sticky headers
     val overlay: Dp = 14.dp   // sheets, dialogs
 }
 
@@ -196,6 +199,12 @@ object TazSize {
      * product on it. Callers that place the stepper alongside text pass this.
      */
     val stepperInlineWidth: Dp = 116.dp
+
+    /** Minimum ADD/stepper hit area — 64x32 per the design system, which is
+     *  smaller than [touchTarget] only because the pill sits inside a padded
+     *  card whose own press area extends past it. */
+    val stepperMinWidth: Dp = 64.dp
+    val stepperMinHeight: Dp = 32.dp
 
     val productCardWidth: Dp = 150.dp
     val productImageHeight: Dp = 96.dp

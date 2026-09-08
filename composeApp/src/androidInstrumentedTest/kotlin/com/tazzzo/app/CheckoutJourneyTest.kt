@@ -28,8 +28,10 @@ import java.io.File
  * C2 on device: delivery is a CHOICE with a price, and the choice follows the
  * order everywhere — review, confirmation, orders list, order detail.
  *
- * Asserts the same figures at every stop. If the slot fee shown at review
- * differed from the one on the receipt, this fails — which is the point.
+ * Asserts the same slot at every stop. The customer deliberately picks the
+ * window that is NOT recommended, so a pass proves their choice propagated and
+ * not merely the default. Slot-fee arithmetic is covered in DeliveryFeeTest;
+ * the three live windows are all free, so no fee is asserted on device.
  */
 @RunWith(AndroidJUnit4::class)
 class CheckoutJourneyTest {
@@ -87,7 +89,7 @@ class CheckoutJourneyTest {
         waitFor(hasContentDescription("Home"))
         waitFor(hasContentDescription("Vegetables & Fruits"))
 
-        // Small basket, BELOW the free-delivery threshold, so the slot fee is real money.
+        // Small basket, BELOW the free-delivery threshold, so delivery is a real line.
         addFromHome("Fresh Onion", 2)                                  // ₹64
         waitFor(hasText("View cart")); click(hasText("View cart"))
         waitFor(hasText("Choose your delivery"))
@@ -101,13 +103,14 @@ class CheckoutJourneyTest {
         rule.waitForIdle()
         click(hasText("Continue"))
 
-        // ---- Slot: grouped, with fees. Pick the PAID late slot deliberately. ----
-        waitFor(hasText("Today, 8–10 PM"))
-        assert(present(hasText("Recommended"))) { "recommended tag missing on the next-available slot" }
+        // ---- Slot: three fixed windows. Pick the one that is NOT recommended. ----
+        waitFor(hasText("6 – 9 AM"))
+        assert(present(hasText("12 – 3 PM"))) { "midday window missing" }
+        assert(present(hasText("6 – 9 PM"))) { "evening window missing" }
+        assert(present(hasText("Recommended"))) { "recommended tag missing on the morning window" }
         assert(present(hasText("Free"))) { "free slots must show 'Free'" }
-        assert(present(hasText("₹15"))) { "paid slot must show its fee" }
         snapshot("c2_02_slot_choice")
-        click(hasText("Today, 8–10 PM"))
+        click(hasText("12 – 3 PM"))
         click(hasText("Continue"))
 
         // ---- Payment: COD (UPI/Card honestly disabled) ----
@@ -117,24 +120,23 @@ class CheckoutJourneyTest {
         click(hasText("Continue"))
 
         // ---- Review: slot + fee echoed; add an instruction ----
-        waitFor(hasText("Today, 8–10 PM · ₹15"))
+        waitFor(hasText("12 – 3 PM · Free"))
         waitFor(hasText("Leave at my door"))
         click(hasText("Leave at my door"))
-        assert(present(hasText("₹15"))) { "delivery fee on the review bill must match the slot" }
         snapshot("c2_03_review_slot_instruction")
         rule.onAllNodes(hasText("Place order", substring = true) and hasClickAction()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
 
         // ---- Confirmation: same slot, same fee, the instruction, Track → detail ----
         waitFor(hasText("Order placed"), 30_000)
-        assert(present(hasText("Today, 8–10 PM · ₹15"))) { "confirmation lost the slot/fee" }
+        assert(present(hasText("12 – 3 PM · Free"))) { "confirmation lost the chosen slot" }
         assert(present(hasText("Leave at my door"))) { "confirmation lost the instruction" }
         snapshot("c2_04_confirmation")
         click(hasText("Track order"))
 
         // ---- Order detail: the receipt agrees with everything above ----
         waitFor(hasText("Order details"))
-        assert(present(hasText("Today, 8–10 PM · ₹15"))) { "receipt lost the slot/fee" }
+        assert(present(hasText("12 – 3 PM · Free"))) { "receipt lost the chosen slot" }
         assert(present(hasText("Total paid"))) { "receipt missing total" }
         assert(present(hasText("Leave at my door"))) { "receipt lost the instruction" }
         assert(present(hasText("Need help"))) { "order-scoped help missing" }

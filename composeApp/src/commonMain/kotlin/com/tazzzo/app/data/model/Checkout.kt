@@ -33,7 +33,7 @@ data class Address(
 @Serializable
 data class DeliverySlot(
     val id: String,
-    val label: String,            // "Today, 6–8 PM"
+    val label: String,            // "6 – 9 AM"
     val available: Boolean,
     val etaMinutes: Int? = null,  // only when backed by serviceability data
     /** Fee for THIS slot. 0 = free. Overrides the flat rule when a slot is chosen. */

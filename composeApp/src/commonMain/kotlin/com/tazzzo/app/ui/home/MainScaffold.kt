@@ -61,6 +61,8 @@ import com.tazzzo.app.ui.common.guidedTarget
 import com.tazzzo.app.ui.guided.GuidedJourneyOverlay
 import com.tazzzo.app.ui.voice.VoiceComingSoonSheet
 import kotlinx.coroutines.delay
+import com.tazzzo.app.theme.TazElevation
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
  * The main shell of the app: 5 bottom tabs + floating cart bar + one-time
@@ -170,7 +172,11 @@ private val NavPillWidth = 52.dp
 private fun BottomNavBar() {
     val app = LocalAppState.current
     val haptics = rememberHaptics()
-    Surface(color = TazColors.Surface, shadowElevation = 12.dp) {
+    Surface(
+        color = TazColors.Surface,
+        shadowElevation = TazElevation.floating,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    ) {
         Column(Modifier.fillMaxWidth()) {
             // hairline top border — separates the bar from cream content
             Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder))

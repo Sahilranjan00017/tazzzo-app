@@ -105,16 +105,19 @@ class MockCheckoutRepository(
         // [MOCKED] Real slots, fees and availability are [BACKEND REQUIRED]
         // (serviceability). Shapes here are what the UI must render: grouped,
         // fee per slot with a reason, one recommended, one sold out.
+        // Three fixed windows, as asked for on 2026-09-08. All free: a fee on
+        // any of them would be a business rule nobody has set. "Recommended"
+        // marks the first, and only as a suggestion — nothing is auto-selected.
+        //
+        // The window labels carry no "Today"/"Tomorrow": which day "6 – 9 AM"
+        // falls on depends on the clock, and the client does not decide that.
+        // The serving store does, when real slots are [BACKEND REQUIRED].
         return listOf(
-            DeliverySlot("slot-next", "Next available", available = true, group = "Next available",
+            DeliverySlot("slot-morning", "6 – 9 AM", available = true, group = "Delivery window",
                 recommended = true, feeRupees = 0),
-            DeliverySlot("slot-today-eve", "Today, 6–8 PM", available = false, group = "Today",
+            DeliverySlot("slot-midday", "12 – 3 PM", available = true, group = "Delivery window",
                 feeRupees = 0),
-            DeliverySlot("slot-today-late", "Today, 8–10 PM", available = true, group = "Today",
-                feeRupees = 15, feeReason = "Late-evening slot"),
-            DeliverySlot("slot-tmrw-am", "Tomorrow, 7–9 AM", available = true, group = "Tomorrow",
-                feeRupees = 0),
-            DeliverySlot("slot-tmrw-pm", "Tomorrow, 6–8 PM", available = true, group = "Tomorrow",
+            DeliverySlot("slot-evening", "6 – 9 PM", available = true, group = "Delivery window",
                 feeRupees = 0)
         )
     }

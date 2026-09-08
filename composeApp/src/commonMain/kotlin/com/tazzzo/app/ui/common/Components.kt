@@ -116,6 +116,7 @@ import tazzzo.resources.cat_home
 import tazzzo.resources.cat_pet
 import tazzzo.resources.cat_pooja
 import tazzzo.resources.cat_paan
+import com.tazzzo.app.config.freeDeliveryProgress
 
 // ---------------------------------------------------------------------------
 // Icon primitive
@@ -802,7 +803,8 @@ fun ProductCard(
     Box(
         modifier = (if (width != null) Modifier.width(width) else Modifier)
             .then(modifier)
-            .shadow(2.dp, TazRadius.card, spotColor = Color.Black.copy(alpha = 0.18f))
+            // No drop shadow: a 1px structural border separates the card from
+            // the canvas without the smudge, and costs nothing per frame.
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
@@ -971,7 +973,10 @@ fun ProductRail(title: String, products: List<Product>, actionLabel: String? = n
     val railState = rememberSaveable(title, saver = LazyListState.Saver) { LazyListState() }
     LazyRow(
         state = railState,
-        contentPadding = PaddingValues(horizontal = TazSpace.gutter),
+        // screenEdge, not gutter: at 12dp a card is clipped by the screen
+        // edge, which is what tells the eye the row keeps going. At 16dp a
+        // rail that happens to end flush reads as a complete set.
+        contentPadding = PaddingValues(horizontal = TazSpace.screenEdge),
         horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
     ) {
         items(
@@ -1021,12 +1026,25 @@ fun BoxScope.CartBar(aboveNav: Boolean = false) {
                 .padding(horizontal = TazSpace.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // The most recent thing added, not a generic cart glyph: it
+            // confirms WHAT went in, which is the question a customer actually
+            // has after tapping ADD. Falls back to the glyph if the basket
+            // somehow has no line to show.
+            val lead = app.cartLines().lastOrNull()?.product
             Box(
-                Modifier.size(TazSize.buttonHeightSm).clip(CircleShape)
+                Modifier.size(TazSize.buttonHeightSm).clip(TazRadius.chip)
                     .background(TazColors.White.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center
             ) {
-                TazIcon(TazIcons.Cart, null, size = TazSize.iconMd, tint = TazColors.White)
+                if (lead != null) {
+                    ProductImage(
+                        lead, Modifier.fillMaxSize().clip(TazRadius.chip),
+                        glyphSize = TazType.titleSize, contentPadding = 2.dp,
+                        background = Color.Transparent
+                    )
+                } else {
+                    TazIcon(TazIcons.Cart, null, size = TazSize.iconMd, tint = TazColors.White)
+                }
             }
             Spacer(Modifier.width(TazSpace.md))
             Column(Modifier.weight(1f)) {
@@ -1036,9 +1054,12 @@ fun BoxScope.CartBar(aboveNav: Boolean = false) {
                     color = TazColors.White, fontSize = TazType.titleSize,
                     fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
-                val gap = AppConfig.charges.freeDeliveryAboveRupees - bill.itemTotal
+                // Same helper the cart's milestone bar uses, so the bar and the
+                // cart can never quote different gaps for one basket.
+                val progress = freeDeliveryProgress(bill)
                 Text(
-                    if (gap > 0) "Add ₹$gap more for free delivery"
+                    if (!progress.alreadyFree && progress.remainingRupees > 0)
+                        "Add ₹${progress.remainingRupees} more for free delivery"
                     else "Free delivery unlocked",
                     color = TazColors.White.copy(alpha = 0.8f), fontSize = TazType.microSize,
                     fontWeight = TazType.microWeight, maxLines = 1, overflow = TextOverflow.Ellipsis

@@ -10,13 +10,13 @@ import com.tazzzo.app.data.model.Campaign
  */
 object CampaignConfig {
     val current: Campaign? = Campaign(
-        id = "janmashtami-2026",
-        title = "Janmashtami at Tazzzo",
-        subtitle = "Everything for the celebration at home",
+        id = "ganesh-chaturthi-2026",
+        title = "Ganesh Chaturthi at Tazzzo",
+        subtitle = "Pooja essentials, sweets and ghee",
         ctaLabel = "Shop the collection",
-        categoryIds = listOf("dairy", "sweet", "oil", "fruits"),   // dairy · sweets · dry fruits (in oil group) · fruits
+        categoryIds = listOf("pooja", "sweet", "oil", "atta"),   // pooja needs · sweets · ghee (in the oil group) · atta for prasad
         heroImageUrl = null,                                        // [ASSET REQUIRED] production artwork
-        validUntilLabel = "Ends this week"
+        validUntilLabel = "Festival collection"
     )
 
     /** Campaigns the system can rotate to; same shape, different data. */
