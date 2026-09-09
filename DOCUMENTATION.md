@@ -436,7 +436,7 @@ Screen → Repository interface → HTTPS → your Node microservice → your da
 
 | Constant | Handles |
 |---|---|
-| `GATEWAY` | Base URL (`https://api.tazzzo.in` — replace with yours) |
+| `GATEWAY` | Base URL (`https://api.tazzzo.com`) |
 | `AUTH_SERVICE` | OTP login, tokens |
 | `CATALOG_SERVICE` | Categories, products, search |
 | `ORDER_SERVICE` | Checkout, order tracking |
