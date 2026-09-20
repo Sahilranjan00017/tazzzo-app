@@ -45,6 +45,8 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.config.BrandCopy
 import com.tazzzo.app.data.model.FaqItem
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazMotion
@@ -64,6 +66,15 @@ import com.tazzzo.app.ui.common.PillButton
 import com.tazzzo.app.ui.common.SectionHeader
 import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.ui.common.TazTopBar
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.widthIn
+import com.tazzzo.app.data.model.Order
+import com.tazzzo.app.data.model.OrderStatus
+import com.tazzzo.app.ui.common.ChipTone
+import com.tazzzo.app.ui.common.TazChip
+import com.tazzzo.app.ui.common.ProductImage
+import com.tazzzo.app.ui.common.TazRowDivider
+import com.tazzzo.app.ui.common.TazListRow
 
 /**
  * Help.
@@ -147,26 +158,42 @@ fun HelpScreen() {
                     }
                 }
 
+                // ---- the order this screen is about --------------------------
+                // Arriving from an order carries its id, so Help can open on the
+                // order itself rather than asking a customer to describe the
+                // thing they just tapped.
+                app.helpOrderId?.let { OrderContextCard(it) }
+
                 // ---- help with an order: real destinations ------------------
                 Spacer(Modifier.height(TazSpace.lg))
-                SectionHeader("Help with an order")
+                SectionHeader(app.helpOrderId?.let { "Help with order #$it" } ?: "Help with an order")
                 Column(
                     Modifier.padding(horizontal = TazSpace.gutter).fillMaxWidth()
                         .clip(TazRadius.card).background(TazColors.Surface)
                         .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
                 ) {
-                    HelpMenuRow(
+                    HelpListRow(
                         TazIcons.Receipt, "Track or manage an order",
                         "Open your orders"
                     ) { app.navigate(Screen.Orders) }
-                    HelpMenuDivider()
-                    HelpMenuRow(
-                        TazIcons.Inventory, "Item missing or damaged",
-                        "Message us about the order"
+                    TazRowDivider()
+                    HelpListRow(
+                        TazIcons.Inventory, "Item damaged, expired or poor quality",
+                        "Message us about the item"
                     ) { openWhatsApp() }
-                    HelpMenuDivider()
-                    HelpMenuRow(
-                        TazIcons.Payment, "Payment or refund",
+                    TazRowDivider()
+                    HelpListRow(
+                        TazIcons.Bag, "Order or item never arrived",
+                        "Message us about a missing delivery"
+                    ) { openWhatsApp() }
+                    TazRowDivider()
+                    HelpListRow(
+                        TazIcons.Delivery, "Report a delivery partner",
+                        "Tell us what happened"
+                    ) { openWhatsApp() }
+                    TazRowDivider()
+                    HelpListRow(
+                        TazIcons.Payment, "Payment, billing or refund",
                         "Message us about a payment"
                     ) { openWhatsApp() }
                 }
@@ -210,7 +237,7 @@ fun HelpScreen() {
                         Modifier
                             .defaultMinSize(minHeight = TazSize.touchTarget)
                             .clip(TazRadius.pill).background(TazColors.Green)
-                            .clickable { openWhatsApp() }
+                            .tazPressable(onClick = { openWhatsApp() }, pressScale = TazPress.compact)
                             .padding(horizontal = TazSpace.lg),
                         contentAlignment = Alignment.Center
                     ) {
@@ -331,7 +358,7 @@ private fun HelpSearchField(query: String, onQueryChange: (String) -> Unit) {
         if (query.isNotEmpty()) {
             Box(
                 Modifier.size(TazSize.iconLg).clip(CircleShape)
-                    .clickable { onQueryChange("") },
+                    .tazPressable(onClick = { onQueryChange("") }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 TazIcon(
@@ -363,7 +390,7 @@ private fun FaqCard(
             )
             Column(
                 Modifier.fillMaxWidth()
-                    .clickable { onToggle(faq.question) }
+                    .tazPressable(onClick = { onToggle(faq.question) }, pressScale = TazPress.compact)
                     .heightIn(min = TazSize.touchTarget)
                     .padding(TazSpace.lg)
             ) {
@@ -403,52 +430,7 @@ private fun FaqCard(
     }
 }
 
-/** Menu row in the Account tab's visual language, so help feels like one app. */
-@Composable
-private fun HelpMenuRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String?,
-    onClick: () -> Unit
-) {
-    Row(
-        Modifier.fillMaxWidth()
-            .clickable { onClick() }
-            .heightIn(min = 56.dp)
-            .padding(horizontal = TazSpace.lg, vertical = TazSpace.sm),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TazIcon(icon, null, size = TazSize.iconSm, tint = TazColors.TextSecondary)
-        Spacer(Modifier.width(TazSpace.md))
-        Column(Modifier.weight(1f)) {
-            Text(
-                title, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine,
-                fontWeight = FontWeight.Medium, color = TazColors.TextPrimary,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            if (subtitle != null) {
-                Text(
-                    subtitle, fontSize = TazType.captionSize,
-                    lineHeight = TazType.captionLine, color = TazColors.TextTertiary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        Spacer(Modifier.width(TazSpace.sm))
-        TazIcon(TazIcons.Chevron, null, size = TazSize.iconXs, tint = TazColors.TextTertiary)
-    }
-}
 
-/** Hairline inset past the icon rail, matching the Account menu. */
-@Composable
-private fun HelpMenuDivider() {
-    Box(
-        Modifier.fillMaxWidth()
-            .padding(start = TazSpace.lg + TazSize.iconSm + TazSpace.md)
-            .height(1.dp)
-            .background(TazColors.CardBorder)
-    )
-}
 
 /**
  * Loading / error / content for the FAQ regions.
@@ -474,3 +456,106 @@ private fun FaqContent(
         is UiState.Success -> content(state.data)
     }
 }
+
+/**
+ * The order this help session is about: its state, what it cost, and what was
+ * in it.
+ *
+ * Why it earns the space at the top: a customer who taps "Need help" from an
+ * order already knows which order they mean, and making them say it again is
+ * the moment support starts feeling like paperwork. Showing the items also
+ * settles most "which one was damaged?" questions before anyone asks.
+ *
+ * The mockup pairs this with a "Quick Resolution Promise" banner guaranteeing a
+ * refund within two minutes. That is a service level nobody has committed to
+ * (**D6**), so it is not drawn. When a refund SLA exists, it belongs here.
+ */
+@Composable
+private fun OrderContextCard(orderId: String) {
+    val load = rememberLoad<Order?>(orderId, isEmpty = { it == null }) {
+        ServiceLocator.orders.getOrders().firstOrNull { it.id == orderId }
+    }
+    val order = (load.state as? UiState.Success)?.data ?: return
+
+    val (statusLabel, statusTone) = when (order.status) {
+        OrderStatus.PLACED -> "Order placed" to ChipTone.Neutral
+        OrderStatus.PACKED -> "Packed" to ChipTone.Neutral
+        OrderStatus.ON_THE_WAY -> "On the way" to ChipTone.Warning
+        OrderStatus.DELIVERED -> "Delivered" to ChipTone.Success
+    }
+
+    Column(
+        Modifier.padding(horizontal = TazSpace.gutter).fillMaxWidth()
+            .clip(TazRadius.card).background(TazColors.Surface)
+            .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
+            .padding(TazSpace.lg)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TazChip(statusLabel, statusTone, standalone = true)
+            Spacer(Modifier.width(TazSpace.sm))
+            Text(
+                order.placedAtLabel, fontSize = TazType.captionSize,
+                color = TazColors.TextTertiary, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            )
+            Text(
+                "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
+                fontWeight = TazType.priceWeight, color = TazColors.TextPrimary, maxLines = 1
+            )
+        }
+        Spacer(Modifier.height(TazSpace.sm))
+        Text(
+            "Order #${order.id}", fontSize = TazType.bodySize,
+            fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary, maxLines = 1
+        )
+        Text(
+            if (order.lines.size == 1) "1 item" else "${order.lines.size} items",
+            fontSize = TazType.captionSize, color = TazColors.TextTertiary
+        )
+        Spacer(Modifier.height(TazSpace.md))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
+        ) {
+            order.lines.forEach { line ->
+                Row(
+                    Modifier.clip(TazRadius.chip).background(TazColors.SurfaceSunken)
+                        .padding(TazSpace.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ProductImage(
+                        line.product,
+                        Modifier.size(36.dp).clip(TazRadius.chip),
+                        glyphSize = TazType.bodySize, contentPadding = 4.dp
+                    )
+                    Spacer(Modifier.width(TazSpace.sm))
+                    Column(Modifier.widthIn(max = 96.dp)) {
+                        Text(
+                            line.product.name, fontSize = TazType.microSize,
+                            fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            line.product.unit, fontSize = TazType.microSize,
+                            color = TazColors.TextTertiary, maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Thin adapter onto the shared [TazListRow] so Help and Account cannot drift.
+ *
+ * Help previously carried a byte-identical private copy of the row and its
+ * divider; two implementations of one control is how two screens stop matching.
+ */
+@Composable
+private fun HelpListRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit,
+) = TazListRow(icon = icon, title = title, subtitle = subtitle, onClick = onClick)

@@ -59,6 +59,9 @@ import com.tazzzo.app.config.AppConfig
 import com.tazzzo.app.config.BrandCopy
 import com.tazzzo.app.config.DeliveryCopy
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.TazHaptic
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -77,10 +80,10 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
 /** Height of the photographic band at the top of the entry screen. */
-private val WallHeight = 300.dp
+private val WallHeight = 288.dp
 
 /** One photographic tile in the wall. */
-private val tileSize = 132.dp
+private val tileSize = 120.dp
 
 /**
  * Login / guest entry — the customer's first interactive screen.
@@ -150,8 +153,20 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
     // Decorative brand wall. Deliberately drawn from the bundled art table, not
     // from CatalogRepository: this is the pre-auth screen and it must render
     // instantly, offline, with no failure state. Nothing here is merchandise.
-    val rowOne = remember { categoryArtTiles.take(10) }
-    val rowTwo = remember { categoryArtTiles.drop(10) }
+    // Curated, not taxonomy-ordered. This is the pre-auth brand wall, so it
+    // shows the photographs that are genuinely appetising and leaves out the
+    // ones that are merely accurate — raw chicken on granite, a frying pan, a
+    // stack of weathered soap. Those still serve their own category tiles,
+    // where the label explains them; here there is no label, only the picture.
+    val wallOrder = listOf(
+        "fruits", "dairy", "atta", "sweet", "munchies",
+        "drinks", "tea", "bakery", "pooja", "pet"
+    )
+    val wall = remember {
+        wallOrder.mapNotNull { id -> categoryArtTiles.firstOrNull { it.id == id } }
+    }
+    val rowOne = remember(wall) { wall.filterIndexed { i, _ -> i % 2 == 0 } }
+    val rowTwo = remember(wall) { wall.filterIndexed { i, _ -> i % 2 == 1 } }
 
     Column(
         Modifier
@@ -192,6 +207,20 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                     )
                 )
             )
+            // Side fades. The band is a marquee, so tiles are always cut at both
+            // edges — with a hard cut that reads as a broken grid rather than a
+            // wall in motion, and it reads that way permanently wherever motion
+            // is off: reduced-motion settings, and every screenshot.
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.horizontalGradient(
+                        0f to TazColors.Cream,
+                        0.14f to Color.Transparent,
+                        0.86f to Color.Transparent,
+                        1f to TazColors.Cream
+                    )
+                )
+            )
             // Top scrim: only over the status-bar strip, so system glyphs stay
             // legible without washing out the photography below them.
             Box(
@@ -217,12 +246,12 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
             Box(
                 Modifier
                     .shadow(
-                        10.dp, RoundedCornerShape(20.dp),
-                        spotColor = Color.Black.copy(alpha = 0.22f)
+                        4.dp, RoundedCornerShape(18.dp),
+                        spotColor = Color.Black.copy(alpha = 0.12f)
                     )
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(18.dp))
                     .background(TazColors.Surface)
-                    .padding(horizontal = TazSpace.xl, vertical = 14.dp)
+                    .padding(horizontal = TazSpace.lg, vertical = TazSpace.md)
             ) {
                 LogoImage(height = 36.dp)
             }
@@ -248,10 +277,12 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)
             )
 
-            // -------------------------------------------------- 3. Value strip
-            Spacer(Modifier.height(TazSpace.xl))
-            ValueStrip()
-            Spacer(Modifier.height(TazSpace.xl))
+            // The three-icon value strip that used to sit here is gone. It
+            // restated the subtitle directly above it, and it sat between the
+            // headline and the only control on the screen — pushing the phone
+            // field down for no new information. The propositions belong in
+            // onboarding copy, not stacked on the sign-in form.
+            Spacer(Modifier.height(TazSpace.xxl))
 
             Text(
                 "LOG IN OR SIGN UP",
@@ -307,7 +338,9 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                         }
                         Spacer(Modifier.height(TazSpace.md))
                         PillButton(
-                            text = if (sending) "Sending OTP…" else "Continue",
+                            text = "Continue",
+                            loading = sending,
+                            loadingText = "Sending OTP…",
                             onClick = {
                                 if (!sending) {
                                     scope.launch {
@@ -354,11 +387,9 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                 color = TazColors.Green,
                                 modifier = Modifier
                                     .clip(TazRadius.chip)
-                                    .clickable {
-                                        step = 1
+                                    .tazPressable(onClick = { step = 1
                                         otp = ""
-                                        errorText = null
-                                    }
+                                        errorText = null }, pressScale = TazPress.compact)
                                     .padding(horizontal = TazSpace.xs, vertical = TazSpace.xxs)
                             )
                         }
@@ -410,7 +441,10 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                     Modifier
                                         .defaultMinSize(minHeight = TazSize.touchTarget)
                                         .clip(TazRadius.chip)
-                                        .clickable {
+                                        .tazPressable(
+                                            pressScale = TazPress.compact,
+                                            haptic = TazHaptic.Tap,
+                                            onClick = {
                                             scope.launch {
                                                 errorText = null
                                                 try {
@@ -422,7 +456,8 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                                 }
                                             }
                                             resendIn = 30
-                                        }
+                                            }
+                                        )
                                         .padding(horizontal = TazSpace.md),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -437,7 +472,9 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                         }
                         Spacer(Modifier.height(TazSpace.md))
                         PillButton(
-                            text = if (verifying) "Verifying…" else "Verify & Start Shopping",
+                            text = "Verify & Start Shopping",
+                            loading = verifying,
+                            loadingText = "Verifying…",
                             onClick = {
                                 if (!verifying) {
                                     scope.launch {
@@ -448,7 +485,7 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                                             if (u != null) {
                                                 app.user = u
                                                 app.requestGuidedTourIfFirstTime()
-                                                app.resetTo(Screen.Home)
+                                                app.goHome()
                                             } else {
                                                 errorText = "Invalid OTP, try again"
                                             }
@@ -478,10 +515,8 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
                     .padding(horizontal = TazSpace.xl)
                     .defaultMinSize(minHeight = 48.dp)
                     .clip(TazRadius.card)
-                    .clickable {
-                        app.requestGuidedTourIfFirstTime()
-                        app.resetTo(Screen.Home)
-                    },
+                    .tazPressable(onClick = { app.requestGuidedTourIfFirstTime()
+                        app.goHome() }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -507,52 +542,6 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
             )
             Spacer(Modifier.height(TazSpace.xxl))
             Box(Modifier.navigationBarsPadding())
-        }
-    }
-}
-
-/**
- * Three compact, config-backed reasons to sign up. Fills the composition
- * without crowding it; the coin item disappears entirely when loyalty is off.
- */
-@Composable
-private fun ValueStrip() {
-    val items: List<Pair<ImageVector, String>> = buildList {
-        add(TazIcons.Delivery to DeliveryCopy.headline(AppConfig.deliveryPromise))
-        if (AppConfig.coins.enabled) add(TazIcons.Coin to "Tazzzo Coins")
-        add(TazIcons.Mic to "Voice shopping")
-    }
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = TazSpace.xxl),
-        horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
-    ) {
-        items.forEach { (icon, label) ->
-            Column(
-                Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape).background(TazColors.GreenSoft),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = TazColors.Green,
-                        modifier = Modifier.size(TazSize.iconSm)
-                    )
-                }
-                Spacer(Modifier.height(TazSpace.sm))
-                Text(
-                    label,
-                    fontSize = TazType.navLabelSize,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 14.sp,
-                    color = TazColors.TextSecondary,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2
-                )
-            }
         }
     }
 }

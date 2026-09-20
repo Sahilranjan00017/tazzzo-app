@@ -16,6 +16,11 @@ interface CatalogRepository {
     suspend fun getProduct(id: String): Product?
     suspend fun getBanners(): List<PromoBanner>
     suspend fun getBestsellers(): List<Product>
+    /** Genuinely discounted SKUs, deepest rupee saving first. Maps to a
+     *  `sort=discount&has_discount=true` listing query once one exists. */
+    suspend fun getDeals(): List<Product>
+    /** SKU counts per category and sub-category id. Derived, never authored. */
+    suspend fun getCounts(): Map<String, Int>
     suspend fun getProducts(categoryId: String, subcategoryId: String? = null): List<Product>
     suspend fun search(query: String): List<Product>
 }
@@ -30,7 +35,9 @@ interface OrderRepository {
         lines: List<CartLine>,
         bill: BillSummary,
         address: String,
-        payment: com.tazzzo.app.data.model.PaymentMethodKind? = null
+        payment: com.tazzzo.app.data.model.PaymentMethodKind? = null,
+        slot: com.tazzzo.app.data.model.DeliverySlot? = null,
+        instructionIds: List<String> = emptyList()
     ): Order
     suspend fun getOrders(): List<Order>
 }
@@ -62,6 +69,8 @@ class MockCatalogRepository : CatalogRepository {
     override suspend fun getProduct(id: String): Product? { delay(FAKE_LATENCY_MS); return MockCatalog.products.find { it.id == id } }
     override suspend fun getBanners(): List<PromoBanner> { maybeFailForDemo(); delay(FAKE_LATENCY_MS / 2); return MockCatalog.banners }
     override suspend fun getBestsellers(): List<Product> { delay(FAKE_LATENCY_MS); return MockCatalog.bestsellers() }
+    override suspend fun getDeals(): List<Product> { delay(FAKE_LATENCY_MS); return MockCatalog.deals() }
+    override suspend fun getCounts(): Map<String, Int> { delay(FAKE_LATENCY_MS / 2); return MockCatalog.counts() }
     override suspend fun getProducts(categoryId: String, subcategoryId: String?): List<Product> {
         delay(FAKE_LATENCY_MS); return MockCatalog.productsFor(categoryId, subcategoryId)
     }
@@ -127,13 +136,16 @@ class MockOrderRepository : OrderRepository {
         lines: List<CartLine>,
         bill: BillSummary,
         address: String,
-        payment: com.tazzzo.app.data.model.PaymentMethodKind?
+        payment: com.tazzzo.app.data.model.PaymentMethodKind?,
+        slot: com.tazzzo.app.data.model.DeliverySlot?,
+        instructionIds: List<String>
     ): Order {
         delay(600)
         val order = Order(
             id = "TZ${100483 + orders.size}",
             lines = lines, bill = bill, status = OrderStatus.PLACED,
-            placedAtLabel = "Just now", address = address, payment = payment
+            placedAtLabel = "Just now", address = address, payment = payment,
+            slot = slot, instructionIds = instructionIds
         )
         orders.add(0, order)
         return order
@@ -166,4 +178,17 @@ object ServiceLocator {
     val addresses: AddressRepository = MockAddressRepository()
     val checkout: CheckoutRepository = MockCheckoutRepository(catalog, orders)
     val support: SupportRepository = MockSupportRepository()
+
+    /**
+     * Club membership. Local today; the same interface fronts the backend
+     * later, where the idempotency guarantees must be enforced server-side.
+     */
+    val membership: MembershipRepository =
+        LocalMembershipRepository(com.tazzzo.app.data.local.PersistentStore())
+
+    /**
+     * Payment. [MockPaymentGateway] until Razorpay + a backend exist — it is
+     * a TEST gateway and says so on every order and result it produces.
+     */
+    val payments: PaymentGateway = MockPaymentGateway()
 }

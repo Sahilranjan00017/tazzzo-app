@@ -55,6 +55,17 @@ import com.tazzzo.app.data.model.Product
 import com.tazzzo.app.data.model.PromoBanner
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.data.repository.Taxonomy
+import com.tazzzo.app.ui.interaction.tazPressableCard
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.theme.MotionSettings
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -78,6 +89,12 @@ import com.tazzzo.app.ui.common.VoiceCommerceBannerV3
 import com.tazzzo.app.ui.common.guidedTarget
 import com.tazzzo.app.ui.state.rememberLoad
 import kotlinx.coroutines.delay
+import androidx.compose.ui.text.font.FontWeight
+import com.tazzzo.app.config.priceBandLabel
+import com.tazzzo.app.theme.TazMotion
+import com.tazzzo.app.ui.common.ProductCard
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Brush
 
 private val RAIL_ORDER = listOf(
     "Bestsellers",
@@ -98,9 +115,12 @@ private val RAIL_ORDER = listOf(
 // cards (banners) and edge-bleeding rails.
 // ---------------------------------------------------------------------------
 
-private val SectionGap: Dp = 28.dp
+private val SectionGap: Dp = 20.dp
 private val InnerGap: Dp = 12.dp
-private val CategoryTileSize: Dp = 74.dp
+// 74dp put the two-line label almost level with the picture, so a grid of
+// them read as a wall of text with thumbnails attached. At 86dp the
+// photograph leads and the label supports it.
+private val CategoryTileSize: Dp = 86.dp
 
 /** Matches the banner height inside ui/common so the carousel never resizes. */
 private val BannerHeight: Dp = 150.dp
@@ -111,7 +131,11 @@ private data class HomeFeed(
     val categories: List<Category>,
     val rails: Map<String, List<Product>>,
     /** Distinct products from real past orders — empty when no order history. */
-    val orderAgain: List<Product>
+    val orderAgain: List<Product>,
+    /** Largest MRP-vs-price savings among the loaded rails. Data, not a claim. */
+    val deals: List<Product> = emptyList(),
+    /** Everyday staples for the two-up grid. Real, purchasable, deduped. */
+    val essentials: List<Product> = emptyList()
 )
 
 /**
@@ -129,22 +153,43 @@ fun HomeTabContent() {
     val feed = rememberLoad(isEmpty = { false }) {
         val catalog = ServiceLocator.catalog
         val pastOrders = ServiceLocator.orders.getOrders()
+        val rails = mapOf(
+            "Bestsellers" to catalog.getBestsellers(),
+            "Snacks & Munchies" to catalog.getProducts("munchies"),
+            "Dairy, Bread & Eggs" to catalog.getProducts("dairy"),
+            "Personal Care" to (catalog.getProducts("personal") + catalog.getProducts("skincare")),
+            "Sweet Tooth" to catalog.getProducts("sweet"),
+            "Cleaning Essentials" to catalog.getProducts("cleaning")
+        )
+        val deals = rails.values.flatten().distinctBy { it.id }
+            .filter { it.mrp > it.price && it.isPurchasable }
+            .sortedByDescending { it.mrp - it.price }
+            .take(10)
         HomeFeed(
             banners = catalog.getBanners(),
             categories = Taxonomy.categories(catalog),
-            rails = mapOf(
-                "Bestsellers" to catalog.getBestsellers(),
-                "Snacks & Munchies" to catalog.getProducts("munchies"),
-                "Dairy, Bread & Eggs" to catalog.getProducts("dairy"),
-                "Personal Care" to (catalog.getProducts("personal") + catalog.getProducts("skincare")),
-                "Sweet Tooth" to catalog.getProducts("sweet"),
-                "Cleaning Essentials" to catalog.getProducts("cleaning")
-            ),
+            rails = rails,
             orderAgain = pastOrders
                 .flatMap { it.lines }
                 .map { it.product }
                 .distinctBy { it.id }
-                .take(8)
+                .take(8),
+            deals = deals,
+            essentials = run {
+                // Deduplicate against everything else the feed already draws.
+                // A product shown twice on one screen is worse than a shorter
+                // section: it wastes the slot, and two controls announcing
+                // "Add Fresh Onion to cart" are indistinguishable to a screen
+                // reader — the same accessibility defect the hero tiles hit.
+                val alreadyShown = (
+                    rails.values.flatten() +
+                        pastOrders.flatMap { it.lines }.map { it.product }
+                    ).map { it.id }.toSet() + deals.map { it.id }
+                (catalog.getProducts("fruits") + catalog.getProducts("atta"))
+                    .distinctBy { it.id }
+                    .filter { it.isPurchasable && it.id !in alreadyShown }
+                    .take(8)
+            }
         )
     }
 
@@ -162,33 +207,65 @@ fun HomeTabContent() {
 @Composable
 private fun HomeFeedList(data: HomeFeed) {
     val app = LocalAppState.current
+    // Home scroll survives a trip into a product and back.
+    val homeScroll = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        // Tagged so the journey suite can scroll rails into composition —
+        // ADD controls below the fold do not exist in semantics until then.
+        modifier = Modifier.fillMaxSize().testTag("homeFeed"),
+        state = homeScroll,
         contentPadding = PaddingValues(bottom = TazSpace.cartBarClearance)
     ) {
         // ------------------------------------------------- 1. restore notice
         item { RestoreNoticeBanner() }
         item { Spacer(Modifier.height(TazSpace.lg)) }
 
-        // ----------------------------------------------- 2. shop by category
-        // No card wrapper: tiles sit straight on the cream ground so the grid
-        // reads as a different KIND of block from the rails below it.
-        item {
-            SectionHeader(
-                title = "Shop by category",
-                actionLabel = "See all",
-                onAction = { app.homeTab = HomeTab.CATEGORIES }
-            )
-        }
-        item { CategoryGrid(data.categories.take(8)) }
-
-        // ----------------------------------------------- 3. offers carousel
+        // Order on Home: festival, today's prices, then the aisles.
+        //
+        // Two full-bleed colour zones — green, then orange — with the cream
+        // directory beneath them gives the scroll a change of scale. Leading
+        // with twenty uniform category tiles instead put the first rupee two
+        // screens down, and buried the campaign entirely.
+        //
+        // The hero took over from the promo carousel, which was removed for an
+        // unsubstantiated "SAVE 8-20%" claim (D6) and third-party trade dress
+        // in its photograph. Zepto leads with its campaign and puts the
+        // directory under it; Blinkit runs no campaign at all. Tazzzo has one
+        // and it is live, so this follows Zepto.
+        item { CampaignHero() }
         item { Spacer(Modifier.height(SectionGap)) }
-        item { BannerCarousel(data.banners) }
+        item { PriceBandDealsPanel(data.deals) }
+        item { Spacer(Modifier.height(SectionGap)) }
+        item { CouponRail() }
+        item { Spacer(Modifier.height(SectionGap)) }
+
+        // ----------------------------------------------- the aisle directory
+        // Grouped, not a single truncated grid. Blinkit and Zepto both open on
+        // the aisle directory itself — heading, 4-up grid, next heading — and
+        // depth lives in the aisle. Showing eight tiles under one heading with
+        // a "See all" made the customer's second tap a whole extra screen just
+        // to see the rest of the shop.
+        data.categories.groupBy { it.group }.forEach { (group, cats) ->
+            item(key = "cat-header-$group") { SectionHeader(title = group) }
+            item(key = "cat-grid-$group") { CategoryGrid(cats) }
+            item(key = "cat-gap-$group") { Spacer(Modifier.height(TazSpace.md)) }
+        }
+
 
         // ------------------------------------ 4. bestsellers + order again
         item { Spacer(Modifier.height(SectionGap)) }
+        // Coupons that exist in config, with their thresholds stated. A coupon
+        // card that hides its minimum is a disappointment waiting in the cart.
+        // Data-backed: the biggest rupee savings among products already loaded
+        // for this feed. No historical price claims — just MRP vs price today.
+        item { Spacer(Modifier.height(SectionGap)) }
         item { ProductRail("Bestsellers", data.rails["Bestsellers"] ?: emptyList()) }
+        // Everyday staples, two-up, so the densest part of the basket is
+        // reachable without opening an aisle.
+        if (data.essentials.isNotEmpty()) {
+            item { Spacer(Modifier.height(SectionGap)) }
+            item { EssentialsGrid(data.essentials) }
+        }
         if (data.orderAgain.isNotEmpty()) {
             item { Spacer(Modifier.height(SectionGap)) }
             item {
@@ -280,20 +357,46 @@ private fun HomeHeader() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
         ) {
-            LogoImage(height = 26.dp)
-            Spacer(Modifier.weight(1f))
+            // The logo is deliberately absent. Home's most valuable row is the
+            // address and the search field; a wordmark on the screen someone
+            // opens twenty times a week earns nothing and costs ~26dp of the
+            // fold. It still leads the splash, the sign-in and the footer.
+            //
+            // Removing it left this row holding only a spacer, which pushed the
+            // address onto a line of its own beneath an empty gap. The address
+            // now shares this row, which is the arrangement it should have had:
+            // where the order is going, then the three standing actions.
+            Row(
+                Modifier.weight(1f)
+                    .guidedTarget("location")
+                    .defaultMinSize(minHeight = TazSize.touchTarget)
+                    .tazPressable(onClick = { /* address picker — demo only */ }, pressScale = TazPress.compact),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TazIcon(TazIcons.Location, null, size = TazSize.iconXs, tint = TazColors.Green)
+                Spacer(Modifier.width(TazSpace.xs))
+                Text(
+                    app.user.address,
+                    fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
+                    color = TazColors.TextPrimary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                TazIcon(TazIcons.Dropdown, null, size = TazSize.iconXs, tint = TazColors.TextSecondary)
+            }
             Box(Modifier.guidedTarget("coins")) {
                 CoinChip(app.user.coinBalance) { app.navigate(Screen.Coins) }
             }
-            Box(Modifier.guidedTarget("mic")) {
-                MicButton { app.showVoiceSheet = true }
-            }
+            // No mic here. Two microphones on one screen — this one and the one
+            // inside the search field — opened the same sheet and read as two
+            // different features. Voice belongs in the search bar, where
+            // speaking is the alternative to typing.
             Box(
                 Modifier
                     .size(TazSize.avatar)
                     .clip(CircleShape)
                     .background(TazColors.GreenSoft)
-                    .clickable { app.homeTab = HomeTab.ACCOUNT },
+                    .tazPressable(onClick = { app.homeTab = HomeTab.ACCOUNT }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 TazIcon(
@@ -303,56 +406,31 @@ private fun HomeHeader() {
             }
         }
 
-        // --- Row 2: one tappable line — promise, then where it goes ---------
-        Spacer(Modifier.height(TazSpace.sm))
+        // Row 2 used to repeat the address here. It moved up into row 1 when
+        // the logo left, so there is nothing between identity and search.
+
+        // --- Search, with voice inside it, and the Master List beside it -----
+        // Zepto puts a second entry point to the right of its search field.
+        // Ours is the Master List: the regulars a grocery customer rebuys, which
+        // is the highest-value thing that slot can hold in a repeat-purchase
+        // business.
+        Spacer(Modifier.height(TazSpace.md))
         Row(
-            Modifier
-                .fillMaxWidth()
-                .guidedTarget("location")
-                .defaultMinSize(minHeight = TazSize.touchTarget)
-                .clickable { /* address picker — demo only */ },
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(TazSpace.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TazIcon(TazIcons.Location, null, size = TazSize.iconXs, tint = TazColors.Green)
-            Spacer(Modifier.width(TazSpace.xs + TazSpace.xxs))
-            Text(
-                DeliveryCopy.headline(AppConfig.deliveryPromise),
-                fontSize = TazType.titleSize,
-                fontWeight = TazType.titleWeight,
-                color = TazColors.TextPrimary,
-                maxLines = 1
-            )
-            Text(
-                " · ",
-                fontSize = TazType.bodySize,
-                color = TazColors.TextTertiary,
-                maxLines = 1
-            )
-            Text(
-                app.user.address,
-                fontSize = TazType.bodySize,
-                color = TazColors.TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            TazIcon(
-                TazIcons.Dropdown, null,
-                size = TazSize.iconXs, tint = TazColors.TextSecondary
-            )
+            HomeSearchBar(Modifier.weight(1f))
+            MasterListButton()
         }
-
-        // --- The search bar: tall, lifted, unmissable ------------------------
-        Spacer(Modifier.height(TazSpace.md))
-        HomeSearchBar()
     }
 }
 
 @Composable
-private fun HomeSearchBar() {
+private fun HomeSearchBar(modifier: Modifier = Modifier) {
     val app = LocalAppState.current
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .height(TazSize.inputHeight)
             .guidedTarget("search")
@@ -360,21 +438,19 @@ private fun HomeSearchBar() {
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-            .clickable { app.navigate(Screen.Search) }
-            .padding(start = TazSpace.md, end = TazSpace.xs),
+            .semantics(mergeDescendants = true) { contentDescription = "Search products" }
+            .tazPressable(onClick = { app.navigate(Screen.Search) }, pressScale = TazPress.compact)
+            .padding(start = TazSpace.md, end = TazSpace.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TazIcon(TazIcons.Search, null, size = TazSize.iconSm, tint = TazColors.TextTertiary)
         Spacer(Modifier.width(TazSpace.sm))
-        Text(
-            "Search \"milk\", \"atta\", \"soap\"…",
-            fontSize = TazType.bodySize,
-            color = TazColors.TextTertiary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        MicButton(TazSize.avatar) { app.showVoiceSheet = true }
+        RotatingSearchHint(Modifier.weight(1f))
+        Spacer(Modifier.width(TazSpace.sm))
+        // Sized down from `avatar`: the field lost width to Master List beside
+        // it, and at the old size the mic was clipped by the field's own
+        // rounded edge — a control cut in half by its own container.
+        MicButton(TazSize.micButton) { app.showVoiceSheet = true }
     }
 }
 
@@ -393,9 +469,14 @@ private fun BannerCarousel(banners: List<PromoBanner>) {
     // customers try first.
     val pagerState = rememberPagerState(pageCount = { banners.size })
 
-    LaunchedEffect(banners) {
+    // Auto-advance is ambient motion: off under reduce-motion and under test.
+    // It also yields to the customer — a banner that is yanked away mid-drag,
+    // or advances while a finger is resting on it, is a classic annoyance.
+    LaunchedEffect(banners, MotionSettings.ambientEnabled) {
+        if (!MotionSettings.ambientEnabled) return@LaunchedEffect
         while (true) {
             delay(4000)
+            if (pagerState.isScrollInProgress) continue
             val next = (pagerState.currentPage + 1) % banners.size
             pagerState.animateScrollToPage(next, animationSpec = tween(450))
         }
@@ -413,11 +494,10 @@ private fun BannerCarousel(banners: List<PromoBanner>) {
                 else -> { { app.homeTab = HomeTab.CATEGORIES } }
             }
             Box(
-                Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick
-                )
+                // Banners are large surfaces, so the scale is gentle and a
+                // shape-clipped tint carries most of the response. Previously
+                // this had indication = null and gave no feedback at all.
+                Modifier.tazPressableCard(onClick = onClick, shape = TazRadius.tile)
             ) {
                 when (page) {
                     0 -> HeroBasketBanner()
@@ -541,9 +621,352 @@ private fun RestoreNoticeBanner() {
             modifier = Modifier
                 .defaultMinSize(minHeight = TazSize.touchTarget)
                 .clip(TazRadius.pill)
-                .clickable { app.restoreNotice = null }
+                .tazPressable(onClick = { app.restoreNotice = null }, pressScale = TazPress.compact)
                 .padding(horizontal = TazSpace.sm)
                 .wrapContentHeight()
+        )
+    }
+}
+
+@Composable
+private fun CouponRail() {
+    val coupons = com.tazzzo.app.config.PromotionConfig.active.filter { it.isCoupon }
+    if (coupons.isEmpty()) return
+    val app = LocalAppState.current
+    SectionHeader("Coupons & offers")
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .padding(horizontal = TazSpace.gutter),
+        horizontalArrangement = Arrangement.spacedBy(TazSpace.md)
+    ) {
+        coupons.forEach { c ->
+            Column(
+                Modifier.width(150.dp).clip(TazRadius.card).background(TazColors.GreenSoft)
+                    .border(BorderStroke(1.dp, TazColors.Green.copy(alpha = 0.25f)), TazRadius.card)
+                    .tazPressableCard(
+                        onClick = { app.couponCode = c.couponCode; app.navigate(Screen.Cart) },
+                        shape = TazRadius.card
+                    )
+                    .padding(TazSpace.md)
+            ) {
+                Text(
+                    c.flatRupees?.let { "FLAT ₹$it OFF" } ?: c.percent?.let { "$it% OFF" } ?: c.title,
+                    fontSize = TazType.titleSize, fontWeight = TazType.titleWeight, color = TazColors.Green
+                )
+                Spacer(Modifier.height(TazSpace.xxs))
+                Text(
+                    if (c.minOrderRupees > 0) "above ₹${c.minOrderRupees}" else "no minimum",
+                    fontSize = TazType.captionSize, color = TazColors.TextSecondary
+                )
+                Spacer(Modifier.height(TazSpace.sm))
+                Box(Modifier.clip(TazRadius.chip).background(TazColors.Surface).padding(horizontal = TazSpace.sm, vertical = TazSpace.xxs)) {
+                    Text(c.couponCode ?: "", fontSize = TazType.microSize, fontWeight = TazType.microWeight, color = TazColors.TextPrimary)
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(TazSpace.lg))
+}
+
+/**
+ * Festival / seasonal hero. Reads [com.tazzzo.app.config.CampaignConfig];
+ * renders nothing when there is no campaign, so Home never shows an empty slot.
+ *
+ * Artwork is [ASSET REQUIRED]: with no `heroImageUrl` the hero is a
+ * typographic treatment over Tazzzo green, with the collection's own category
+ * art (openly licensed, already attributed) as the visual cue. It is a real
+ * module with real destinations — the CTA opens the first collection aisle,
+ * each tile opens its aisle — not a decorative rectangle.
+ */
+@Composable
+private fun CampaignHero() {
+    val campaign = com.tazzzo.app.config.CampaignConfig.current ?: return
+    val app = LocalAppState.current
+    val byId = (Taxonomy.cached() ?: emptyList()).associateBy { it.id }
+    // Edge to edge, not another card in the gutter. Every other block on Home
+    // is an inset rounded rectangle, so a hero that is also an inset rounded
+    // rectangle has no way to read as the loudest thing on the page. Bleeding
+    // it to both edges and carrying a gradient is the one move that gives the
+    // scroll a change of scale.
+    Column(
+        Modifier.fillMaxWidth()
+            .background(
+                Brush.linearGradient(listOf(TazColors.GreenDark, TazColors.GreenMid))
+            )
+            .tazPressableCard(
+                onClick = { campaign.categoryIds.firstOrNull()?.let { app.navigate(Screen.CategoryDetail(it)) } },
+                shape = androidx.compose.ui.graphics.RectangleShape
+            )
+            .padding(horizontal = TazSpace.gutter, vertical = TazSpace.xl)
+    ) {
+        campaign.validUntilLabel?.let {
+            Text(
+                it.uppercase(), fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                letterSpacing = TazType.labelTracking, color = TazColors.White.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.height(TazSpace.xs))
+        }
+        Text(
+            campaign.title, fontSize = TazType.h1Size, fontWeight = TazType.h1Weight,
+            lineHeight = TazType.h1Line, color = TazColors.White
+        )
+        Spacer(Modifier.height(TazSpace.xxs))
+        Text(campaign.subtitle, fontSize = TazType.bodySize, color = TazColors.White.copy(alpha = 0.85f))
+        Spacer(Modifier.height(TazSpace.lg))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
+            campaign.categoryIds.take(4).forEach { id ->
+                val cat = byId[id] ?: return@forEach
+                Column(
+                    Modifier.weight(1f)
+                        .clip(TazRadius.card).background(TazColors.White.copy(alpha = 0.10f))
+                        // Distinct label: the SAME category also appears in the grid
+                        // below. Two controls announcing "Vegetables & Fruits" are
+                        // indistinguishable to a screen reader (and to a test).
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "${campaign.title}: ${cat.name}"
+                        }
+                        .tazPressableCard(onClick = { app.navigate(Screen.CategoryDetail(cat.id)) }, shape = TazRadius.card)
+                        .padding(TazSpace.sm),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Art where a vetted photograph exists, the category's own
+                    // emoji where it does not. Four tiles were withdrawn for
+                    // trade dress and an unverified licence, and without this
+                    // branch their campaign tiles rendered as an empty box.
+                    val art = com.tazzzo.app.ui.common.categoryArtFor(cat.id)
+                    if (art != null) {
+                        androidx.compose.foundation.Image(
+                            painter = org.jetbrains.compose.resources.painterResource(art),
+                            contentDescription = null,   // decorative; the tile carries the label
+                            modifier = Modifier.size(64.dp).clip(TazRadius.chip),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            Modifier.size(64.dp).clip(TazRadius.chip)
+                                .background(TazColors.White.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center
+                        ) { Text(cat.emoji, fontSize = 28.sp) }
+                    }
+                    Spacer(Modifier.height(TazSpace.xs))
+                    Text(
+                        // Two lines, not one. `substringBefore(",")` only
+                        // shortens names that HAVE a comma — "Dairy, Bread &
+                        // Eggs" becomes "Dairy", but "Vegetables & Fruits" and
+                        // "Sweet Tooth" have none and were chopped mid-word on
+                        // a 384dp screen ("Vegetabl", "Sweet To"). Verified on a
+                        // Galaxy S24 FE, which is narrower than the emulator.
+                        // First word only, one line. The full name wrapped to two
+                        // lines and still truncated ("Pooja & Religiou…") in a
+                        // 64dp column — a label that fits is worth more here
+                        // than a complete one, because the picture identifies it.
+                        cat.name.substringBefore(",").substringBefore(" &").trim(),
+                        fontSize = TazType.microSize,
+                        fontWeight = TazType.microWeight, lineHeight = TazType.microLine,
+                        textAlign = TextAlign.Center,
+                        color = TazColors.White, maxLines = 2, overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(TazSpace.lg))
+        Box(
+            Modifier.clip(TazRadius.pill).background(TazColors.White)
+                .padding(horizontal = TazSpace.lg, vertical = TazSpace.sm)
+        ) {
+            Text(
+                campaign.ctaLabel, fontSize = TazType.buttonSize, fontWeight = TazType.buttonWeight,
+                color = TazColors.GreenDark
+            )
+        }
+    }
+    Spacer(Modifier.height(SectionGap))
+}
+
+private val SearchHints = listOf(
+    "Search \"milk\", \"atta\", \"soap\"…",
+    "Search \"onion\", \"tomato\", \"palak\"…",
+    "Search \"agarbatti\", \"diya\", \"ghee\"…",
+    "Search \"biscuits\", \"chips\", \"tea\"…"
+)
+
+/**
+ * The search field's cycling hint.
+ *
+ * Gated on [MotionSettings.ambientEnabled], like every other perpetual
+ * animation in the app. An ungated `while (true) { delay(…) }` never lets
+ * Compose reach idle, and the instrumented suite waits on idle — one rotating
+ * placeholder would hang all six journey tests rather than fail them, which is
+ * far harder to diagnose than a red assertion.
+ */
+@Composable
+private fun RotatingSearchHint(modifier: Modifier = Modifier) {
+    var index by remember { mutableStateOf(0) }
+    val rotating = MotionSettings.ambientEnabled
+    LaunchedEffect(rotating) {
+        if (!rotating) return@LaunchedEffect
+        while (true) {
+            delay(3_200)
+            index = (index + 1) % SearchHints.size
+        }
+    }
+    Crossfade(SearchHints[index], animationSpec = tween(TazMotion.normal), label = "searchHint") {
+        Text(
+            it, fontSize = TazType.bodySize, color = TazColors.TextTertiary,
+            maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * Deals, grouped four to a row with the price band each item genuinely falls in.
+ *
+ * The mockup shows "₹9 STORE" / "₹19 STORE" ribbons. Tazzzo runs no price-point
+ * store and nothing sells at ₹9, so those bands would label empty shelves. The
+ * band here is read off the item's own price, which makes it both accurate and
+ * impossible to leave empty.
+ *
+ * No countdown. `Campaign` carries display copy, not an end timestamp, and the
+ * client does not gate merchandising on its own clock.
+ */
+@Composable
+private fun PriceBandDealsPanel(deals: List<Product>) {
+    if (deals.isEmpty()) return
+    val app = LocalAppState.current
+    val shown = deals.take(8)
+    // Full bleed, like the hero. Two edge-to-edge colour zones with cream
+    // between them give the page a rhythm; four inset cards in a row do not.
+    Column(
+        Modifier.fillMaxWidth().background(TazColors.OrangeSoft)
+            .padding(vertical = TazSpace.lg)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = TazSpace.md, vertical = TazSpace.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TazIcon(TazIcons.Offer, null, size = TazSize.iconSm, tint = TazColors.Orange)
+            Spacer(Modifier.width(TazSpace.sm))
+            Text(
+                "Today's deals", fontSize = TazType.h2Size, fontWeight = TazType.h2Weight,
+                color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
+            )
+            Text(
+                "See all", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+                color = TazColors.Orange,
+                modifier = Modifier
+                    .semantics(mergeDescendants = true) { contentDescription = "See all deals" }
+                    .tazPressable(
+                        onClick = { app.homeTab = HomeTab.DEALS },
+                        pressScale = TazPress.compact
+                    )
+                    .padding(TazSpace.xs)
+            )
+        }
+        shown.chunked(4).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth().padding(
+                    horizontal = TazSpace.sm, vertical = TazSpace.xs
+                ),
+                horizontalArrangement = Arrangement.spacedBy(TazSpace.xs)
+            ) {
+                row.forEach { product ->
+                    Box(Modifier.weight(1f)) {
+                        ProductCard(
+                            product,
+                            width = null,
+                            compact = true,
+                            ribbon = priceBandLabel(product.price),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/**
+ * Everyday staples, two to a row.
+ *
+ * The count is the size of the list actually drawn — the mockup's "42 Items"
+ * was a comp value, and a header that overstates the section it introduces is
+ * the same defect as a category tile overstating its aisle.
+ */
+@Composable
+private fun EssentialsGrid(products: List<Product>) {
+    if (products.isEmpty()) return
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(
+                horizontal = TazSpace.screenEdge, vertical = TazSpace.sm
+            ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Fresh & daily essentials", fontSize = TazType.h2Size,
+                fontWeight = TazType.h2Weight, color = TazColors.TextPrimary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            )
+            Text(
+                if (products.size == 1) "1 item" else "${products.size} items",
+                fontSize = TazType.captionSize, color = TazColors.TextTertiary, maxLines = 1
+            )
+        }
+        products.chunked(2).forEach { row ->
+            Row(
+                Modifier.fillMaxWidth().padding(
+                    horizontal = TazSpace.screenEdge, vertical = TazSpace.xs
+                ),
+                horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
+            ) {
+                row.forEach { product ->
+                    Box(Modifier.weight(1f)) {
+                        ProductCard(
+                            product, width = null, modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+/**
+ * Entry to the Master List, sitting beside the search field.
+ *
+ * Labelled and sized as a peer of search rather than a chip on it: a customer
+ * either hunts for something new (search) or restocks what they always buy
+ * (this). Those are the two ways into a grocery basket and they deserve equal
+ * billing.
+ */
+@Composable
+private fun MasterListButton() {
+    val app = LocalAppState.current
+    // Outlined, not filled. Filled green made it the loudest thing on the
+    // screen, competing with the search field it sits beside — and search is
+    // still the more common way in. Same height, same radius, quieter voice.
+    Column(
+        Modifier
+            .height(TazSize.inputHeight)
+            .clip(TazRadius.card)
+            .background(TazColors.GreenSoft)
+            .border(BorderStroke(1.dp, TazColors.Green.copy(alpha = 0.25f)), TazRadius.card)
+            .semantics(mergeDescendants = true) { contentDescription = "Master List" }
+            .tazPressable(
+                onClick = { app.navigate(Screen.MasterList) },
+                pressScale = TazPress.compact, shape = TazRadius.card
+            )
+            .padding(horizontal = TazSpace.md),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        TazIcon(TazIcons.Receipt, null, size = TazSize.iconSm, tint = TazColors.Green)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "My list", fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+            color = TazColors.Green, maxLines = 1
         )
     }
 }

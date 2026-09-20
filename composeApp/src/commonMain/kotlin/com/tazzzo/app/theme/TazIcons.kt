@@ -1,6 +1,7 @@
 package com.tazzzo.app.theme
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
@@ -36,6 +37,9 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material.icons.filled.Toll
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -70,6 +74,9 @@ object TazIcons {
     val Plus: ImageVector = Icons.Default.Add
     val Minus: ImageVector = Icons.Default.Remove
     val Offer: ImageVector = Icons.Outlined.LocalOffer
+    /** Expand / collapse affordance for disclosure rows (savings breakdown, fee reasons). */
+    val ChevronDown: ImageVector = Icons.Default.KeyboardArrowDown
+    val ChevronUp: ImageVector = Icons.Default.KeyboardArrowUp
     val Store: ImageVector = Icons.Default.Storefront
     val Inventory: ImageVector = Icons.Outlined.Inventory2
     val Filter: ImageVector = Icons.Default.Tune
@@ -92,6 +99,10 @@ object TazIcons {
     // status
     val Success: ImageVector = Icons.Default.CheckCircle
     val Check: ImageVector = Icons.Default.Check
+    val Bell: ImageVector = Icons.Outlined.Notifications
+    val Globe: ImageVector = Icons.Outlined.Language
+    val Edit: ImageVector = Icons.Outlined.Edit
+
     val Error: ImageVector = Icons.Default.ErrorOutline
     val Offline: ImageVector = Icons.Default.WifiOff
     val Info: ImageVector = Icons.Default.Info

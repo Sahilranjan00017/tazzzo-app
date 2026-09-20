@@ -1,6 +1,6 @@
 # TAZZZO — 5/5 EXPERIENCE AUDIT
 
-**Opened:** 2026-09-01 · **Status:** AUDIT COMPLETE / FIXES NOT YET STARTED
+**Opened:** 2026-09-01 · **Status:** E1 + E2 COMPLETE (Android-verified) · E3–E7 OPEN
 **Target:** 5/5 across the complete experience (raised from the 4.8/5 gate passed 2026-08-31)
 
 ---
@@ -31,7 +31,7 @@ against nine axes, and it is **not 5/5 if any single axis is obviously weak**:
 |---|---|
 | `[CODE]` | Verified by reading the source. Exact file and line given. |
 | `[VISUAL]` | Verified against rendered evidence in `docs/screenshots/`. |
-| `[RUN]` | Verified by driving the running app. **Not yet performed for this pass.** |
+| `[RUN]` | Verified by driving the running app. Performed on Android for E1; **iOS runtime blocked, see §7a.** |
 | `[DEVICE]` | Requires physical hardware. **I cannot perform this.** |
 | `[HUMAN]` | Requires a human session (screen-reader traversal). **I cannot perform this.** |
 | `[DEP]` | Capped by an external dependency (asset, backend, or your decision). |
@@ -187,12 +187,201 @@ This document is not closed until every row above either:
 
 **No row may be marked complete on the basis of "it compiles" or "tests pass."**
 
-**Current state: 0 of 7 fix waves executed. No score in this document has moved yet.**
+**Current state: E1 executed and verified on Android. E2–E7 not started.**
+
+---
+
+## 7a. WAVE E1 — INTERACTION SUBSTRATE (executed 2026-09-01)
+
+### Inspected
+All 65 `clickable` call sites, `PillButton`, `QuantityStepper`, `ProductCard`,
+`CategoryTile`, banners, bottom nav, toast, checkout selection rows, filter and
+sort controls, and every ambient animation site.
+
+### Found — including three defects the audit had NOT predicted
+
+| # | Finding | How it was found |
+|---|---|---|
+| **F1** | **The cart bar covered the bottom navigation.** As a bottom-aligned overlay it drew exactly over the nav bar, so from the moment a customer added one item, Home / Categories / Order Again / Account were **unreachable** until the cart was emptied. | On-device screenshot |
+| **F2** | **Home never stopped animating.** The voice banner ran **six** simultaneous infinite float animations, plus a self-advancing carousel — so Compose never reached idle. Real cost: battery, and the "multiple animations competing for attention" the brief forbids. | UI harness timed out on "pending recompositions" |
+| **F3** | **`selected` never reached the accessibility tree.** `clickable` + a separate `semantics` block produced **two** nodes: an outer clickable one and an inner labelled one. The state went on the wrong node. | `uiautomator` dump, then confirmed via the semantics tree |
+
+### Changed
+- **New `ui/interaction/` package** — one press language: shape-clipped scale
+  (`TazPress.card/control/compact/row`) plus an optional press tint. Not a
+  Material ripple: a rectangular ripple bleeding past a 14 dp card corner is
+  why feedback was switched off originally.
+- **Haptics** — `TazHaptic` vocabulary (Tap/Select/Add/Limit/Success/Error) with
+  `expect/actual` engines: Android via `View.performHapticFeedback` (respects
+  the OS setting, needs no permission), iOS via prepared `UIFeedbackGenerator`s
+  (unprepared generators fire ~100 ms late, which reads as broken). Both are
+  safe no-ops when haptics are unavailable. **16 call sites, not sprinkled.**
+- **`PillButton`** now owns `loading`: it shows a spinner, keeps its height, and
+  **refuses taps**. Callers previously faked it by rewriting the label while the
+  button stayed enabled, so a second tap gave a ripple and did nothing.
+- **`QuantityStepper`** is now **one control that transforms** — the pill
+  silhouette is held constant and only the interior crossfades — with quantity
+  digits animating directionally, and **44 dp touch targets inside the 40 dp
+  visual pill** (the spec's own minimum, previously violated).
+- **`MotionSettings.ambientEnabled`** — one gate for all perpetual motion
+  (shimmer, marquee, pulse, equaliser, carousel, pointer bob). Serves
+  reduce-motion (E6), battery, and test determinism.
+- **Cart bar** takes `aboveNav`, animates in/out, and no longer covers the nav.
+- **Toast** animates, is anchored to real geometry instead of a magic `120.dp`,
+  and carries `liveRegion` semantics so a refusal is **announced**, not only shown.
+- **`Modifier.selectable`** for nav tabs and checkout selection rows, so state,
+  role and action live on one node.
+
+### Android verification `[RUN]`
+Driven on a booted emulator (1080×2400, API 35), evidence in
+`docs/screenshots/e1-after/`:
+- ADD → stepper transforms in place, no card reflow, cart bar appears `03_added.png`
+- Quantity capped at 10, `+` dimmed, toast "Limit of 10 per order" renders above
+  the cart bar, incentive copy flips to "Free delivery unlocked" `04_limit_toast.png`
+- Cart bar clears the nav; all four tabs reachable and Categories selected `07_cart_above_nav.png`
+- 480×854 @ 240 dpi: checkout CTA above the fold, disabled **with its reason**
+  stated, "To pay" visible `10_small_480x854.png`
+
+**New on-device UI harness** (`androidInstrumentedTest`) — the project's first,
+asserting against the same semantics tree TalkBack reads:
+```
+InteractionSemanticsTest — OK (3 tests)
+  bottom_nav_publishes_selected_state_to_the_accessibility_tree
+  switching_tab_moves_the_selected_state
+  add_control_transforms_into_a_stepper_in_place
+```
+`uiautomator` is explicitly **not** treated as an oracle here — it flattened the
+nav into three same-bounds nodes and hid the very state being verified.
+
+### iOS verification
+**NOT PERFORMED.** `[DEP]` The simulator integration refuses to attach:
+`Xcode is installed but not selected` → needs
+`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, which
+requires your password. iOS **compiles** (`iosSimulatorArm64Test`, 69/69) and
+the shared code is identical, but E1 is **unverified at runtime on iOS** —
+specifically the `UIFeedbackGenerator` haptics, which have no Android analogue
+in this codebase and cannot be inferred from a passing build.
+
+### Tests
+Unit **69 → 69**, 0 failures. Instrumented **0 → 3**, 0 failures.
+
+### Scores
+| Component | Before | After | Note |
+|---|---|---|---|
+| Pressed state (app-wide) | 2.0 | **5.0** | 47 surfaces, one language |
+| Haptics | 0.0 | **4.5** | `[DEP]` iOS runtime unverified |
+| `PillButton` | 3.5 | **5.0** | idle/pressed/loading/disabled, enforced by the component |
+| `QuantityStepper` | 3.5 | **5.0** | one transforming control, 44 dp targets |
+| `ProductCard` press | 4.0 | **5.0** | |
+| Bottom nav | 4.0 | **4.5** | selected announced + animated; icon-family weight still mixed (E5) |
+| Toast | 3.0 | **5.0** | animated, anchored, announced |
+| Cart bar | 4.5 | **5.0** | F1 fixed; animated |
+| Hero banner fake CTA | 2.5 | 2.5 | **unchanged** — restyling the pill is E5 |
+| Home skeleton | 3.5 | 3.5 | **unchanged** — E4 |
+
+Motion, navigation direction and state continuity are **untouched by E1** and
+remain at their audit scores; they are E2/E3.
+
+---
+
+## 7b. WAVE E2 — NAVIGATION & CONTINUITY (executed 2026-09-01)
+
+### Inspected
+`App.kt` screen host, `AppState` back stack, every `remember` holding customer
+context, all lazy containers, `ProductRail`, `MicButton`, the system-back chain.
+
+### Found
+| # | Finding |
+|---|---|
+| **S2** | Confirmed: one `Crossfade` for every screen change. Forward and back were pixel-identical. |
+| **S3** | Confirmed and worse than "no `rememberSaveable`": `Crossfade` **disposes** the outgoing screen, so state was not merely unsaved, it was destroyed. |
+| **F4** | **`MicButton` could be focused but not activated by a screen reader.** The label was on an outer `Box` and the click on an inner one, so the focused node carried **no action**. The 44 dp `defaultMinSize` was also on the outer box while the clickable was the 36 dp circle — the code looked like it enforced the minimum; **the real touch target was 36 dp.** Found by an instrumented test, not by reading. |
+| **F5** | **Neither search entry point had an accessibility label** — the Home search bar and the search field were both unnamed. A screen reader announced an unlabelled edit box. |
+
+### Changed
+- **`NavMotion.kt`** — a directional language. Forward: new screen in from the
+  right, old one parallaxes ¼-width left (reads as "still underneath", not
+  discarded). Backward: exactly reversed. Replace: fade, for stack resets where
+  no spatial story exists. `TazMotion.nav = 240 ms`, deliberately *shorter* than
+  the 300 ms crossfade it replaces — a slide reads slower than a fade of equal
+  duration because the eye tracks the moving edge. Decelerate easing, no bounce.
+- **`SaveableStateHolder` keyed by `Screen.stateKey`** — the actual fix for S3.
+  Keyed by destination identity, **not** back-stack index, because an index
+  shifts on pop and would discard the state being preserved. Retained state is
+  pruned when a destination leaves the stack.
+- **Customer context made saveable** — search query, settled query, filters
+  (with a `ProductFiltersSaver`), selected aisle, Home scroll, category grid
+  scroll. Transient UI (the sort sheet) deliberately stays `remember` so it does
+  *not* come back.
+- **`ProductRail`** — retains its own horizontal scroll per rail, and declares
+  `contentType` so Compose reuses card compositions instead of rebuilding a
+  subtree per item. Same `contentType` on the category grid and aisle rail.
+- **Double-navigation guard** in `AppState.navigate` — a push of the destination
+  already on top is ignored, so a double-tapped card cannot stack two identical
+  PDPs and force two back presses.
+- **Back hierarchy** — overlays now swallow the first back press
+  (voice sheet → guided tour → checkout step → nav stack → tab → exit).
+- **F4/F5 fixed** — label, action and 44 dp touch area on one node for
+  `MicButton`; both search entry points labelled.
+
+### Verified `[RUN]` — Android emulator, API 35
+Instrumented suite **3 → 9 tests, all passing**:
+```
+InteractionSemanticsTest (3)  ·  NavigationJourneyTest (6)
+  home_to_category_to_pdp_and_back_returns_through_the_stack
+  category_scroll_position_survives_opening_a_product_and_coming_back
+  search_query_survives_opening_a_product_and_coming_back
+  rapid_taps_do_not_stack_duplicate_destinations
+  system_back_dismisses_the_voice_sheet_before_popping_the_screen
+  tab_switching_preserves_each_tabs_state
+```
+The scroll test asserts the **same product at the same pixel offset** after a
+round trip (drift < 8 px), not merely "something is on screen".
+
+Unit tests **69 → 69**, 0 failures. iOS **compiles**; still not runtime-verified.
+
+### Scores
+| Area | Before | After |
+|---|---|---|
+| Navigation direction (S2) | 2.0 | **5.0** |
+| State continuity (S3) | 1.5 | **5.0** |
+| Double-nav safety | 2.5 | **5.0** |
+| Back hierarchy | 3.5 | **5.0** |
+| Rail scroll retention | 2.0 | **5.0** |
+| `MicButton` a11y (F4) | 2.0 | **5.0** |
+| Search labelling (F5) | 2.0 | **5.0** |
+
+### NOT done in E2 — stated plainly
+Keyboard/IME choreography, skeleton geometry matching, sheet motion language,
+scroll-jank profiling and the **Perceived Performance & Smoothness Audit** are
+**not** in this wave. Nothing above claims a measured latency or frame number;
+every score is a behavioural assertion backed by a passing on-device test.
+Perceived-performance numbers on an emulator would be worthless — that audit
+needs `[DEVICE]` hardware and is recorded as such.
 
 ---
 
 ## 8. LOG
 
+- **2026-09-06** — Commerce wave C2 (see `TAZZZO_COMMERCE_EXPERIENCE_AUDIT.md`
+  §2). **F8** double gutter on cart cards — found by eye, not by test. Two new
+  test-failure classes recorded in TESTING.md: process-global mock memory, and
+  post-reinstall cold start (fixed by warm-up, not by widening timeouts).
+- **2026-09-05** — Commerce wave C1 (see `TAZZZO_COMMERCE_EXPERIENCE_AUDIT.md`).
+  Two more defects found by RUNNING, in the same family as F1–F5: **F6**
+  "Start shopping" landed on the last-open tab in 7 files (stack reset, tab
+  not); **F7** the cart's Club card contradicted the bill after a coupon won.
+  Test environment right-sized (§41): smoke suite 340 s/never-green → 18.6 s
+  green. Promotion engine added with 22 deterministic money tests.
+- **2026-09-01** — E2 executed. Directional navigation, per-destination state
+  retention, double-nav guard, overlay-first back. Two further a11y defects
+  found by test (F4 MicButton unactivatable + 36dp target, F5 unlabelled search).
+  Instrumented suite 3 → 9, all passing.
+- **2026-09-01** — E1 executed. Three unpredicted defects found by running the
+  app rather than reading it: the cart bar covered the bottom nav, Home never
+  stopped animating, and `selected` never reached the accessibility tree. First
+  on-device UI harness added. iOS runtime verification blocked on Xcode
+  selection (needs your password).
 - **2026-09-01** — Audit opened. Freeze reopened by design owner; target raised to
   5/5. Four structural findings (S1–S4) established by source verification.
   Component and screen inventories scored against rendered evidence. No fixes

@@ -42,6 +42,9 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -59,6 +62,28 @@ import com.tazzzo.app.config.DeliveryCopy
 import com.tazzzo.app.data.model.Availability
 import com.tazzzo.app.data.model.Category
 import com.tazzzo.app.data.model.Product
+import androidx.compose.material3.CircularProgressIndicator
+import com.tazzzo.app.ui.interaction.TazHaptic
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.tazPressableCard
+import com.tazzzo.app.ui.interaction.tazPressableIcon
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.semantics.Role
+import com.tazzzo.app.theme.TazMotion
+import com.tazzzo.app.ui.interaction.rememberHaptics
+import com.tazzzo.app.theme.MotionSettings
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.graphics.luminance
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -74,7 +99,6 @@ import tazzzo.resources.banner_coins
 import tazzzo.resources.cat_fruits
 import tazzzo.resources.cat_dairy
 import tazzzo.resources.cat_atta
-import tazzzo.resources.cat_oil
 import tazzzo.resources.cat_meat
 import tazzzo.resources.cat_munchies
 import tazzzo.resources.cat_drinks
@@ -83,13 +107,53 @@ import tazzzo.resources.cat_instant
 import tazzzo.resources.cat_sweet
 import tazzzo.resources.cat_bakery
 import tazzzo.resources.cat_personal
-import tazzzo.resources.cat_skincare
 import tazzzo.resources.cat_pharma
-import tazzzo.resources.cat_baby
-import tazzzo.resources.cat_cleaning
 import tazzzo.resources.cat_home
 import tazzzo.resources.cat_pet
+import tazzzo.resources.cat_pooja
+import tazzzo.resources.prod_p62
+import tazzzo.resources.prod_p50
+import tazzzo.resources.prod_p44
+import tazzzo.resources.prod_p43
+import tazzzo.resources.prod_p37
+import tazzzo.resources.prod_p36
+import tazzzo.resources.prod_p15
+import tazzzo.resources.prod_p11
+import tazzzo.resources.prod_p1
+import tazzzo.resources.prod_p2
+import tazzzo.resources.prod_p3
+import tazzzo.resources.prod_p4
+import tazzzo.resources.prod_p5
+import tazzzo.resources.prod_p6
+import tazzzo.resources.prod_p7
+import tazzzo.resources.prod_p9
+import tazzzo.resources.prod_p10
+import tazzzo.resources.prod_p12
+import tazzzo.resources.prod_p13
+import tazzzo.resources.prod_p14
+import tazzzo.resources.prod_p17
+import tazzzo.resources.prod_p18
+import tazzzo.resources.prod_p20
+import tazzzo.resources.prod_p21
+import tazzzo.resources.prod_p24
+import tazzzo.resources.prod_p25
+import tazzzo.resources.prod_p26
+import tazzzo.resources.prod_p27
+import tazzzo.resources.prod_p28
+import tazzzo.resources.prod_p29
+import tazzzo.resources.prod_p33
+import tazzzo.resources.prod_p35
+import tazzzo.resources.prod_p39
+import tazzzo.resources.prod_p40
+import tazzzo.resources.prod_p41
+import tazzzo.resources.prod_p42
+import tazzzo.resources.prod_p45
+import tazzzo.resources.prod_p47
+import tazzzo.resources.prod_p60
+import tazzzo.resources.prod_p61
+import tazzzo.resources.prod_p63
 import tazzzo.resources.cat_paan
+import com.tazzzo.app.config.freeDeliveryProgress
 
 // ---------------------------------------------------------------------------
 // Icon primitive
@@ -117,11 +181,15 @@ fun TazIcon(
 // placeholder is always the exact silhouette of the thing that replaces it.
 // ---------------------------------------------------------------------------
 
-internal val ProductCardWidth: Dp = 158.dp
+// 120dp: three cards fit a 360dp screen with the gutter. The previous 158dp
+// showed 2.3 cards and read as sparse next to every mature commerce app.
+internal val ProductCardWidth: Dp = 120.dp
 internal val ProductCardImageHeight: Dp = 104.dp
 /** Card image container aspect — 158w x 104h ≈ 1.52. Fixed so the grid aligns. */
-internal const val ProductCardImageAspect: Float = 1.52f
-internal val ProductCardPadding: Dp = 10.dp
+// Square: the ADD control now floats on the image, so the image is the card's
+// stage and a square stage keeps every rail the same height.
+internal const val ProductCardImageAspect: Float = 1f
+internal val ProductCardPadding: Dp = 8.dp
 internal val ProductNameBlockHeight: Dp = 34.dp   // exactly two lines of productNameLine
 
 /** Below this content width the price and the control cannot share a line. */
@@ -139,6 +207,19 @@ fun LogoImage(height: Dp, modifier: Modifier = Modifier) {
         modifier = modifier.height(height)
     )
 }
+
+
+/**
+ * Label colour for a filled pill, chosen from the fill's own luminance.
+ *
+ * Previously the label was hard-coded white whenever the button was filled, so
+ * a light fill produced white-on-white — a button with no visible text at all.
+ * That shipped on the Deals campaign band and was invisible to every semantic
+ * assertion, because the label node was present and correct; only a screenshot
+ * showed a blank pill. Deriving the colour means no caller can reintroduce it.
+ */
+internal fun pillLabelColor(fill: Color): Color =
+    if (fill.luminance() > 0.5f) TazColors.TextPrimary else TazColors.White
 
 /** TAZZZO wordmark rendered as text (for places where the PNG is too heavy). */
 @Composable
@@ -170,7 +251,7 @@ fun TazTopBar(
                 Box(
                     Modifier.size(TazSize.touchTarget).clip(CircleShape)
                         .background(TazColors.SurfaceSunken)
-                        .clickable { onBack() },
+                        .tazPressable(onClick = { onBack() }, pressScale = TazPress.compact),
                     contentAlignment = Alignment.Center
                 ) {
                     TazIcon(TazIcons.Back, "Back", size = TazSize.iconSm)
@@ -204,7 +285,7 @@ fun SectionHeader(title: String, actionLabel: String? = null, onAction: (() -> U
         )
         if (actionLabel != null) {
             Row(
-                Modifier.clip(TazRadius.pill).clickable { onAction?.invoke() }
+                Modifier.clip(TazRadius.pill).tazPressable(onClick = { onAction?.invoke() }, pressScale = TazPress.compact)
                     .padding(horizontal = TazSpace.sm, vertical = TazSpace.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -230,16 +311,29 @@ fun PillButton(
     filled: Boolean = true,
     color: Color = TazColors.Green,
     enabled: Boolean = true,
-    disabledHint: String? = null
+    disabledHint: String? = null,
+    loading: Boolean = false,
+    loadingText: String? = null,
+    haptic: TazHaptic? = TazHaptic.Tap
 ) {
+    // A loading button is NOT a disabled button and must not look like one:
+    // disabled means "you may not do this", loading means "I am doing it".
+    // But it is equally not tappable — the old behaviour rewrote the label to
+    // "Sending OTP…" while leaving the control fully enabled, so a second tap
+    // produced a ripple and silently did nothing. The component now owns that,
+    // so no caller can get it wrong again.
+    val interactive = enabled && !loading
+
     val bg = when {
+        loading -> if (filled) color else TazColors.Surface
         !enabled -> TazColors.GreenDisabled
         filled -> color
         else -> TazColors.Surface
     }
     val fg = when {
+        loading -> if (filled) pillLabelColor(color) else color
         !enabled -> TazColors.TextPrimary          // dark-on-light: readable disabled state
-        filled -> TazColors.White
+        filled -> pillLabelColor(color)
         else -> color
     }
     Box(
@@ -252,21 +346,45 @@ fun PillButton(
                 TazRadius.pill
             )
             .semantics {
-                if (!enabled) {
+                if (loading) {
+                    // Announced as busy, not as broken.
+                    stateDescription = loadingText ?: "Working"
+                } else if (!enabled) {
                     disabled()
                     disabledHint?.let { stateDescription = it }
                 }
             }
-            .clickable(enabled = enabled) { onClick() }
+            .tazPressable(
+                onClick = onClick,
+                enabled = interactive,
+                pressScale = TazPress.control,
+                haptic = haptic
+            )
             .padding(vertical = TazSpace.md, horizontal = TazSpace.xxl),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            // two lines rather than one: an action label that truncates loses
-            // its meaning, and long labels exist ("Verify & Start Shopping").
-            text, color = fg, fontWeight = TazType.buttonWeight, fontSize = TazType.buttonSize,
-            textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (loading) {
+                // Sized to the cap height of the label so the button never
+                // changes height between idle and loading.
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = fg,
+                    strokeWidth = 2.dp
+                )
+                Spacer(Modifier.width(TazSpace.sm))
+            }
+            Text(
+                // two lines rather than one: an action label that truncates loses
+                // its meaning, and long labels exist ("Verify & Start Shopping").
+                if (loading) (loadingText ?: text) else text,
+                color = fg, fontWeight = TazType.buttonWeight, fontSize = TazType.buttonSize,
+                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -285,7 +403,8 @@ fun MarqueeRow(
         content()
         content()
     }
-    LaunchedEffect(reverse) {
+    LaunchedEffect(reverse, MotionSettings.ambientEnabled) {
+        if (!MotionSettings.ambientEnabled) return@LaunchedEffect   // static row
         while (scroll.maxValue == 0 || scroll.maxValue == Int.MAX_VALUE) {
             withFrameNanos { }
         }
@@ -321,6 +440,24 @@ fun EmojiBox(
         modifier.clip(RoundedCornerShape(corner)).background(bg),
         contentAlignment = Alignment.Center
     ) { Text(emoji, fontSize = fontSize) }
+}
+
+/** Rupee-off badge — the exact saving, which is what a customer can verify. */
+@Composable
+fun SavingsBadge(rupeesOff: Int, modifier: Modifier = Modifier) {
+    if (rupeesOff > 0) {
+        Box(
+            modifier
+                .clip(RoundedCornerShape(topStart = TazRadius.cardDp, bottomEnd = TazRadius.chipDp))
+                .background(TazColors.Orange)
+                .padding(horizontal = TazSpace.sm, vertical = 3.dp)
+        ) {
+            Text(
+                "₹$rupeesOff OFF", color = TazColors.White, fontSize = TazType.microSize,
+                fontWeight = TazType.microWeight, maxLines = 1
+            )
+        }
+    }
 }
 
 @Composable
@@ -410,19 +547,26 @@ fun PriceColumn(price: Int, mrp: Int) {
  */
 @Composable
 private fun CardPriceBlock(price: Int, mrp: Int, modifier: Modifier = Modifier) {
-    Row(modifier, verticalAlignment = Alignment.Bottom) {
-        Text(
-            "₹$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
-            color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
-        )
-        if (mrp > price) {
-            Spacer(Modifier.width(6.dp))
+    // Commerce hierarchy on the card: PRICE leads (bold), MRP struck beside it,
+    // and the saving stated in RUPEES underneath — a ₹8 the customer can check
+    // beats a 20% they cannot. One savings signal per card; the orange badge
+    // on the image carries the same figure so the card never says it twice
+    // in two units.
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                "₹$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
-                textDecoration = TextDecoration.LineThrough,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
+                "₹$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
+                color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
+            if (mrp > price) {
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "₹$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                    textDecoration = TextDecoration.LineThrough,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
         }
     }
 }
@@ -438,7 +582,7 @@ fun CoinChip(balance: Int, onClick: () -> Unit) {
             .defaultMinSize(minHeight = TazSize.touchTarget)
             .clip(TazRadius.pill).background(TazColors.CoinSoft)
             .border(BorderStroke(1.dp, TazColors.CoinInk), TazRadius.pill)
-            .clickable { onClick() }.padding(horizontal = TazSpace.md, vertical = TazSpace.xs),
+            .tazPressable(onClick = { onClick() }, pressScale = TazPress.compact).padding(horizontal = TazSpace.md, vertical = TazSpace.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
         TazIcon(TazIcons.Coin, null, size = TazSize.iconSm, tint = TazColors.CoinInk)
@@ -452,13 +596,29 @@ fun CoinChip(balance: Int, onClick: () -> Unit) {
 
 @Composable
 fun MicButton(size: Dp = TazSize.micButton, onClick: () -> Unit) {
+    // Two defects lived here, both invisible on screen and both found by an
+    // instrumented test rather than by reading the code:
+    //
+    //  1. The LABEL was on the outer box and the CLICK was on the inner one, so
+    //     a screen-reader user could focus "Voice shopping — coming soon" and
+    //     had no way to activate it — the focused node carried no action.
+    //  2. The 44dp `defaultMinSize` was on the outer box too, while the
+    //     clickable was only the 36dp circle. The code looked like it enforced
+    //     the accessibility minimum; the actual touch target was 36dp.
+    //
+    // Both are fixed by putting the label, the action and the touch area on one
+    // node, and letting the circle be purely decorative inside it.
     Box(
-        Modifier.defaultMinSize(minWidth = TazSize.touchTarget, minHeight = TazSize.touchTarget)
-            .semantics { contentDescription = "Voice shopping — coming soon" },
+        Modifier
+            .defaultMinSize(minWidth = TazSize.touchTarget, minHeight = TazSize.touchTarget)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Voice shopping — coming soon"
+            }
+            .tazPressable(onClick = onClick, pressScale = TazPress.compact),
         contentAlignment = Alignment.Center
     ) {
         Box(
-            Modifier.size(size).clip(CircleShape).background(TazColors.Green).clickable { onClick() },
+            Modifier.size(size).clip(CircleShape).background(TazColors.Green),
             contentAlignment = Alignment.Center
         ) { TazIcon(TazIcons.Mic, null, size = TazSize.iconSm, tint = TazColors.White) }
     }
@@ -480,6 +640,7 @@ fun MicButton(size: Dp = TazSize.micButton, onClick: () -> Unit) {
 @Composable
 fun QuantityStepper(product: Product, modifier: Modifier = Modifier) {
     val app = LocalAppState.current
+    val haptics = rememberHaptics()
     val qty = app.quantityOf(product)
 
     if (!product.isPurchasable) {
@@ -499,194 +660,367 @@ fun QuantityStepper(product: Product, modifier: Modifier = Modifier) {
     }
 
     val atLimit = qty >= product.purchasableLimit
-    if (qty == 0) {
-        Box(
-            modifier.defaultMinSize(minWidth = 74.dp).height(TazSize.buttonHeightSm)
-                .clip(TazRadius.pill).background(TazColors.Surface)
-                .border(BorderStroke(1.5.dp, TazColors.Success), TazRadius.pill)
-                .clickable { app.addToCart(product) }
-                .padding(horizontal = TazSpace.md),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "ADD", color = TazColors.Success, fontSize = TazType.buttonSize,
-                fontWeight = TazType.buttonWeight, maxLines = 1
-            )
-        }
-    } else {
-        Row(
-            modifier.defaultMinSize(minWidth = 74.dp).height(TazSize.buttonHeightSm)
-                .clip(TazRadius.pill).background(TazColors.Success),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .semantics { contentDescription = "Decrease quantity of ${product.name}" }
-                    .clickable { app.removeFromCart(product) }
-                    .size(TazSize.buttonHeightSm),
-                contentAlignment = Alignment.Center
-            ) {
-                TazIcon(TazIcons.Minus, null, size = TazSize.iconSm, tint = TazColors.White)
-            }
-            Text(
-                "$qty", color = TazColors.White, fontSize = TazType.buttonSize,
-                fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1
-            )
-            Box(
-                Modifier
-                    .semantics {
+
+    // ONE control that transforms, not two controls that swap.
+    //
+    // The pill silhouette is held constant (same min width, same height, same
+    // radius) and only its interior crossfades, so the card never reflows and
+    // the customer reads it as the ADD button *becoming* the stepper. The
+    // container keeps its own identity across the change; only `qty == 0`
+    // drives the interior.
+    val inCart = qty > 0
+    val containerColor by animateColorAsState(
+        targetValue = if (inCart) TazColors.Success else TazColors.Surface,
+        animationSpec = tween(TazMotion.fast),
+        label = "stepperContainer"
+    )
+    Box(
+        modifier
+            .defaultMinSize(minWidth = 74.dp)
+            .height(TazSize.buttonHeightSm)
+            .clip(TazRadius.pill)
+            .background(containerColor)
+            .border(
+                BorderStroke(if (inCart) 0.dp else 1.5.dp, TazColors.Success),
+                TazRadius.pill
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Crossfade(targetState = inCart, animationSpec = tween(TazMotion.fast), label = "stepper") { showStepper ->
+            if (!showStepper) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        // Label merged BEFORE the pressable so it lands on the
+                        // same accessibility node as the action (verified: the
+                        // reverse order splits them into two nodes).
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "Add ${product.name} to cart"
+                        }
+                        .tazPressable(
+                            onClick = { if (app.addToCart(product)) haptics.perform(TazHaptic.Add) },
+                            pressScale = TazPress.control,
+                            role = Role.Button
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "ADD", color = TazColors.Success, fontSize = TazType.buttonSize,
+                        fontWeight = TazType.buttonWeight, maxLines = 1
+                    )
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 44dp TOUCH target inside a 40dp VISUAL pill: the design
+                    // spec's accessibility minimum was being violated by reusing
+                    // the silhouette height as the hit area. The pill still
+                    // renders at buttonHeightSm; only the touch region grows.
+                    StepperTouchTarget(
+                        contentDescription = "Decrease quantity of ${product.name}",
+                        onClick = {
+                            app.removeFromCart(product)
+                            haptics.perform(TazHaptic.Add)
+                        }
+                    ) {
+                        TazIcon(TazIcons.Minus, null, size = TazSize.iconSm, tint = TazColors.White)
+                    }
+                    // Quantity animates so a change is never silent, even when
+                    // the finger is covering the + button that caused it.
+                    AnimatedContent(
+                        targetState = qty,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                (slideInVertically { it / 2 } + fadeIn(tween(TazMotion.fast))) togetherWith
+                                    (slideOutVertically { -it / 2 } + fadeOut(tween(TazMotion.fast)))
+                            } else {
+                                (slideInVertically { -it / 2 } + fadeIn(tween(TazMotion.fast))) togetherWith
+                                    (slideOutVertically { it / 2 } + fadeOut(tween(TazMotion.fast)))
+                            }.using(SizeTransform(clip = false))
+                        },
+                        label = "qty"
+                    ) { value ->
+                        Text(
+                            "$value", color = TazColors.White, fontSize = TazType.buttonSize,
+                            fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1
+                        )
+                    }
+                    StepperTouchTarget(
                         contentDescription =
                             if (atLimit) "Maximum quantity of ${product.name} reached"
-                            else "Increase quantity of ${product.name}"
+                            else "Increase quantity of ${product.name}",
+                        onClick = {
+                            if (atLimit) {
+                                // The screen barely changes when we refuse, so the
+                                // hand has to be told. This is the canonical haptic.
+                                haptics.perform(TazHaptic.Limit)
+                                val stock = product.availability
+                                app.transientMessage =
+                                    if (stock is Availability.LowStock) "Only ${stock.remaining} left in stock"
+                                    else "Limit of ${product.maxOrderQuantity} per order"
+                            } else {
+                                if (app.addToCart(product)) haptics.perform(TazHaptic.Add)
+                            }
+                        }
+                    ) {
+                        TazIcon(
+                            TazIcons.Plus, null, size = TazSize.iconSm,
+                            tint = if (atLimit) TazColors.White.copy(alpha = 0.45f) else TazColors.White
+                        )
                     }
-                    .clickable {
-                        if (atLimit) {
-                            val stock = product.availability
-                            app.transientMessage =
-                                if (stock is Availability.LowStock) "Only ${stock.remaining} left in stock"
-                                else "Limit of ${product.maxOrderQuantity} per order"
-                        } else app.addToCart(product)
-                    }
-                    .size(TazSize.buttonHeightSm),
-                contentAlignment = Alignment.Center
-            ) {
-                TazIcon(
-                    TazIcons.Plus, null, size = TazSize.iconSm,
-                    tint = if (atLimit) TazColors.White.copy(alpha = 0.45f) else TazColors.White
-                )
+                }
             }
         }
+    }
+}
+
+/**
+ * A stepper control whose TOUCH area meets the 44dp accessibility minimum
+ * while its VISUAL footprint stays at the compact 40dp pill height.
+ *
+ * The extra 4dp is taken outside the drawn pill, so nothing moves on screen.
+ */
+@Composable
+private fun StepperTouchTarget(
+    contentDescription: String,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Box(
+        Modifier
+            .size(TazSize.buttonHeightSm)
+            .wrapContentSize(unbounded = true)
+            .size(TazSize.touchTarget)
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription }
+            .tazPressable(
+                onClick = onClick,
+                pressScale = TazPress.compact,
+                role = Role.Button
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
     }
 }
 
 @Composable
-fun ProductCard(product: Product, modifier: Modifier = Modifier) {
+fun ProductCard(
+    product: Product,
+    modifier: Modifier = Modifier,
+    /**
+     * Fixed cell width, or null to let the caller size the card.
+     *
+     * Applied BEFORE [modifier] so a caller's `weight(1f)` or `fillMaxWidth()`
+     * wins — with the width applied after, every grid cell would silently
+     * collapse back to the rail width and the two-up and four-up grids would
+     * render as one narrow column.
+     */
+    width: Dp? = ProductCardWidth,
+    /**
+     * Drops the per-unit price line and holds the name to one line.
+     *
+     * For four-up grids, where the full body would wrap the name to three lines
+     * and squeeze the price out of the cell. Nothing that is a price CLAIM is
+     * dropped — the saving in rupees and the struck MRP both survive.
+     */
+    compact: Boolean = false,
+    /**
+     * Optional band label drawn on the artwork, e.g. "Under ₹29".
+     *
+     * When set, the low-stock chip moves to the opposite corner so the two never
+     * overlap — stock is the more important of the two and must stay visible.
+     */
+    ribbon: String? = null,
+) {
     val app = LocalAppState.current
+    val inCart = app.quantityOf(product) > 0
     Box(
-        modifier = modifier
-            .width(ProductCardWidth)
-            .shadow(2.dp, TazRadius.card, spotColor = Color.Black.copy(alpha = 0.18f))
+        modifier = (if (width != null) Modifier.width(width) else Modifier)
+            .then(modifier)
+            // No drop shadow: a 1px structural border separates the card from
+            // the canvas without the smudge, and costs nothing per frame.
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) { app.navigate(Screen.ProductDetail(product.id)) }
+            .tazPressableCard(
+                onClick = { app.navigate(Screen.ProductDetail(product.id)) },
+                shape = TazRadius.card
+            )
     ) {
         Column(Modifier.fillMaxWidth()) {
-            // --- image well: flat, sunken, one colour for the whole grid ------
-            // One image architecture for every product surface — fixed aspect,
-            // Fit (never Crop), skeleton while loading, graceful fallback.
-            ProductImage(
-                product = product,
-                modifier = Modifier.fillMaxWidth()
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = TazRadius.cardDp, topEnd = TazRadius.cardDp
-                        )
-                    ),
-                aspectRatio = ProductCardImageAspect,
-                glyphSize = 44.sp,
-                // out of stock dims the produce, never the price or the name
-                dimmed = !product.isPurchasable
-            )
-
-            // --- body ---------------------------------------------------------
-            Column(Modifier.fillMaxWidth().padding(ProductCardPadding)) {
-                Text(
-                    product.name,
-                    fontSize = TazType.productNameSize,
-                    fontWeight = TazType.productNameWeight,
-                    lineHeight = TazType.productNameLine,
-                    color = TazColors.TextPrimary,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    // reserves two lines so short and long names align across the grid
-                    modifier = Modifier.fillMaxWidth().heightIn(min = ProductNameBlockHeight)
+            // --- stage: square image with the ADD control floating on it -------
+            // The commerce-card anatomy: image → price → savings → name → pack.
+            // The control lives on the image so the body is pure information,
+            // which is what lets three cards fit a screen without clutter.
+            Box(Modifier.fillMaxWidth()) {
+                ProductImage(
+                    product = product,
+                    modifier = Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = TazRadius.cardDp, topEnd = TazRadius.cardDp)),
+                    aspectRatio = ProductCardImageAspect,
+                    glyphSize = if (compact) 26.sp else 40.sp,
+                    dimmed = !product.isPurchasable
                 )
-                Spacer(Modifier.height(TazSpace.xxs))
-                Text(
-                    product.unit, fontSize = TazType.unitSize, color = TazColors.TextTertiary,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
-                // Honest copy: nothing renders unless the promise is verified.
-                DeliveryCopy.short(AppConfig.deliveryPromise)?.let { eta ->
-                    Spacer(Modifier.height(TazSpace.xxs))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TazIcon(
-                            TazIcons.Slot, null,
-                            size = TazSize.iconXs, tint = TazColors.TextTertiary
-                        )
-                        Spacer(Modifier.width(TazSpace.xs))
+                // ADD sits bottom-end; once in the cart the stepper spans the
+                // stage so − and + have room. Same control, same place.
+                // At rail width the control floats on the artwork, which is
+                // what lets three cards fit a screen. At four-up width there is
+                // no room to float anything: the pill covered the product it
+                // was selling, so a compact cell moves it under the body.
+                if (!compact) {
+                    QuantityStepper(
+                        product,
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(TazSpace.xs + TazSpace.xxs)
+                            .then(
+                                if (inCart || !product.isPurchasable) Modifier.fillMaxWidth()
+                                else Modifier
+                            )
+                    )
+                }
+                if (ribbon != null) {
+                    Box(
+                        Modifier.align(Alignment.TopStart).padding(TazSpace.xs + TazSpace.xxs)
+                            .clip(TazRadius.chip).background(TazColors.Green)
+                            .padding(horizontal = 6.dp, vertical = TazSpace.xxs)
+                    ) {
                         Text(
-                            eta, fontSize = TazType.microSize, fontWeight = TazType.microWeight,
-                            color = TazColors.TextTertiary, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            ribbon, color = TazColors.White, fontSize = TazType.microSize,
+                            fontWeight = TazType.microWeight, maxLines = 1
                         )
                     }
                 }
-                Spacer(Modifier.height(TazSpace.sm))
-
-                // Price + control. On a wide card they share a line; on the
-                // narrow two-column grids (a 84dp sidebar leaves ~110dp of
-                // content) they stack so neither is ever truncated.
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val sideBySide = product.isPurchasable && maxWidth >= CardRowThreshold
-                    if (sideBySide) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CardPriceBlock(product.price, product.mrp, Modifier.weight(1f))
-                            QuantityStepper(product)
-                        }
-                    } else {
-                        Column(Modifier.fillMaxWidth()) {
-                            CardPriceBlock(product.price, product.mrp, Modifier.fillMaxWidth())
-                            Spacer(Modifier.height(TazSpace.sm))
-                            QuantityStepper(product, Modifier.fillMaxWidth())
-                        }
+                val stock = product.availability
+                if (stock is Availability.LowStock) {
+                    Box(
+                        (if (ribbon == null) Modifier.align(Alignment.TopStart)
+                         else Modifier.align(Alignment.TopEnd))
+                            .padding(TazSpace.xs + TazSpace.xxs)
+                            .clip(TazRadius.chip).background(TazColors.WarningSoft)
+                            .padding(horizontal = 6.dp, vertical = TazSpace.xxs)
+                    ) {
+                        Text(
+                            "Only ${stock.remaining} left", color = TazColors.Warning,
+                            fontSize = TazType.microSize, fontWeight = TazType.microWeight, maxLines = 1
+                        )
                     }
                 }
             }
-        }
 
-        // Both badges live in one top row: on a narrow two-column grid an
-        // absolutely-positioned pair would overlap in the middle.
-        Row(
-            Modifier.fillMaxWidth().align(Alignment.TopStart),
-            verticalAlignment = Alignment.Top
-        ) {
-            DiscountBadge(product.discountPercent)
-            Spacer(Modifier.weight(1f))
-            val stock = product.availability
-            if (stock is Availability.LowStock) {
-                Box(
-                    Modifier.padding(TazSpace.sm)
-                        .clip(TazRadius.chip).background(TazColors.WarningSoft)
-                        .padding(horizontal = 6.dp, vertical = TazSpace.xxs)
-                ) {
+            // --- body: price leads --------------------------------------------
+            Column(Modifier.fillMaxWidth().padding(ProductCardPadding)) {
+                Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        "Only ${stock.remaining} left", color = TazColors.Warning,
-                        fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        "₹${product.price}", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
+                        color = TazColors.TextPrimary, maxLines = 1
+                    )
+                    // The struck MRP is dropped in compact cells. At four-up
+                    // width it truncated mid-number — "₹699" rendered as "₹69" —
+                    // and a clipped price is a WRONG price, not a cosmetic
+                    // flaw. The saving below still states the difference in
+                    // rupees, so nothing is hidden.
+                    if (!compact && product.mrp > product.price) {
+                        Spacer(Modifier.width(TazSpace.xs))
+                        Text(
+                            "₹${product.mrp}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                            textDecoration = TextDecoration.LineThrough, maxLines = 1,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+                }
+                // The saving in rupees — one signal, verifiable, Tazzzo orange = savings.
+                if (product.mrp > product.price) {
+                    Text(
+                        "₹${product.mrp - product.price} OFF", fontSize = TazType.microSize,
+                        fontWeight = TazType.microWeight, color = TazColors.Orange, maxLines = 1
+                    )
+                }
+                Spacer(Modifier.height(TazSpace.xxs))
+                Text(
+                    product.name,
+                    fontSize = TazType.productNameSize, fontWeight = TazType.productNameWeight,
+                    lineHeight = TazType.productNameLine, color = TazColors.TextPrimary,
+                    maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                        .then(if (compact) Modifier else Modifier.heightIn(min = ProductNameBlockHeight))
+                )
+                // The customer's own word for the item, where a verified one
+                // exists. Never transliterated at render time — a wrong word in
+                // someone's own language is worse than English alone.
+                product.localName?.let { local ->
+                    Text(
+                        local, fontSize = TazType.microSize, color = TazColors.TextTertiary,
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
+                }
+                // Pack size, and beside it the per-unit price when the pack is
+                // actually measurable. That figure is the only price claim a
+                // customer can check against another pack without arithmetic,
+                // and it is derived, never authored.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        product.unit, fontSize = TazType.unitSize, color = TazColors.TextTertiary,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (!compact) product.unitPriceLabel?.let { perUnit ->
+                        Text(
+                            "  \u00b7  " + perUnit, fontSize = TazType.unitSize,
+                            color = TazColors.TextTertiary, maxLines = 1
+                        )
+                    }
+                }
+                if (compact) {
+                    Spacer(Modifier.height(TazSpace.xs))
+                    QuantityStepper(product, Modifier.fillMaxWidth())
                 }
             }
         }
     }
 }
 
+/**
+ * Horizontal product rail.
+ *
+ * Two things here are load-bearing, both learned the hard way in E1/E2.
+ *
+ * 1. **The rail's own scroll position is retained**, keyed by [title]. A rail
+ *    is a LazyRow inside a LazyColumn, and the vertical list disposes rows that
+ *    leave the viewport — so without a saved state, scrolling a rail sideways,
+ *    scrolling the page down and back, and finding the rail reset to the start
+ *    is not a bug in the rail: it is the outer list doing its job. Retaining it
+ *    is what makes the page feel like it kept your place.
+ *
+ * 2. **`contentType` is declared.** Every item is the same kind of card, so
+ *    Compose can reuse the composition and the layout node instead of building
+ *    a fresh subtree per item. This is the difference between a rail that
+ *    glides on a mid-range phone and one that hitches while scrolling.
+ *
+ * Nesting a LazyRow in a LazyColumn is supported precisely because the scroll
+ * axes differ; the failure mode is state and reuse, not gesture conflict.
+ */
 @Composable
 fun ProductRail(title: String, products: List<Product>, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     if (products.isEmpty()) return
     SectionHeader(title, actionLabel, onAction)
+    val railState = rememberSaveable(title, saver = LazyListState.Saver) { LazyListState() }
     LazyRow(
-        contentPadding = PaddingValues(horizontal = TazSpace.gutter),
-        horizontalArrangement = Arrangement.spacedBy(TazSpace.md)
+        state = railState,
+        // screenEdge, not gutter: at 12dp a card is clipped by the screen
+        // edge, which is what tells the eye the row keeps going. At 16dp a
+        // rail that happens to end flush reads as a complete set.
+        contentPadding = PaddingValues(horizontal = TazSpace.screenEdge),
+        horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
     ) {
-        items(products, key = { it.id }) { p -> ProductCard(p) }
+        items(
+            products,
+            key = { it.id },
+            contentType = { "productCard" }
+        ) { p -> ProductCard(p) }
     }
 }
 
@@ -694,34 +1028,60 @@ fun ProductRail(title: String, products: List<Product>, actionLabel: String? = n
 // Floating "view cart" bar
 // ---------------------------------------------------------------------------
 
+/**
+ * @param aboveNav true on the tabbed shell, where a bottom navigation bar owns
+ *   the bottom edge. Found during E1 verification: as an overlay aligned to
+ *   the bottom, this bar drew EXACTLY over the nav bar, so the moment a
+ *   customer added one item, Home / Categories / Order Again / Account became
+ *   unreachable until the cart was emptied. With `aboveNav` the bar floats
+ *   above the nav instead; content is still not displaced (no layout jump),
+ *   and scrolling surfaces keep using [TazSpace.cartBarClearance].
+ */
 @Composable
-fun BoxScope.CartBar() {
+fun BoxScope.CartBar(aboveNav: Boolean = false) {
     val app = LocalAppState.current
     val count = app.cartItemCount
     AnimatedVisibility(
         visible = count > 0,
         modifier = Modifier.align(Alignment.BottomCenter),
-        enter = slideInVertically { it },
-        exit = slideOutVertically { it }
+        enter = slideInVertically(tween(TazMotion.normal)) { it } + fadeIn(tween(TazMotion.fast)),
+        exit = slideOutVertically(tween(TazMotion.fast)) { it } + fadeOut(tween(TazMotion.fast))
     ) {
         Row(
-            Modifier.padding(horizontal = TazSpace.gutter, vertical = TazSpace.md)
+            Modifier
+                // Clear the nav bar's full height (bar + its hairline). The nav
+                // applies the system inset itself, so it is applied here once.
+                .padding(bottom = if (aboveNav) TazSize.navBarHeight + 1.dp else 0.dp)
+                .padding(horizontal = TazSpace.gutter, vertical = TazSpace.md)
                 .navigationBarsPadding()
                 .fillMaxWidth()
                 .shadow(10.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.32f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(TazColors.Green)
-                .clickable { app.navigate(Screen.Cart) }
+                .tazPressable(onClick = { app.navigate(Screen.Cart) }, pressScale = TazPress.compact)
                 .height(64.dp)
                 .padding(horizontal = TazSpace.lg),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // The most recent thing added, not a generic cart glyph: it
+            // confirms WHAT went in, which is the question a customer actually
+            // has after tapping ADD. Falls back to the glyph if the basket
+            // somehow has no line to show.
+            val lead = app.cartLines().lastOrNull()?.product
             Box(
-                Modifier.size(TazSize.buttonHeightSm).clip(CircleShape)
+                Modifier.size(TazSize.buttonHeightSm).clip(TazRadius.chip)
                     .background(TazColors.White.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center
             ) {
-                TazIcon(TazIcons.Cart, null, size = TazSize.iconMd, tint = TazColors.White)
+                if (lead != null) {
+                    ProductImage(
+                        lead, Modifier.fillMaxSize().clip(TazRadius.chip),
+                        glyphSize = TazType.titleSize, contentPadding = 2.dp,
+                        background = Color.Transparent
+                    )
+                } else {
+                    TazIcon(TazIcons.Cart, null, size = TazSize.iconMd, tint = TazColors.White)
+                }
             }
             Spacer(Modifier.width(TazSpace.md))
             Column(Modifier.weight(1f)) {
@@ -731,9 +1091,12 @@ fun BoxScope.CartBar() {
                     color = TazColors.White, fontSize = TazType.titleSize,
                     fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
-                val gap = AppConfig.charges.freeDeliveryAboveRupees - bill.itemTotal
+                // Same helper the cart's milestone bar uses, so the bar and the
+                // cart can never quote different gaps for one basket.
+                val progress = freeDeliveryProgress(bill)
                 Text(
-                    if (gap > 0) "Add ₹$gap more for free delivery"
+                    if (!progress.alreadyFree && progress.remainingRupees > 0)
+                        "Add ₹${progress.remainingRupees} more for free delivery"
                     else "Free delivery unlocked",
                     color = TazColors.White.copy(alpha = 0.8f), fontSize = TazType.microSize,
                     fontWeight = TazType.microWeight, maxLines = 1, overflow = TextOverflow.Ellipsis
@@ -779,11 +1142,28 @@ data class CategoryArtTile(
     val art: DrawableResource
 )
 
+/**
+ * Photographic tiles, for the categories that have a usable photograph.
+ *
+ * Deliberately a PARTIAL cover of the taxonomy. Four tiles were withdrawn on
+ * 2026-09-08 after an audit of all twenty:
+ *
+ *  - `cleaning`, `oil`, `skincare` showed third-party product packaging —
+ *    Jif, Oleina on a priced shop shelf, Wardah. That is competitors' trade
+ *    dress sitting inside Tazzzo, and it is barred however the file is licensed.
+ *  - `oil` and `skincare` additionally shipped with UNVERIFIED licences; their
+ *    attribution lines read "metadata fetch failed", which means nobody ever
+ *    confirmed they were free to use.
+ *  - `baby` was a photograph of an identifiable infant, not a product.
+ *
+ * A category with no entry here renders the tinted emoji tile, which
+ * [categoryArtFor] already returns null for and every caller already handles.
+ * An honest blank beats a borrowed photograph.
+ */
 val categoryArtTiles: List<CategoryArtTile> = listOf(
     CategoryArtTile("fruits", "Vegetables & Fruits", 0xFFE8F5E9, Res.drawable.cat_fruits),
     CategoryArtTile("dairy", "Dairy, Bread & Eggs", 0xFFFFF8E1, Res.drawable.cat_dairy),
     CategoryArtTile("atta", "Atta, Rice & Dal", 0xFFFFF3E0, Res.drawable.cat_atta),
-    CategoryArtTile("oil", "Oil, Masala & Dry Fruits", 0xFFFFFDE7, Res.drawable.cat_oil),
     CategoryArtTile("meat", "Chicken, Meat & Fish", 0xFFFFEBEE, Res.drawable.cat_meat),
     CategoryArtTile("munchies", "Munchies & Snacks", 0xFFFFF3E0, Res.drawable.cat_munchies),
     CategoryArtTile("drinks", "Cold Drinks & Juices", 0xFFE3F2FD, Res.drawable.cat_drinks),
@@ -792,14 +1172,74 @@ val categoryArtTiles: List<CategoryArtTile> = listOf(
     CategoryArtTile("sweet", "Sweet Tooth", 0xFFF3E5F5, Res.drawable.cat_sweet),
     CategoryArtTile("bakery", "Bakery & Biscuits", 0xFFFFF8E1, Res.drawable.cat_bakery),
     CategoryArtTile("personal", "Bath & Body", 0xFFE0F7FA, Res.drawable.cat_personal),
-    CategoryArtTile("skincare", "Skin & Face Care", 0xFFFCE4EC, Res.drawable.cat_skincare),
     CategoryArtTile("pharma", "Pharma & Wellness", 0xFFE8F5E9, Res.drawable.cat_pharma),
-    CategoryArtTile("baby", "Baby Care", 0xFFE3F2FD, Res.drawable.cat_baby),
-    CategoryArtTile("cleaning", "Cleaning Essentials", 0xFFE8F5E9, Res.drawable.cat_cleaning),
     CategoryArtTile("home", "Home & Office", 0xFFFFF3E0, Res.drawable.cat_home),
     CategoryArtTile("pet", "Pet Care", 0xFFEFEBE9, Res.drawable.cat_pet),
+    CategoryArtTile("pooja", "Pooja & Religious Needs", 0xFFFFF3E0, Res.drawable.cat_pooja),
     CategoryArtTile("paan", "Paan Corner", 0xFFE8F5E9, Res.drawable.cat_paan)
 )
+
+/**
+ * Bundled product photography, keyed by product id.
+ *
+ * Every entry passed two checks on 2026-09-08: it is the right product, and no
+ * third-party brand is visible. Thirty-three of seventy-two SKUs have one. The
+ * rest render the emoji well, because the openly-licensed sources that cover
+ * fresh produce and raw commodities well cover packaged branded goods badly —
+ * and where they do, the photograph shows the brand, which is barred.
+ *
+ * Bundled, not fetched: the pre-auth and offline surfaces must render with no
+ * network and no failure state, the same reasoning as [categoryArtTiles]. A
+ * backend image URL, when one exists, still wins — see [ProductImage].
+ */
+private val productArt: Map<String, DrawableResource> = mapOf(
+    "p1" to Res.drawable.prod_p1,
+    "p2" to Res.drawable.prod_p2,
+    "p3" to Res.drawable.prod_p3,
+    "p4" to Res.drawable.prod_p4,
+    "p5" to Res.drawable.prod_p5,
+    "p6" to Res.drawable.prod_p6,
+    "p7" to Res.drawable.prod_p7,
+    "p9" to Res.drawable.prod_p9,
+    "p10" to Res.drawable.prod_p10,
+    "p11" to Res.drawable.prod_p11,
+    "p12" to Res.drawable.prod_p12,
+    "p13" to Res.drawable.prod_p13,
+    "p14" to Res.drawable.prod_p14,
+    "p15" to Res.drawable.prod_p15,
+    "p17" to Res.drawable.prod_p17,
+    "p18" to Res.drawable.prod_p18,
+    "p20" to Res.drawable.prod_p20,
+    "p21" to Res.drawable.prod_p21,
+    "p24" to Res.drawable.prod_p24,
+    "p25" to Res.drawable.prod_p25,
+    "p26" to Res.drawable.prod_p26,
+    "p27" to Res.drawable.prod_p27,
+    "p28" to Res.drawable.prod_p28,
+    "p29" to Res.drawable.prod_p29,
+    "p33" to Res.drawable.prod_p33,
+    "p35" to Res.drawable.prod_p35,
+    "p36" to Res.drawable.prod_p36,
+    "p37" to Res.drawable.prod_p37,
+    "p39" to Res.drawable.prod_p39,
+    "p40" to Res.drawable.prod_p40,
+    "p41" to Res.drawable.prod_p41,
+    "p42" to Res.drawable.prod_p42,
+    "p43" to Res.drawable.prod_p43,
+    "p44" to Res.drawable.prod_p44,
+    "p45" to Res.drawable.prod_p45,
+    "p47" to Res.drawable.prod_p47,
+    "p50" to Res.drawable.prod_p50,
+    "p60" to Res.drawable.prod_p60,
+    "p61" to Res.drawable.prod_p61,
+    "p62" to Res.drawable.prod_p62,
+    "p63" to Res.drawable.prod_p63,
+)
+
+fun productArtFor(productId: String): DrawableResource? = productArt[productId]
+
+/** Ids with bundled photography, for tests that must not hardcode the set. */
+val bundledProductArtIds: Set<String> get() = productArt.keys
 
 private val categoryArt: Map<String, DrawableResource> =
     categoryArtTiles.associate { it.id to it.art }
@@ -818,12 +1258,23 @@ fun Modifier.guidedTarget(key: String): Modifier = composed {
 fun CategoryTile(
     category: Category,
     size: Dp = TazSize.categoryTile,
+    /**
+     * How many SKUs this aisle holds. Rendered as a badge on the artwork.
+     *
+     * Null hides the badge, which is the correct behaviour for an empty aisle:
+     * a tile must not advertise depth it does not have. Counts come from
+     * `MockCatalog.counts()`, never from a literal.
+     */
+    count: Int? = null,
     onClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(size + TazSpace.sm)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClick() }
+            // Tile press response. The label sits outside the artwork, so the
+            // whole column scales together and the tile never looks detached
+            // from its caption.
+            .tazPressable(onClick = onClick, pressScale = TazPress.card)
     ) {
         Box(
             Modifier.size(size)
@@ -852,6 +1303,18 @@ fun CategoryTile(
                     )
                 )
             )
+            if (count != null && count > 0) {
+                Box(
+                    Modifier.align(Alignment.TopStart).padding(TazSpace.xs)
+                        .clip(TazRadius.chip).background(TazColors.White.copy(alpha = 0.92f))
+                        .padding(horizontal = TazSpace.xs, vertical = 1.dp)
+                ) {
+                    Text(
+                        "$count", fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        color = TazColors.Green, maxLines = 1
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(TazSpace.xs))
         Text(
@@ -1106,15 +1569,22 @@ fun CoinsPromoBanner(modifier: Modifier = Modifier) {
 @Composable
 fun VoiceCommerceBannerV3() {
     val app = LocalAppState.current
-    val anim = rememberInfiniteTransition()
-    val pulse by anim.animateFloat(
-        0.85f, 1.15f, infiniteRepeatable(tween(700), RepeatMode.Reverse)
-    )
-    val eq1 by anim.animateFloat(0.35f, 1f, infiniteRepeatable(tween(380), RepeatMode.Reverse))
-    val eq2 by anim.animateFloat(1f, 0.3f, infiniteRepeatable(tween(300), RepeatMode.Reverse))
-    val eq3 by anim.animateFloat(0.5f, 0.95f, infiniteRepeatable(tween(460), RepeatMode.Reverse))
-    val eq4 by anim.animateFloat(0.9f, 0.4f, infiniteRepeatable(tween(340), RepeatMode.Reverse))
-    val eq5 by anim.animateFloat(0.4f, 0.8f, infiniteRepeatable(tween(420), RepeatMode.Reverse))
+    // Six perpetual animations on a banner that sits on Home for the whole
+    // session. Gated: with ambient motion off they hold a resting frame.
+    val ambient = MotionSettings.ambientEnabled
+    val pulse: Float
+    val eq1: Float; val eq2: Float; val eq3: Float; val eq4: Float; val eq5: Float
+    if (ambient) {
+        val anim = rememberInfiniteTransition()
+        pulse = anim.animateFloat(0.85f, 1.15f, infiniteRepeatable(tween(700), RepeatMode.Reverse)).value
+        eq1 = anim.animateFloat(0.35f, 1f, infiniteRepeatable(tween(380), RepeatMode.Reverse)).value
+        eq2 = anim.animateFloat(1f, 0.3f, infiniteRepeatable(tween(300), RepeatMode.Reverse)).value
+        eq3 = anim.animateFloat(0.5f, 0.95f, infiniteRepeatable(tween(460), RepeatMode.Reverse)).value
+        eq4 = anim.animateFloat(0.9f, 0.4f, infiniteRepeatable(tween(340), RepeatMode.Reverse)).value
+        eq5 = anim.animateFloat(0.4f, 0.8f, infiniteRepeatable(tween(420), RepeatMode.Reverse)).value
+    } else {
+        pulse = 1f; eq1 = 0.6f; eq2 = 0.75f; eq3 = 0.5f; eq4 = 0.8f; eq5 = 0.55f
+    }
 
     Row(
         Modifier.fillMaxWidth()
@@ -1122,7 +1592,7 @@ fun VoiceCommerceBannerV3() {
             .shadow(BannerElevation, TazRadius.tile, spotColor = Color.Black.copy(alpha = 0.30f))
             .clip(TazRadius.tile)
             .background(Brush.linearGradient(listOf(TazColors.GreenDark, Color(0xFF062313))))
-            .clickable { app.showVoiceSheet = true }
+            .tazPressable(onClick = { app.showVoiceSheet = true }, pressScale = TazPress.compact)
             .padding(horizontal = TazSpace.lg, vertical = TazSpace.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1177,5 +1647,195 @@ fun VoiceCommerceBannerV3() {
                 )
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Grouped settings rows
+//
+// Account and Help each carried a private, byte-identical `MenuRow` and
+// divider. One shared row now serves both, with the anatomy the redesign asks
+// for: the icon sits in a tinted well rather than bare, the title can carry a
+// status chip, and the trailing slot takes a chevron, a switch or a chip.
+// ---------------------------------------------------------------------------
+
+/** Semantic colouring for a [TazChip]. Tone carries meaning; never decoration. */
+enum class ChipTone { Neutral, Brand, Savings, Success, Warning }
+
+private fun ChipTone.ink(): Color = when (this) {
+    ChipTone.Neutral -> TazColors.TextSecondary
+    ChipTone.Brand -> TazColors.Green
+    ChipTone.Savings -> TazColors.Orange
+    ChipTone.Success -> TazColors.Success
+    ChipTone.Warning -> TazColors.Warning
+}
+
+private fun ChipTone.ground(): Color = when (this) {
+    ChipTone.Neutral -> TazColors.SurfaceSunken
+    ChipTone.Brand -> TazColors.GreenSoft
+    ChipTone.Savings -> TazColors.OrangeSoft
+    ChipTone.Success -> TazColors.SuccessSoft
+    ChipTone.Warning -> TazColors.WarningSoft
+}
+
+/**
+ * Small status chip — "2 Saved", "Active", "SAVED ₹50", "Recommended".
+ *
+ * Decorative by default: the chip repeats or qualifies text that is already in
+ * the row, so announcing it again would make a screen reader read the same fact
+ * twice. Pass [standalone] when the chip is the ONLY place a fact appears.
+ */
+@Composable
+fun TazChip(
+    text: String,
+    tone: ChipTone = ChipTone.Neutral,
+    modifier: Modifier = Modifier,
+    standalone: Boolean = false,
+) {
+    Box(
+        modifier.clip(TazRadius.chip).background(tone.ground())
+            .padding(horizontal = TazSpace.sm, vertical = TazSpace.xxs)
+            .then(if (standalone) Modifier else Modifier.clearAndSetSemantics { })
+    ) {
+        Text(
+            text, fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+            color = tone.ink(), maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/**
+ * A card that groups related rows, separated by hairlines inset past the icon
+ * rail so the icons read as one continuous edge.
+ *
+ * Place [TazRowDivider] between rows. The card owns the rounding and the ground
+ * so no caller repeats them and drifts.
+ */
+@Composable
+fun TazGroupedCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface),
+        content = content
+    )
+}
+
+/** Hairline between two [TazListRow]s, inset to clear the icon well. */
+@Composable
+fun TazRowDivider() {
+    Box(
+        Modifier.fillMaxWidth()
+            .padding(start = TazSpace.lg + IconWellSize + TazSpace.md)
+            .height(1.dp).background(TazColors.CardBorder)
+    )
+}
+
+private val IconWellSize: Dp = 36.dp
+
+/**
+ * One row in a [TazGroupedCard].
+ *
+ * Exactly one of [onClick] and [checked] may be set. A row that both navigates
+ * and toggles is two controls wearing one label, which is precisely the defect
+ * that put two "Vegetables & Fruits" nodes on Home — a screen reader cannot tell
+ * the caller which one it activated.
+ *
+ * The whole row is the control, not the switch inside it: a 36dp switch is below
+ * the 44dp touch target, and a settings row whose label is not tappable is a
+ * needlessly small hit area.
+ */
+@Composable
+fun TazListRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    iconTint: Color = TazColors.Green,
+    titleChip: String? = null,
+    titleChipTone: ChipTone = ChipTone.Neutral,
+    trailingText: String? = null,
+    checked: Boolean? = null,
+    onCheckedChange: ((Boolean) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+) {
+    require(onClick == null || checked == null) {
+        "a row either navigates or toggles, never both"
+    }
+    val base = Modifier.fillMaxWidth().heightIn(min = TazSize.touchTarget + TazSpace.md)
+    val interactive = when {
+        checked != null && onCheckedChange != null ->
+            base.toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            ).semantics {
+                contentDescription = title
+                stateDescription = if (checked) "On" else "Off"
+            }
+        onClick != null ->
+            base.semantics(mergeDescendants = true) {
+                contentDescription = if (titleChip != null) "$title, $titleChip" else title
+            }.tazPressable(onClick = onClick, pressScale = TazPress.compact)
+        else -> base
+    }
+    Row(
+        interactive.padding(horizontal = TazSpace.lg, vertical = TazSpace.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(IconWellSize).clip(TazRadius.chip).background(TazColors.SurfaceSunken),
+            contentAlignment = Alignment.Center
+        ) { TazIcon(icon, null, size = TazSize.iconSm, tint = iconTint) }
+        Spacer(Modifier.width(TazSpace.md))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine,
+                    fontWeight = FontWeight.Medium, color = TazColors.TextPrimary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (titleChip != null) {
+                    Spacer(Modifier.width(TazSpace.sm))
+                    TazChip(titleChip, titleChipTone)
+                }
+            }
+            if (subtitle != null) {
+                Text(
+                    subtitle, fontSize = TazType.captionSize,
+                    lineHeight = TazType.captionLine, color = TazColors.TextTertiary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Spacer(Modifier.width(TazSpace.sm))
+        when {
+            checked != null -> TazSwitchTrack(checked)
+            trailingText != null -> Text(
+                trailingText, fontSize = TazType.captionSize,
+                fontWeight = FontWeight.SemiBold, color = TazColors.TextSecondary, maxLines = 1
+            )
+            onClick != null -> TazIcon(
+                TazIcons.Chevron, null, size = TazSize.iconXs, tint = TazColors.TextTertiary
+            )
+        }
+    }
+}
+
+/**
+ * The switch's appearance only. It carries no semantics and no click of its own
+ * — [TazListRow] owns both, so the control is one node, not two.
+ */
+@Composable
+private fun TazSwitchTrack(checked: Boolean) {
+    val ground by animateColorAsState(
+        if (checked) TazColors.Green else TazColors.BorderStrong,
+        tween(TazMotion.fast), label = "switchTrack"
+    )
+    Box(
+        Modifier.width(44.dp).height(26.dp).clip(TazRadius.pill).background(ground)
+            .padding(3.dp),
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
+    ) {
+        Box(Modifier.size(20.dp).clip(CircleShape).background(TazColors.White))
     }
 }

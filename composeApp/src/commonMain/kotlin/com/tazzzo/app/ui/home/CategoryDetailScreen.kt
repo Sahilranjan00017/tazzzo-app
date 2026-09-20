@@ -26,6 +26,12 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.data.repository.Taxonomy
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import com.tazzzo.app.ui.common.ProductFiltersSaver
+import androidx.compose.ui.platform.testTag
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.ui.common.TazIcon
 import com.tazzzo.app.theme.TazType
@@ -72,9 +78,18 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
     val category = (taxonomy.state as? UiState.Success)?.data
         ?: Taxonomy.cachedCategory(categoryId)
 
-    var selectedSub by remember { mutableStateOf(initialSubcategoryId) } // null = All
-    var filters by remember { mutableStateOf(ProductFilters()) }
+    // rememberSaveable, not remember: these are the customer's context. Opening
+    // a product and coming back must not silently reset the aisle they chose or
+    // the filters they set.
+    var selectedSub by rememberSaveable { mutableStateOf(initialSubcategoryId) } // null = All
+    var filters by rememberSaveable(stateSaver = ProductFiltersSaver) {
+        mutableStateOf(ProductFilters())
+    }
+    // The sort sheet is transient UI, not context — it should NOT come back.
     var showSort by remember { mutableStateOf(false) }
+    // Grid scroll position, keyed per aisle so switching subcategory starts at
+    // the top but returning from a product does not.
+    val gridState = rememberSaveable(selectedSub, saver = LazyGridState.Saver) { LazyGridState() }
     val hairlinePx = with(LocalDensity.current) { Hairline.toPx() }
 
     // Keyed on the selected subcategory: switching aisles re-runs the load and
@@ -92,7 +107,7 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
                     // 44dp minimum touch target + a label for screen readers.
                     Box(
                         Modifier.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                            .clickable { app.navigate(Screen.Search) }
+                            .tazPressable(onClick = { app.navigate(Screen.Search) }, pressScale = TazPress.compact)
                             .semantics { contentDescription = "Search" },
                         contentAlignment = Alignment.Center
                     ) {
@@ -130,7 +145,11 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
                                 onClick = { selectedSub = null }
                             )
                         }
-                        items(category.subcategories, key = { it.id }) { sub ->
+                        items(
+                            category.subcategories,
+                            key = { it.id },
+                            contentType = { "sidebarEntry" }
+                        ) { sub ->
                             SidebarEntry(
                                 emoji = sub.emoji,
                                 name = sub.name,
@@ -201,8 +220,13 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
                             )
                         } else {
                             LazyVerticalGrid(
+                                // Test tag so the journey suite can drive this
+                                // grid unambiguously — the screen has two
+                                // scrollable regions (aisle rail + product grid)
+                                // and "the scrollable one" is not a selector.
+                                modifier = Modifier.fillMaxSize().testTag("categoryGrid"),
+                                state = gridState,
                                 columns = GridCells.Fixed(2),
-                                modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(
                                     start = TazSpace.md, top = TazSpace.md, end = TazSpace.md,
                                     bottom = TazSpace.cartBarClearance
@@ -210,7 +234,14 @@ fun CategoryDetailScreen(categoryId: String, initialSubcategoryId: String?) {
                                 horizontalArrangement = Arrangement.spacedBy(TazSpace.md),
                                 verticalArrangement = Arrangement.spacedBy(TazSpace.md)
                             ) {
-                                items(filtered, key = { it.id }) { p ->
+                                items(
+                                    filtered,
+                                    key = { it.id },
+                                    // Uniform item type lets Compose reuse the
+                                    // card's composition and layout node instead
+                                    // of rebuilding one per row while scrolling.
+                                    contentType = { "productCard" }
+                                ) { p ->
                                     ProductCard(p, Modifier.fillMaxWidth())
                                 }
                             }
@@ -255,7 +286,7 @@ private fun SidebarEntry(
     onClick: () -> Unit
 ) {
     Box(
-        Modifier.fillMaxWidth().clickable { onClick() },
+        Modifier.fillMaxWidth().tazPressable(onClick = { onClick() }, pressScale = TazPress.compact),
         contentAlignment = Alignment.CenterStart
     ) {
         Column(

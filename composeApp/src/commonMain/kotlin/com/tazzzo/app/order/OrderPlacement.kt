@@ -12,6 +12,7 @@ import com.tazzzo.app.data.model.PaymentMethodKind
 import com.tazzzo.app.data.model.PlaceOrderResult
 import com.tazzzo.app.data.repository.CheckoutRepository
 import com.tazzzo.app.data.repository.CoinRepository
+import com.tazzzo.app.data.repository.MembershipRepository
 import com.tazzzo.app.data.repository.ServiceLocator
 
 /**
@@ -56,6 +57,7 @@ object OrderPlacement {
         payment: PaymentMethodKind,
         checkout: CheckoutRepository = ServiceLocator.checkout,
         coins: CoinRepository = ServiceLocator.coins,
+        memberships: MembershipRepository = ServiceLocator.membership,
         navigate: Boolean = true
     ): PlaceOrderResult? {
         if (session.placement is CheckoutSession.Placement.InFlight) return null
@@ -72,7 +74,9 @@ object OrderPlacement {
                 addressId = address.id,
                 addressText = address.label + " — " + address.line1,
                 slotId = slot.id,
-                payment = payment
+                payment = payment,
+                slot = slot,
+                instructionIds = session.instructionIds.toList()
             )
         )
 
@@ -84,14 +88,22 @@ object OrderPlacement {
                 )
                 // Gated: only the FIRST placement of this key may move money.
                 if (!result.replayed) {
-                    applyFirstPlacement(app, coins, result.order.id, orderBill.coinsEarned)
+                    applyFirstPlacement(
+                        app = app,
+                        coins = coins,
+                        memberships = memberships,
+                        orderId = result.order.id,
+                        coinsEarned = orderBill.coinsEarned,
+                        itemTotalRupees = orderBill.itemTotal,
+                        clubDiscountRupees = orderBill.clubDiscount
+                    )
                 }
                 // Idempotent on repeat: showing the same order again is safe.
                 app.lastOrder = result.order
                 app.clearCart()
                 app.checkout = null
                 if (navigate) {
-                    app.resetTo(Screen.Home)
+                    app.goHome()
                     app.navigate(Screen.OrderSuccess(result.order.id))
                 }
             }
@@ -121,10 +133,29 @@ object OrderPlacement {
     private suspend fun applyFirstPlacement(
         app: TazzzoAppState,
         coins: CoinRepository,
+        memberships: MembershipRepository,
         orderId: String,
-        coinsEarned: Int
+        coinsEarned: Int,
+        itemTotalRupees: Int,
+        clubDiscountRupees: Int
     ) {
         coins.credit(coinsEarned, "Order $orderId cashback")
         app.user = app.user.copy(coinBalance = app.user.coinBalance + coinsEarned)
+
+        // Club progress advances only on orders where the discount actually
+        // applied — "eligible order" means exactly that, not "any order by a
+        // member". The repository is ALSO idempotent on orderId, so this is
+        // guarded twice: once by !replayed here, once by the order ledger
+        // there. Progress that can be double-counted is progress a customer
+        // will eventually notice is wrong.
+        if (clubDiscountRupees > 0) {
+            memberships.recordEligibleOrder(
+                orderId = orderId,
+                itemTotalRupees = itemTotalRupees,
+                discountAppliedRupees = clubDiscountRupees,
+                placedAtLabel = "Today"
+            )
+            app.membership = memberships.getState()
+        }
     }
 }

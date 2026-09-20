@@ -37,6 +37,10 @@ import com.tazzzo.app.Screen
 import com.tazzzo.app.data.model.Order
 import com.tazzzo.app.data.model.OrderStatus
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.TazHaptic
+import com.tazzzo.app.ui.interaction.tazPressableCard
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -131,7 +135,7 @@ private fun EmptyOrdersState() {
             color = TazColors.TextSecondary, textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(TazSpace.xl))
-        PillButton("Start Shopping", onClick = { app.resetTo(Screen.Home) })
+        PillButton("Start Shopping", onClick = { app.goHome() })
     }
 }
 
@@ -213,7 +217,10 @@ internal fun ReorderPill(order: Order, modifier: Modifier = Modifier) {
             .clip(TazRadius.pill)
             .background(TazColors.Surface)
             .border(BorderStroke(1.5.dp, TazColors.Green), TazRadius.pill)
-            .clickable {
+            .tazPressable(
+                pressScale = TazPress.compact,
+                haptic = TazHaptic.Add,     // items really do enter the cart
+                onClick = {
                 order.lines.forEach { line ->
                     repeat(line.quantity) { app.addToCart(line.product) }
                         .also {
@@ -222,9 +229,10 @@ internal fun ReorderPill(order: Order, modifier: Modifier = Modifier) {
                             )
                         }
                 }
-                // Land in the cart so the customer can review before checkout.
-                app.navigate(Screen.Cart)
-            }
+                    // Land in the cart so the customer can review before checkout.
+                    app.navigate(Screen.Cart)
+                }
+            )
             .padding(horizontal = TazSpace.lg),
         contentAlignment = Alignment.Center
     ) {
@@ -262,6 +270,8 @@ private fun OrderCard(order: Order) {
             .clip(TazRadius.card)
             .background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
+            // The whole card opens the receipt; the pills inside keep their own actions.
+            .tazPressableCard(onClick = { app.navigate(Screen.OrderDetail(order.id)) }, shape = TazRadius.card)
             .padding(TazSpace.lg)
     ) {
         OrderCardHeader(order)
@@ -282,18 +292,29 @@ private fun OrderCard(order: Order) {
 
         Spacer(Modifier.height(TazSpace.md))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
-                fontWeight = TazType.priceWeight, color = TazColors.TextPrimary,
-                modifier = Modifier.weight(1f)
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
+                    fontWeight = TazType.priceWeight, color = TazColors.TextPrimary
+                )
+                // What this order actually saved — realised, never MRP theatre.
+                if (order.bill.realisedSavings > 0) {
+                    Text(
+                        "Saved ₹${order.bill.realisedSavings}", fontSize = TazType.captionSize,
+                        fontWeight = FontWeight.SemiBold, color = TazColors.Green
+                    )
+                }
+                order.slot?.let {
+                    Text(it.label, fontSize = TazType.microSize, color = TazColors.TextTertiary, maxLines = 1)
+                }
+            }
             ReorderPill(order)
             Spacer(Modifier.width(TazSpace.xs))
             Box(
                 Modifier
                     .defaultMinSize(minHeight = TazSize.touchTarget)
                     .clip(TazRadius.pill)
-                    .clickable { app.navigate(Screen.Help) }
+                    .tazPressable(onClick = { app.navigate(Screen.Help) }, pressScale = TazPress.compact)
                     .padding(horizontal = TazSpace.md),
                 contentAlignment = Alignment.Center
             ) {

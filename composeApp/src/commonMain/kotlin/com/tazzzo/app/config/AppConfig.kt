@@ -91,6 +91,23 @@ data class CoinRules(
 // Charges
 // ---------------------------------------------------------------------------
 
+/**
+ * Delivery instruction options. Configuration, not code: a market can add
+ * "Leave with security" or drop "Ring the bell" without touching a screen.
+ * [BUSINESS DECISION] on the final set; these are sensible Indian-household
+ * defaults for the pre-backend build.
+ */
+val defaultDeliveryInstructions = listOf(
+    com.tazzzo.app.data.model.DeliveryInstruction("no-bell", "Don't ring the bell"),
+    com.tazzzo.app.data.model.DeliveryInstruction("at-door", "Leave at my door"),
+    com.tazzzo.app.data.model.DeliveryInstruction("call", "Call on arrival"),
+    com.tazzzo.app.data.model.DeliveryInstruction("security", "Leave with security"),
+    // Chosen in the cart rather than at review, because it changes how the
+    // order is PACKED, not how it is handed over. It travels the same path as
+    // every other instruction so the store actually receives it.
+    com.tazzzo.app.data.model.DeliveryInstruction("no-bag", "No carry bag needed")
+)
+
 data class ChargeRules(
     val freeDeliveryAboveRupees: Int = 199,
     val deliveryFeeRupees: Int = 25,

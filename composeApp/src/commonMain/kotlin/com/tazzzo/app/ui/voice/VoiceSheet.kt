@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.config.BrandCopy
+import com.tazzzo.app.theme.MotionSettings
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazMotion
@@ -54,15 +55,17 @@ fun VoiceComingSoonSheet(onDismiss: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Pulsing mic — ambient motion, the one place it earns its keep.
-            val pulse = rememberInfiniteTransition()
-            val micScale by pulse.animateFloat(
-                initialValue = 1f,
-                targetValue = 1.08f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(TazMotion.ambient),
-                    repeatMode = RepeatMode.Reverse
-                )
-            )
+            // Still gated: under reduce-motion or test it rests at 1f.
+            val micScale: Float = if (MotionSettings.ambientEnabled) {
+                rememberInfiniteTransition().animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.08f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(TazMotion.ambient),
+                        repeatMode = RepeatMode.Reverse
+                    )
+                ).value
+            } else 1f
             Box(
                 Modifier
                     .size(96.dp)

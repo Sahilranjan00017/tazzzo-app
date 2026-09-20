@@ -27,7 +27,7 @@ expect fun isDemoFailLoadEnabled(): Boolean
 fun DemoTourRunner() {
     val app = LocalAppState.current
     LaunchedEffect(Unit) {
-        if (isDemoHomeEnabled()) { app.resetTo(Screen.Home); return@LaunchedEffect }
+        if (isDemoHomeEnabled()) { app.enterDemoHome(); return@LaunchedEffect }
         if (!isDemoTourEnabled()) return@LaunchedEffect
 
         // Dev-only search smoke test — evidence in the device log, ships nowhere.

@@ -56,6 +56,7 @@ import com.tazzzo.app.data.model.CartIssue
 import com.tazzzo.app.data.model.PaymentMethodKind
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.order.OrderPlacement
+import androidx.compose.foundation.horizontalScroll
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -63,6 +64,12 @@ import com.tazzzo.app.theme.TazSize
 import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.ui.common.EmptyState
+import com.tazzzo.app.data.model.PlaceOrderResult
+import com.tazzzo.app.ui.interaction.rememberHaptics
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import androidx.compose.ui.semantics.Role
+import com.tazzzo.app.ui.interaction.TazHaptic
 import kotlinx.coroutines.CancellationException
 import com.tazzzo.app.ui.state.toLoadError
 import com.tazzzo.app.ui.state.LoadError
@@ -86,7 +93,11 @@ import kotlinx.coroutines.launch
 fun CheckoutScreen() {
     val app = LocalAppState.current
     if (app.checkout == null) {
-        app.checkout = CheckoutSession()
+        app.checkout = CheckoutSession(
+            // Carried over from the cart, so a choice made there is not lost
+            // the moment checkout begins.
+            initialInstructionIds = if (app.noCarryBag) setOf("no-bag") else emptySet()
+        )
         Analytics.track(AnalyticsEvents.CHECKOUT_STARTED)
     }
     val session = app.checkout!!
@@ -101,6 +112,7 @@ fun CheckoutScreen() {
     // would stay null, the CTA would stay disabled and the screen would sit on
     // "Checking your cart…" forever with no way out.
     var validationError by remember { mutableStateOf<LoadError?>(null) }
+    val haptics = rememberHaptics()
 
     suspend fun runValidation() {
         validationError = null
@@ -302,6 +314,15 @@ fun CheckoutScreen() {
                                 text = if (placement is CheckoutSession.Placement.Failed) "Try again"
                                 else "Place order  ·  ₹${bill.grandTotal}",
                                 enabled = enabled,
+                                // The single most consequential button in the
+                                // app. While a placement is in flight it must
+                                // look busy AND refuse further taps — the
+                                // component enforces both, so the in-flight
+                                // guard in OrderPlacement is a second line of
+                                // defence rather than the only one.
+                                loading = placement is CheckoutSession.Placement.InFlight,
+                                loadingText = "Placing your order…",
+                                haptic = TazHaptic.Tap,
                                 onClick = {
                                     if (!enabled) return@PillButton
                                     scope.launch {
@@ -312,13 +333,28 @@ fun CheckoutScreen() {
                                         // in-flight guard, the analytics, and the
                                         // replay-gated side effects, so this screen and
                                         // the demo autopilot cannot drift apart again.
-                                        OrderPlacement.place(
+                                        val outcome = OrderPlacement.place(
                                             app = app,
                                             session = session,
                                             address = address,
                                             slot = slot,
                                             payment = payment
                                         )
+                                        // The payoff of the entire journey, and
+                                        // the one place a success haptic is
+                                        // earned. A replayed placement is the
+                                        // same order coming back, so it is still
+                                        // a success from the customer's point of
+                                        // view — but it moves no money and is
+                                        // already gated inside OrderPlacement.
+                                        when (outcome) {
+                                            is PlaceOrderResult.Placed ->
+                                                haptics.perform(TazHaptic.Success)
+                                            is PlaceOrderResult.Failed,
+                                            is PlaceOrderResult.Rejected ->
+                                                haptics.perform(TazHaptic.Error)
+                                            null -> Unit   // refused in flight
+                                        }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth().heightIn(min = TazSize.buttonHeight)
@@ -452,7 +488,7 @@ private fun IssuesCard(issues: List<CartIssue>, onFix: (CartIssue) -> Unit) {
                 Spacer(Modifier.width(TazSpace.md))
                 // Comfortable tap target: 44dp minimum height + horizontal breathing room.
                 Box(
-                    Modifier.clip(TazRadius.pill).clickable { onFix(issue) }
+                    Modifier.clip(TazRadius.pill).tazPressable(onClick = { onFix(issue) }, pressScale = TazPress.compact)
                         .defaultMinSize(minHeight = TazSize.touchTarget)
                         .padding(horizontal = TazSpace.sm),
                     contentAlignment = Alignment.Center
@@ -535,7 +571,19 @@ private fun SelectionRow(
                 ),
                 TazRadius.card
             )
-            .clickable(enabled = enabled) { onClick() }
+            // One selection response for address, slot and payment alike, so
+            // choosing feels the same wherever the customer is in checkout.
+            // Row scale is deliberately off (motion on a wide row is
+            // distracting); the shape-clipped tint carries the press.
+            .tazPressable(
+                onClick = onClick,
+                enabled = enabled,
+                pressScale = TazPress.row,
+                shape = TazRadius.card,
+                haptic = TazHaptic.Select,
+                role = Role.RadioButton,
+                selected = selected
+            )
             .padding(TazSpace.lg),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -649,7 +697,7 @@ private fun AddressStep(session: CheckoutSession) {
 
         if (!showForm) {
             Row(
-                Modifier.clip(TazRadius.pill).clickable { showForm = true }
+                Modifier.clip(TazRadius.pill).tazPressable(onClick = { showForm = true }, pressScale = TazPress.compact)
                     .defaultMinSize(minHeight = TazSize.touchTarget)
                     .padding(horizontal = TazSpace.sm),
                 verticalAlignment = Alignment.CenterVertically
@@ -768,24 +816,50 @@ private fun SlotStep(session: CheckoutSession) {
             )
         }
     ) { list ->
+        // Grouped by when, with the fee on every row. A slot is a CHOICE with a
+        // price attached, not a label — so the price sits where the choice is
+        // made, and a recommended slot is tagged, never silently pre-selected.
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            list.forEach { slot ->
-                val selected = session.slot?.id == slot.id
-                SelectionRow(
-                    selected = selected,
-                    enabled = slot.available,
-                    onClick = { session.slot = slot },
-                    leading = TazIcons.Slot,
-                    trailing = if (!slot.available) {
-                        { StatusChip("Full", warning = true) }
-                    } else null
-                ) {
+            list.groupBy { it.group ?: "" }.forEach { (group, slots) ->
+                if (group.isNotBlank()) {
                     Text(
-                        slot.label,
-                        fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
-                        color = TazColors.TextPrimary,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        group.uppercase(), fontSize = TazType.microSize, fontWeight = TazType.microWeight,
+                        letterSpacing = TazType.labelTracking, color = TazColors.TextTertiary,
+                        modifier = Modifier.padding(top = TazSpace.xs)
                     )
+                }
+                slots.forEach { slot ->
+                    val selected = session.slot?.id == slot.id
+                    SelectionRow(
+                        selected = selected,
+                        enabled = slot.available,
+                        onClick = { session.slot = slot },
+                        leading = TazIcons.Slot,
+                        trailing = {
+                            if (!slot.available) StatusChip("Full", warning = true)
+                            else Text(
+                                if (slot.feeRupees == 0) "Free" else "₹${slot.feeRupees}",
+                                fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
+                                color = if (slot.feeRupees == 0) TazColors.Success else TazColors.TextPrimary
+                            )
+                        }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                slot.label,
+                                fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
+                                color = TazColors.TextPrimary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            if (slot.recommended && slot.available) {
+                                Spacer(Modifier.width(TazSpace.sm))
+                                StatusChip("Recommended", warning = false)
+                            }
+                        }
+                        slot.feeReason?.takeIf { slot.available && slot.feeRupees > 0 }?.let {
+                            Text(it, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+                        }
+                    }
                 }
             }
         }
@@ -832,6 +906,18 @@ private fun PaymentStep(session: CheckoutSession) {
                         Text(
                             "Pay when your order arrives",
                             fontSize = TazType.captionSize, color = TazColors.TextSecondary,
+                            lineHeight = TazType.captionLine
+                        )
+                    }
+                    // Where the mockup put a CVV box. Card and UPI details are
+                    // entered inside the provider's own secure checkout and
+                    // never in a Tazzzo view — taking a CVV in app-owned UI is
+                    // a PCI violation, and there is no gateway behind it yet.
+                    if (method.kind == PaymentMethodKind.CARD) {
+                        Spacer(Modifier.height(TazSpace.xxs))
+                        Text(
+                            "Card details are entered on your bank's secure page, never in Tazzzo",
+                            fontSize = TazType.captionSize, color = TazColors.TextTertiary,
                             lineHeight = TazType.captionLine
                         )
                     }
@@ -892,7 +978,9 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
             )
             Spacer(Modifier.height(TazSpace.xxs))
             Text(
-                session.slot?.label ?: "—",
+                session.slot?.let { s ->
+                    s.label + (if (s.feeRupees == 0) " · Free" else " · ₹${s.feeRupees}")
+                } ?: "—",
                 fontSize = TazType.captionSize, color = TazColors.TextSecondary
             )
         }
@@ -913,6 +1001,35 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
             )
         }
 
+        // ----- 3b. Delivery instructions (optional, market-configurable) -----
+        ReviewCard(title = "Delivery instructions") {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)
+            ) {
+                com.tazzzo.app.config.defaultDeliveryInstructions.forEach { opt ->
+                    val on = opt.id in session.instructionIds
+                    Box(
+                        Modifier.height(TazSize.chipHeight).clip(TazRadius.pill)
+                            .background(if (on) TazColors.Green else TazColors.Surface)
+                            .border(BorderStroke(1.dp, if (on) TazColors.Green else TazColors.CardBorder), TazRadius.pill)
+                            .tazPressable(
+                                onClick = { session.toggleInstruction(opt.id) },
+                                pressScale = TazPress.compact, haptic = TazHaptic.Select,
+                                role = Role.Checkbox, selected = on
+                            )
+                            .padding(horizontal = TazSpace.md),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            opt.label, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+                            color = if (on) TazColors.White else TazColors.TextPrimary, maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+
         // ----- 4. Bill -----
         ReviewCard(title = "Bill details") {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -931,6 +1048,46 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                 Text(
                     "₹${bill.itemTotal}", fontSize = TazType.bodySize,
                     fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary
+                )
+            }
+            // ---- discounts, each on its own line, before the customer commits ----
+            // The review is the last place a total can surprise someone. Every
+            // rupee taken off is itemised here exactly as on the cart; nothing
+            // is folded into "item total".
+            bill.appliedPromotions.filter { it.discountRupees > 0 }.forEach { promo ->
+                Spacer(Modifier.height(TazSpace.md))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(promo.title, fontSize = TazType.bodySize, color = TazColors.TextSecondary)
+                        Text(
+                            promo.explanation, fontSize = TazType.microSize,
+                            lineHeight = TazType.microLine, color = TazColors.TextTertiary
+                        )
+                    }
+                    Text(
+                        "−₹${promo.discountRupees}", fontSize = TazType.bodySize,
+                        fontWeight = FontWeight.SemiBold, color = TazColors.Green
+                    )
+                }
+            }
+            if (bill.clubDiscount > 0) {
+                Spacer(Modifier.height(TazSpace.md))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Tazzzo Club savings", fontSize = TazType.bodySize,
+                        color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "−₹${bill.clubDiscount}", fontSize = TazType.bodySize,
+                        fontWeight = FontWeight.SemiBold, color = TazColors.Green
+                    )
+                }
+            }
+            bill.bestOfferNote?.let { note ->
+                Spacer(Modifier.height(TazSpace.sm))
+                Text(
+                    note, fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
+                    color = TazColors.TextSecondary
                 )
             }
             Spacer(Modifier.height(TazSpace.md))
@@ -1012,7 +1169,7 @@ private fun ReviewCard(
             )
             if (actionLabel != null && onAction != null) {
                 Box(
-                    Modifier.clip(TazRadius.pill).clickable { onAction() }
+                    Modifier.clip(TazRadius.pill).tazPressable(onClick = { onAction() }, pressScale = TazPress.compact)
                         .defaultMinSize(minHeight = TazSize.touchTarget)
                         .padding(horizontal = TazSpace.sm),
                     contentAlignment = Alignment.Center

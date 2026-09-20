@@ -100,6 +100,19 @@ object MockCatalog {
             Subcategory("dogfood-s", "Dog Food", "🐶"),
             Subcategory("catfood-s", "Cat Food", "🐱")
         )),
+        // Mirrors taxonomy v0.9.0 exactly: Household & Lifestyle >
+        // Pooja & Religious Needs, sub-categories Daily Pooja and Pooja
+        // Materials, verticals TZV-000225..TZV-000233. Names and shape are the
+        // backend's, not ours, so the swap from mock to service is a data
+        // change and not a re-modelling exercise.
+        //
+        // Deliberately NOT called "Festive". A festival is a merchandising
+        // collection over these SKUs, which the taxonomy's own three-plane rule
+        // puts outside taxonomy; ritual goods themselves sell all year.
+        Category("pooja", "Pooja & Religious Needs", "🪔", 0xFFFFF3E0, "Household & Lifestyle", listOf(
+            Subcategory("daily-pooja", "Daily Pooja", "🪔"),
+            Subcategory("pooja-materials", "Pooja Materials", "🌸")
+        )),
         Category("paan", "Paan Corner", "🍃", 0xFFE8F5E9, "Household & Lifestyle", listOf(
             Subcategory("mouthfresh-s", "Mouth Fresheners", "🍬"),
             Subcategory("smoking-s", "Candles & Lighters", "🕯️")
@@ -187,7 +200,21 @@ object MockCatalog {
         Product("p61", "Cat Food Ocean Fish", "Whiskas", "🐱", "1.2 kg", 345, 399, "pet", "catfood-s", 0.0, 0),
         // Paan corner
         Product("p62", "Silver Coated Elaichi", "Pass Pass", "🍬", "85 g", 52, 60, "paan", "mouthfresh-s", 0.0, 0),
-        Product("p63", "Scented Candles Pack", "HomeLite", "🕯️", "2 pcs", 149, 199, "paan", "smoking-s", 0.0, 0)
+        Product("p63", "Scented Candles Pack", "HomeLite", "🕯️", "2 pcs", 149, 199, "paan", "smoking-s", 0.0, 0),
+        // ----- Pooja & Religious Needs -----
+        // One SKU per vertical in taxonomy v0.9.0 (TZV-000225..TZV-000233), so
+        // the aisle can be validated against the real tree rather than a
+        // shape we invented. Ritual goods sell year-round; a festival is a
+        // collection over them, not a category of its own.
+        Product("p64", "Sandal Agarbatti", "Cycle", "🧴", "72 sticks", 55, 65, "pooja", "daily-pooja", 0.0, 0, verticalId = "TZV-000225", tags = listOf("Bestseller")),
+        Product("p65", "Sambrani Dhoop Sticks", "Cycle", "🌬️", "20 sticks", 65, 75, "pooja", "daily-pooja", 0.0, 0, verticalId = "TZV-000226"),
+        Product("p66", "Pure Camphor Tablets", "Mangaldeep", "❄️", "50 g", 95, 110, "pooja", "daily-pooja", 0.0, 0, verticalId = "TZV-000227"),
+        Product("p67", "Cotton Diya Wicks (Long)", "Shubhkart", "🧵", "100 pcs", 39, 45, "pooja", "daily-pooja", 0.0, 0, verticalId = "TZV-000228"),
+        Product("p68", "Mitti Diya", "Tazzzo Home", "🪔", "12 pcs", 59, 75, "pooja", "daily-pooja", 0.0, 0, verticalId = "TZV-000229", tags = listOf("Bestseller")),
+        Product("p69", "Deepam Pooja Oil (Non-Edible)", "VVV", "🛢️", "500 ml", 149, 165, "pooja", "daily-pooja", 0.0, 0, verticalId = "TZV-000230", highlights = listOf("Not for cooking")),
+        Product("p70", "Havan Samagri", "Shubhkart", "🔥", "200 g", 89, 105, "pooja", "daily-pooja", 0.0, 0, verticalId = "TZV-000231"),
+        Product("p71", "Roli Chandan Kumkum Set", "Shubhkart", "🔴", "4 pcs", 59, 69, "pooja", "pooja-materials", 0.0, 0, verticalId = "TZV-000232"),
+        Product("p72", "Brass Pooja Thali Set", "Tazzzo Home", "🟡", "1 set", 449, 599, "pooja", "pooja-materials", 0.0, 0, verticalId = "TZV-000233", tags = listOf("Premium"))
     )
 
     val banners = listOf(
@@ -208,7 +235,34 @@ object MockCatalog {
     fun productsFor(categoryId: String, subcategoryId: String? = null) =
         products.filter { it.categoryId == categoryId && (subcategoryId == null || it.subcategoryId == subcategoryId) }
 
+    /**
+     * How many SKUs each category and sub-category actually holds, keyed by id.
+     *
+     * The supplied mockups print a count on every category tile ("340+",
+     * "1,840 Items"). Those figures were invented for the comp. These are
+     * counted from the catalogue, so a tile can never advertise depth the aisle
+     * does not have — and the number shrinks honestly when a SKU goes away.
+     */
+    fun counts(): Map<String, Int> = buildMap {
+        products.forEach { p ->
+            put(p.categoryId, (get(p.categoryId) ?: 0) + 1)
+            p.subcategoryId?.let { put(it, (get(it) ?: 0) + 1) }
+        }
+    }
+
     fun bestsellers() = products.filter { "Bestseller" in it.tags }
+
+    /**
+     * Every SKU whose MRP genuinely exceeds its selling price, deepest saving
+     * first, measured in rupees rather than percent.
+     *
+     * Ranked by rupees because that is the figure a customer can verify against
+     * the pack, and because a 40% saving on a ₹10 item is not a better deal
+     * than ₹300 off a ₹2,000 one. Nothing is promoted into this list by a flag.
+     */
+    fun deals() = products
+        .filter { it.mrp > it.price }
+        .sortedByDescending { it.mrp - it.price }
 
     fun search(query: String): List<Product> {
         if (query.isBlank()) return emptyList()

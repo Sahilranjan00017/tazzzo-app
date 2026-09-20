@@ -29,6 +29,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.tazzzo.app.data.model.Product
+import com.tazzzo.app.ui.interaction.TazHaptic
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -48,12 +54,45 @@ import androidx.compose.ui.unit.dp
 data class ProductFilters(
     val sort: SortOption = SortOption.RELEVANCE,
     val inStockOnly: Boolean = false,
-    val brands: Set<String> = emptySet()
+    val brands: Set<String> = emptySet(),
+    /**
+     * Only items whose MRP genuinely exceeds their selling price.
+     *
+     * Derived from the two prices on the SKU, never from a "deal" flag someone
+     * set: a discount the customer cannot verify against an MRP is not a
+     * discount. An item priced at its MRP is excluded even if it is on a
+     * campaign, because there is nothing off.
+     */
+    val dealsOnly: Boolean = false
 ) {
     val activeCount: Int
-        get() = (if (inStockOnly) 1 else 0) + brands.size +
+        get() = (if (inStockOnly) 1 else 0) + brands.size + (if (dealsOnly) 1 else 0) +
             (if (sort != SortOption.RELEVANCE) 1 else 0)
 }
+
+/**
+ * Saver so a customer's filter selection survives navigation.
+ *
+ * Without this, opening a product from a filtered list and pressing back
+ * silently reset the filters — the customer's work, thrown away by the
+ * navigation layer. Encoded as primitives because `rememberSaveable` must
+ * round-trip through the platform's own state bundle.
+ */
+val ProductFiltersSaver: Saver<ProductFilters, Any> = listSaver(
+    save = { listOf(it.sort.name, it.inStockOnly, it.brands.toList(), it.dealsOnly) },
+    restore = {
+        @Suppress("UNCHECKED_CAST")
+        ProductFilters(
+            sort = runCatching { SortOption.valueOf(it[0] as String) }
+                .getOrDefault(SortOption.RELEVANCE),
+            inStockOnly = it[1] as Boolean,
+            brands = (it[2] as List<String>).toSet(),
+            // Older saved bundles predate this filter, so read it defensively:
+            // a restore must never crash on state written by a previous build.
+            dealsOnly = it.getOrNull(3) as? Boolean ?: false
+        )
+    }
+)
 
 enum class SortOption(val label: String) {
     RELEVANCE("Relevance"),
@@ -67,6 +106,7 @@ fun List<Product>.applyFilters(f: ProductFilters): List<Product> {
     var out = this
     if (f.inStockOnly) out = out.filter { it.isPurchasable }
     if (f.brands.isNotEmpty()) out = out.filter { it.brand in f.brands }
+    if (f.dealsOnly) out = out.filter { it.mrp > it.price }
     out = when (f.sort) {
         SortOption.RELEVANCE -> out
         SortOption.PRICE_LOW -> out.sortedBy { it.price }
@@ -108,6 +148,15 @@ fun FilterBar(
             leading = if (filters.inStockOnly) TazIcons.Check else null,
             onClick = { onChange(filters.copy(inStockOnly = !filters.inStockOnly)) }
         )
+        // Sits beside "In stock" because both are one-tap truths about the
+        // item, not preferences. "Deals" means MRP exceeds price on this SKU
+        // today — nothing else qualifies.
+        FilterChip(
+            label = "Deals",
+            selected = filters.dealsOnly,
+            leading = if (filters.dealsOnly) TazIcons.Check else null,
+            onClick = { onChange(filters.copy(dealsOnly = !filters.dealsOnly)) }
+        )
         brands.forEach { brand ->
             FilterChip(
                 label = brand,
@@ -139,7 +188,12 @@ private fun FilterChip(
                 BorderStroke(1.dp, if (selected) TazColors.Green else TazColors.CardBorder),
                 TazRadius.pill
             )
-            .clickable { onClick() }
+            .tazPressable(
+                onClick = onClick,
+                pressScale = TazPress.compact,
+                haptic = TazHaptic.Select,
+                role = Role.Button
+            )
             .padding(horizontal = TazSpace.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -178,7 +232,12 @@ fun SortSheet(
             SortOption.entries.forEach { option ->
                 Row(
                     Modifier.fillMaxWidth().clip(TazRadius.chip)
-                        .clickable { onSelect(option); onDismiss() }
+                        .tazPressable(
+                            onClick = { onSelect(option); onDismiss() },
+                            pressScale = TazPress.row,
+                            haptic = TazHaptic.Select,
+                            role = Role.RadioButton
+                        )
                         .padding(vertical = TazSpace.md, horizontal = TazSpace.xs),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -213,3 +272,4 @@ fun SortSheet(
         }
     }
 }
+

@@ -57,6 +57,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tazzzo.app.LocalAppState
+import com.tazzzo.app.ui.interaction.TazHaptic
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.theme.MotionSettings
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -182,6 +186,9 @@ fun GuidedJourneyOverlay(onDone: () -> Unit) {
                         )
                     }
                 }
+                // Full-screen scrim: intentionally has NO press response.
+                // A whole-screen scale or tint on tap would read as a glitch,
+                // and the spotlight advancing IS the feedback.
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
@@ -190,7 +197,8 @@ fun GuidedJourneyOverlay(onDone: () -> Unit) {
 
         // --- bobbing arrow pointing at the spotlight ---
         if (hole != null) {
-            val bob by rememberInfiniteTransition(label = "arrowBob").animateFloat(
+            val bob by if (!MotionSettings.ambientEnabled) remember { mutableStateOf(0f) }
+            else rememberInfiniteTransition(label = "arrowBob").animateFloat(
                 initialValue = 0f,
                 targetValue = 14f,
                 animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse),
@@ -237,6 +245,8 @@ fun GuidedJourneyOverlay(onDone: () -> Unit) {
                 )
                 .clip(RoundedCornerShape(CardCorner))
                 .background(TazColors.Surface)
+                // Deliberately inert: swallows taps so they do not reach the
+                // scrim behind. No feedback, because nothing happened.
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
@@ -343,7 +353,11 @@ fun GuidedJourneyOverlay(onDone: () -> Unit) {
                             color = TazColors.TextSecondary,
                             modifier = Modifier
                                 .defaultMinSize(minHeight = 48.dp)
-                                .clickable { onDone() }
+                                .tazPressable(
+                                    onClick = onDone,
+                                    pressScale = TazPress.compact,
+                                    haptic = TazHaptic.Tap
+                                )
                                 .padding(vertical = TazSpace.sm, horizontal = TazSpace.sm)
                         )
                         Spacer(Modifier.width(TazSpace.sm))

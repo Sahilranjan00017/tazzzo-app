@@ -45,6 +45,9 @@ import com.tazzzo.app.Screen
 import com.tazzzo.app.data.repository.ServiceLocator
 import kotlinx.coroutines.CancellationException
 import com.tazzzo.app.ui.state.toLoadError
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.ui.interaction.TazHaptic
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazRadius
 import com.tazzzo.app.theme.TazSize
@@ -175,19 +178,15 @@ fun LoginScreen() {
                                 )
                             }
                             Spacer(Modifier.height(18.dp))
-                            if (sending) {
-                                Box(
-                                    Modifier.fillMaxWidth().height(48.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(
-                                        color = TazColors.Green,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
-                            } else {
+                            run {
+                                // Was: the button vanished and a bare spinner
+                                // took its place, so the CTA disappeared from
+                                // under the customer's finger. The button now
+                                // stays put and shows that it is working.
                                 PillButton(
                                     text = "Send OTP",
+                                    loading = sending,
+                                    loadingText = "Sending OTP…",
                                     onClick = {
                                         if (!sending) {
                                             scope.launch {
@@ -289,7 +288,10 @@ fun LoginScreen() {
                                         Modifier
                                             .defaultMinSize(minHeight = 44.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
+                                            .tazPressable(
+                                                pressScale = TazPress.compact,
+                                                haptic = TazHaptic.Tap,
+                                                onClick = {
                                                 scope.launch {
                                                     error = null
                                                     try {
@@ -301,7 +303,8 @@ fun LoginScreen() {
                                                     }
                                                 }
                                                 resendIn = 30
-                                            }
+                                                }
+                                            )
                                             .padding(horizontal = 12.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -339,7 +342,7 @@ fun LoginScreen() {
                                                     if (profile != null) {
                                                         app.user = profile
                                                         app.requestGuidedTourIfFirstTime()
-                                                        app.resetTo(Screen.Home)
+                                                        app.goHome()
                                                     } else {
                                                         error = "Invalid OTP, try again"
                                                     }
@@ -365,11 +368,9 @@ fun LoginScreen() {
                                 Modifier
                                     .defaultMinSize(minHeight = 44.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        step = 1
+                                    .tazPressable(onClick = { step = 1
                                         otp = ""
-                                        error = null
-                                    }
+                                        error = null }, pressScale = TazPress.compact)
                                     .padding(horizontal = 12.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -391,10 +392,8 @@ fun LoginScreen() {
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 48.dp)
                     .clip(TazRadius.card)
-                    .clickable {
-                        app.requestGuidedTourIfFirstTime()
-                        app.resetTo(Screen.Home)
-                    },
+                    .tazPressable(onClick = { app.requestGuidedTourIfFirstTime()
+                        app.goHome() }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

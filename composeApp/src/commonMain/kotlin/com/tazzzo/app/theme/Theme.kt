@@ -45,9 +45,15 @@ object TazColors {
     val OrangeSoft = Color(0xFFFFF1EA)
 
     // --- neutral surface ramp (the missing hierarchy) ---------------------
+    // Four levels, lowest (cards) to highest (tiles). The supplied mockups get
+    // their depth from a four-step ramp; Tazzzo had two, which is why every
+    // panel previously read as the same plane. Hues stay warm — the logo is
+    // drawn in #00411C and a cool ground would fight it.
     val Cream = Color(0xFFFAF9F6)        // page background — cleaner, lets cards lift
-    val Surface = Color(0xFFFFFFFF)      // cards
-    val SurfaceSunken = Color(0xFFF1EFE9) // grouped/inset areas, image wells
+    val Surface = Color(0xFFFFFFFF)      // L0 cards
+    val SurfaceSunken = Color(0xFFF1EFE9) // L1 grouped/inset areas, image wells
+    val SurfaceTile = Color(0xFFE6E2D8)  // L2 category tiles, filled thumbs — reads as a
+                                         // distinct plane against a card sitting on cream
     val CardBorder = Color(0xFFEBE8E0)   // hairline
     val BorderStrong = Color(0xFFD8D4C9) // inputs, dividers that must read
 

@@ -44,6 +44,31 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       placeholders; attribution in docs/IMAGE_ATTRIBUTIONS.md).
 
 ## P1 — visual ceiling (new, Phase 6)
+- [ ] **Campaign artwork [ASSET REQUIRED] (2026-09-06).** CampaignHero is live and
+      data-driven (CampaignConfig, [MOCKED]); it renders typographically with
+      licensed category art until production artwork is supplied. Date windowing
+      is [BACKEND REQUIRED].
+- [ ] **Delivery slots are [MOCKED] (2026-09-06).** Slot model now carries fee,
+      reason, group and recommended; the chosen slot follows the order to the
+      receipt. Real slots, fees and availability are [BACKEND REQUIRED]
+      (serviceability). No ETA is fabricated — D4 stands.
+- [ ] **Tip / delivery-partner gratuity — [BUSINESS DECISION], NOT BUILT.** Seen
+      in the reference checkout; deliberately not copied. Needs revenue-
+      recognition and reversal rules before any UI exists.
+- [ ] **"Rate order" — not built.** No ratings backend; a rating control with no
+      destination is a fake. [BACKEND REQUIRED].
+- [x] F8 FIXED 2026-09-06 — cart's Club and Offers cards rendered narrower than
+      the delivery/bill cards (double gutter). Found in a screenshot after all
+      semantic assertions passed.
+- [ ] **Promotions are [MOCKED] (2026-09-05).** A deterministic promotion engine now
+      exists (config/PromotionEngine.kt, 22 unit tests) but the promotion SET,
+      usage counters per user and real validity windows are [BACKEND REQUIRED].
+      PromotionConfig.active is fixture data. PromotionPolicy.clubStacksWithPromotions
+      = false is a [BUSINESS DECISION] default, same standing as D4/D5/D6.
+- [x] F6 FIXED 2026-09-05 — "Start shopping" / "Continue shopping" landed on
+      whichever bottom tab was last open (resetTo(Home) reset the stack, not the
+      tab). Found by the on-device journey test after joining Club from Account.
+      Same bug in 7 files; all now go through AppState.goHome(). GoHomeTest pins it.
 - [ ] **5/5 EXPERIENCE PASS (opened 2026-09-01).** Four structural gaps found by
       source audit, none visible in a screenshot: (S1) no component has a
       designed pressed state — `collectIsPressedAsState` appears zero times
@@ -54,6 +79,10 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       are lost on every back; (S4) no haptics anywhere. Full inventory, per
       component and per screen before-scores, and the fix plan are in
       TAZZZO_5_STAR_EXPERIENCE_AUDIT.md.
+- [x] REMOVED FROM HOME 2026-09-06: the hero carousel (and with it the
+      "SAVE 8–20%" claim and the trade-dress photograph) is replaced by a
+      config-driven CampaignHero. The asset still exists in MockCatalog banners
+      and D6 remains UNRESOLVED for About / splash / login copy.
 - [ ] Hero banner carries THIRD-PARTY TRADE DRESS (Aashirvaad, Daawat, Maggi,
       Tata Salt, Colgate, Fortune packaging) in Tazzzo's own marketing image.
       Brand/licensing exposure, not just a placeholder issue. Raised 2026-09-01.
@@ -101,3 +130,111 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
 - [ ] Micro-interactions, transitions, checkout polish.
 - [ ] Performance pass (emulator cold start is slow under swiftshader;
       profile on hardware).
+
+## Taxonomy v0.9.0 conflicts (2026-09-06)
+
+Raised after verifying `Tazzzo_Taxonomy_Handoff_for_Mobile_App.md` directly
+against `Tazzzo_Taxonomy_V1_Master.csv` (293 rows), `Tazzzo_Taxonomy_V1_Master.json`
+and `tazzzo-catalog-service/docs/openapi.json` (29 paths, 8 GET). None of these
+is an app defect. All need a decision or backend work.
+
+- [ ] **No browse, list or search endpoint. Blocks the category screen and
+      search entirely.** Verified: `GET /api/v1/products` *requires*
+      `canonicalKey` and returns a single `ProductResponse`, not a page. There
+      is no node-children endpoint. The app currently renders both screens from
+      `MockCatalog`, so this is invisible today and fatal at integration.
+      Needs a contract change, which the handoff says is not scoped.
+- [ ] **Every vertical id in the shipped master CSV is suffixed
+      " (provisional)"** — all 293 rows, e.g. `TZV-000225 (provisional)`. That
+      is branch status leaking into the identity column, and it contradicts the
+      handoff's own stability contract. The app stores the bare id in
+      `Product.verticalId`. If anyone keys on the raw CSV string it breaks the
+      day a branch locks. Backend should split status out of the id column.
+- [ ] **Fresh produce, dairy and pet care do not exist in v0.9.0 and were
+      excluded by recorded decision — but they are the app's entire spine.**
+      Verified absent: zero Dairy, Milk, Curd, Paneer, Dog or Cat verticals;
+      the only produce-adjacent nodes are Frozen Vegetables, Nuts, Dried
+      Fruits, Dates, Seeds and Juice & Fruit Drinks, all inside Food. Eggs DO
+      exist (under Meat, Seafood & Eggs). `[BUSINESS DECISION]` — either the
+      exclusion is reversed through the release machinery, or Tazzzo ships
+      without the aisles its Home screen is built around. **Produce depth work
+      is stopped pending this ruling; it was not expanded.**
+- [ ] **The collections plane is not built.** Festival campaigns, offer rows
+      and curated rails have no backend home. `CampaignConfig` and
+      `PromotionConfig` are `[MOCKED]` locally and have nothing to bind to.
+- [ ] **All 9 Pooja verticals are `PROPOSED — 50-SKU validation pending`**, as
+      are all of Personal Care, Home Care, Meat and Health & Wellness (161 of
+      293 rows). Only Staples (69) and Food (63) are conditionally locked.
+      Names and structure in the Pooja aisle may still move.
+- [ ] **Local-language product names need native review before launch.** The
+      Kannada names planned for Bengaluru produce (Eerulli, Baale Hannu,
+      Southekayi) are researched, not verified by a native speaker. A wrong
+      word in a customer's own language is worse than English only. None have
+      shipped yet.
+
+### Correction to the handoff document itself
+§1.2 states "there is no festive category" in a way that reads as though ritual
+goods are absent. **`Pooja & Religious Needs` does exist** — a full Category
+under Household & Lifestyle with 2 sub-categories and 9 verticals
+(TZV-000225..TZV-000233), and §3 of the same document lists it. What does not
+exist is *festive as a seasonal grouping*, which the document's own three-plane
+rule correctly places in collections. The app now mirrors the real shape.
+
+## UI redesign — decisions and defects (2026-09-06)
+
+Raised while implementing the six supplied screen mockups. The redesign itself
+is built and green; these are the things it cannot decide for you.
+
+### Founder decisions
+- [ ] **Tip `[BUSINESS DECISION]`.** Built and wired into the bill as its own
+      row, added to the payable and never netted against savings. But there is
+      **no payout rail**: nothing routes a tip to a delivery partner, and on
+      Cash on Delivery it is cash handed to a person the app cannot account to.
+      Copy states only that the amount is added to this order — the mockup's
+      "100% of your tip goes directly to your rider" is a promise nobody can
+      keep today. **Do not ship to production until a payout rail exists.**
+- [ ] **Delivery promise (D4).** `AppConfig.deliveryPromise` is `Unknown`, so
+      the Home delivery chip, the cart items-header ETA and the mockups' "10
+      MINS" / per-item "8 MINS" all render **nothing**. The components are
+      built and light up the moment a verified window per pincode exists.
+- [ ] **Store hours.** The mockup's "24x7 STORE" chip is an operational
+      commitment. Nothing models store hours, so it is not drawn.
+- [ ] **Support SLA (D6).** The mockup's "Quick Resolution Promise — instant
+      refund within 2 minutes" is not drawn. No refund pipeline, no ticketing,
+      no signed SLA.
+- [ ] **Privacy policy and terms.** No document exists at any URL the app
+      knows. The Account row is not drawn. This is an independent launch
+      blocker for an Indian consumer app, not a redesign item.
+- [ ] **Bottom nav label.** The mockups rename the fifth tab "Order Again" →
+      "Orders". Kept as "Order Again": the label feeds both the visible text
+      and the contentDescription, and `InteractionSemanticsTest` asserts it.
+      Changing it is one line plus one test — say the word.
+- [ ] **`BrandCopy.savingsClaim` "SAVE 8–20%" (D6, pre-existing).** Still live
+      on marketing surfaces with no substantiating dataset in the repo.
+
+### Backend required before these screens can be finished
+- [ ] **Payment gateway.** Until one exists: UPI and Card stay `Coming soon`,
+      there are **no Google Pay / PhonePe / Paytm rows** (third-party trade
+      dress), no saved-card vault, and **no CVV field in Tazzzo's own UI** —
+      taking a CVV outside the gateway's checkout is a PCI violation. The card
+      row says where card details are actually entered.
+- [ ] **Refunds, e-gift cards, payment management** (Account). Each needs a
+      backend that does not exist. Rows are not drawn rather than leading
+      nowhere.
+- [ ] **Rupee wallet.** The mockup's "Tazzzo Wallet · Add Balance · 5%
+      cashback" is stored value — a regulated prepaid-instrument product in
+      India. The card renders **Tazzzo Coins** instead.
+- [ ] **WhatsApp transport.** Every Help contact route still ends in an
+      "Opening WhatsApp… (demo)" dialog; there is no URL-opening
+      expect/actual in commonMain. The redesign makes Help look considerably
+      more capable, which widens the gap between what it offers and what it
+      does.
+
+### Defect found while reviewing, NOT introduced by this work
+- [ ] **Coin balance has two sources that can disagree.** Account's balance
+      card and Home's `CoinChip` read `app.user.coinBalance` (advanced by
+      `OrderPlacement`); `CoinsScreen` reads `ServiceLocator.coins.getBalance()`,
+      which only `credit()` moves. The two can show different balances for the
+      same customer. Not fixed here — fixing it means choosing which is
+      authoritative, which is a data decision, and doing it inside a UI wave
+      would bury it.

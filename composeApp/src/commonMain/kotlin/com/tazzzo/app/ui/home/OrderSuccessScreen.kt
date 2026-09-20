@@ -37,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -134,6 +136,22 @@ fun OrderSuccessScreen(orderId: String) {
                     SummaryRow("Placed", order.placedAtLabel)
                     Spacer(Modifier.height(TazSpace.md))
                     SummaryRow("Delivering to", order.address)
+                    order.slot?.let { s ->
+                        Spacer(Modifier.height(TazSpace.sm))
+                        SummaryRow("Delivery slot", s.label + (if (s.feeRupees == 0) " · Free" else " · ₹${s.feeRupees}"))
+                    }
+                    if (order.instructionIds.isNotEmpty()) {
+                        Spacer(Modifier.height(TazSpace.sm))
+                        SummaryRow(
+                            "Instructions",
+                            com.tazzzo.app.config.defaultDeliveryInstructions
+                                .filter { it.id in order.instructionIds }.joinToString(" · ") { it.label }
+                        )
+                    }
+                    if (order.bill.realisedSavings > 0) {
+                        Spacer(Modifier.height(TazSpace.sm))
+                        SummaryRow("You saved", "₹${order.bill.realisedSavings}")
+                    }
                     // Rendered only when the order actually carries a method.
                     order.payment?.let { method ->
                         Spacer(Modifier.height(TazSpace.sm))
@@ -165,21 +183,29 @@ fun OrderSuccessScreen(orderId: String) {
                         }
                     }
                 }
-                Spacer(Modifier.height(TazSpace.xxl))
+                Spacer(Modifier.height(TazSpace.lg))
+                // The retention moment: what this order did for the customer's
+                // Club standing, and how far the next reward is. Members only —
+                // nothing is shown to a guest that they did not earn.
+                if (app.isClubMember) {
+                    com.tazzzo.app.ui.club.ClubProgressCard(app.membership)
+                    Spacer(Modifier.height(TazSpace.lg))
+                }
+                Spacer(Modifier.height(TazSpace.sm))
             }
 
             PillButton(
                 text = "Track order",
                 onClick = {
-                    app.resetTo(Screen.Home)
-                    app.navigate(Screen.Orders)
+                    app.goHome()
+                    app.navigate(Screen.OrderDetail(orderId))
                 },
                 modifier = Modifier.fillMaxWidth().heightIn(min = TazSize.buttonHeight)
             )
             Spacer(Modifier.height(TazSpace.md))
             Box(
                 Modifier.fillMaxWidth().clip(TazRadius.pill)
-                    .clickable { app.resetTo(Screen.Home) }
+                    .tazPressable(onClick = { app.goHome() }, pressScale = TazPress.compact)
                     .defaultMinSize(minHeight = 48.dp),
                 contentAlignment = Alignment.Center
             ) {

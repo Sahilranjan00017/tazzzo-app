@@ -22,12 +22,60 @@ sealed interface Screen {
     data object Coins : Screen
     data object Help : Screen
     data object Addresses : Screen
+    /** Your regulars, built from real order history, with one tap to add them all. */
+    data object MasterList : Screen
     data object About : Screen
+    /** Tazzzo Club landing — the value proposition, before any payment. */
+    data object Club : Screen
+    /** Confirm + pay. Separate destination so back returns to the landing page. */
+    data object ClubCheckout : Screen
+    /** Permanent receipt + service centre for one order. */
+    data class OrderDetail(val orderId: String) : Screen
 }
+
+/**
+ * Stable identity for a destination, used to key retained UI state (scroll
+ * position, query, filters) across navigation.
+ *
+ * Deliberately NOT the back-stack index: an index shifts when the stack is
+ * popped, which would throw away exactly the state we are trying to keep. Two
+ * identical destinations in one stack share a key, and therefore share scroll
+ * position — the correct behaviour for this app, where that means the same
+ * product or the same aisle.
+ */
+val Screen.stateKey: String
+    get() = when (this) {
+        is Screen.Splash -> "splash"
+        is Screen.Onboarding -> "onboarding"
+        is Screen.Login -> "login"
+        is Screen.Home -> "home"
+        is Screen.CategoryDetail -> "category:$categoryId:${subcategoryId ?: ""}"
+        is Screen.ProductDetail -> "product:$productId"
+        is Screen.Search -> "search"
+        is Screen.Cart -> "cart"
+        is Screen.Checkout -> "checkout"
+        is Screen.OrderSuccess -> "orderSuccess:$orderId"
+        is Screen.Orders -> "orders"
+        is Screen.Coins -> "coins"
+        is Screen.Help -> "help"
+        is Screen.Addresses -> "addresses"
+        is Screen.MasterList -> "masterList"
+        is Screen.About -> "about"
+        is Screen.Club -> "club"
+        is Screen.ClubCheckout -> "clubCheckout"
+        is Screen.OrderDetail -> "order:$orderId"
+    }
+
+/** Which way the customer is travelling. Drives the transition, nothing else. */
+enum class NavDirection { Forward, Backward, Replace }
 
 enum class HomeTab(val label: String, val emoji: String) {
     HOME("Home", "🏠"),
     CATEGORIES("Categories", "🗂️"),
+    // Savings is a destination, not a filter buried in a list. Every benchmark
+    // gives it a permanent slot, because "what is cheap today" is one of the
+    // three questions a customer opens a grocery app to answer.
+    DEALS("Deals", "🏷️"),
     ORDER_AGAIN("Order Again", "🔄"),
     ACCOUNT("Account", "👤")
 }
@@ -41,7 +89,24 @@ class TazzzoAppState(
     val current: Screen get() = backStack.last()
     var homeTab by mutableStateOf(HomeTab.HOME)
 
-    fun navigate(screen: Screen) { backStack.add(screen) }
+    /** Set by every stack mutation so the host can pick the right transition. */
+    var navDirection by mutableStateOf(NavDirection.Forward)
+        private set
+
+    /**
+     * Pushes a destination.
+     *
+     * Ignores a push of the destination already on top. That single guard is
+     * what stops a double-tapped product card from stacking two identical PDPs
+     * and forcing the customer to press back twice — the classic "broken back
+     * stack" bug. Genuine re-entry (Home → PDP → Home → same PDP) still works,
+     * because the top of the stack differs by then.
+     */
+    fun navigate(screen: Screen) {
+        if (backStack.lastOrNull() == screen) return
+        navDirection = NavDirection.Forward
+        backStack.add(screen)
+    }
 
     /**
      * One back behaviour for every trigger (top-bar arrow, Android system
@@ -49,6 +114,13 @@ class TazzzoAppState(
      * the bottom tabs return to Home before the app is allowed to exit.
      */
     fun handleSystemBack() {
+        // Hierarchy, outermost first. An overlay must always swallow the first
+        // back press: dismissing what is on top of the screen is what the
+        // customer means, and popping the screen underneath it instead is the
+        // single most disorienting thing back navigation can do.
+        if (showVoiceSheet) { showVoiceSheet = false; return }
+        if (guidedJourneyPending) { markTourSeen(); return }
+
         val active = checkout
         if (current is Screen.Checkout && active != null) {
             if (!active.backStep()) { checkout = null; back() }
@@ -59,9 +131,34 @@ class TazzzoAppState(
     }
 
     val canHandleSystemBack: Boolean
-        get() = backStack.size > 1 || current is Screen.Checkout || homeTab != HomeTab.HOME
-    fun back() { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) }
-    fun resetTo(screen: Screen) { backStack.clear(); backStack.add(screen) }
+        get() = showVoiceSheet || guidedJourneyPending ||
+            backStack.size > 1 || current is Screen.Checkout || homeTab != HomeTab.HOME
+    fun back() {
+        if (backStack.size > 1) {
+            navDirection = NavDirection.Backward
+            backStack.removeAt(backStack.lastIndex)
+        }
+    }
+
+    fun resetTo(screen: Screen) {
+        navDirection = NavDirection.Replace
+        backStack.clear()
+        backStack.add(screen)
+    }
+
+    /**
+     * "Start shopping" / "Continue shopping": the Home FEED, every time.
+     *
+     * Found by the on-device journey test (F6): a customer who reached Tazzzo
+     * Club via the Account tab, paid, and tapped "Start shopping" was dropped
+     * back on the Account tab — `resetTo(Screen.Home)` resets the back stack
+     * but the shell's selected tab is separate state, and it was still
+     * ACCOUNT. A button that says "shopping" must land on shopping.
+     */
+    fun goHome() {
+        homeTab = HomeTab.HOME
+        resetTo(Screen.Home)
+    }
 
     // --- session ---
     private val _user = mutableStateOf(
@@ -107,8 +204,43 @@ class TazzzoAppState(
         store?.onboarded = true
     }
 
+    /**
+     * Notification preference. Reading is cheap and observable; writing also
+     * persists, so the switch survives a relaunch.
+     *
+     * One property rather than a val plus a setter function: the pair compiled
+     * to two JVM methods with the same signature and broke the Android build.
+     */
+    private var notificationsState by mutableStateOf(store?.notificationsEnabled ?: true)
+    var notificationsEnabled: Boolean
+        get() = notificationsState
+        set(value) {
+            notificationsState = value
+            store?.notificationsEnabled = value
+        }
+
+    /**
+     * "No carry bag needed", chosen in the cart.
+     *
+     * Lives here rather than on [CheckoutSession] because the cart is open long
+     * before a session exists; the session seeds itself from this value so the
+     * choice is not silently dropped between the two screens.
+     *
+     * It is a packing preference and nothing more. The mockup pairs it with
+     * "earn 5 Eco Karma points"; no such ledger exists, and inventing a reward
+     * to sell a choice the customer was already making is the kind of claim
+     * D5 exists to stop.
+     */
+    var noCarryBag by mutableStateOf(false)
+
     /** Returning customers skip the login wall; logout resets this. */
     val isOnboarded: Boolean get() = store?.onboarded == true
+
+    /** Dev-only entry behind the `taz_start_home` launch flag: mark the device
+     *  onboarded AND route to Home in one step, so no later routing effect
+     *  (Splash → Onboarding for a new device) can bounce a demo launch back onto
+     *  the login wall. Ships nowhere; test classes clear the store first. */
+    fun enterDemoHome() { store?.onboarded = true; resetTo(Screen.Home) }
 
     fun markLoggedOut() {
         store?.onboarded = false
@@ -131,6 +263,7 @@ class TazzzoAppState(
         st.loadSession()?.let {
             _user.value = UserProfile(it.name, it.phone, it.isGuest, it.coinBalance, it.address)
         }
+        st.loadMembership()?.let { membership = it }
         val searches = st.loadRecentSearches()
         if (recentSearches.isEmpty() && searches.isNotEmpty()) {
             recentSearches.addAll(searches)
@@ -203,9 +336,47 @@ class TazzzoAppState(
 
     val cartItemCount: Int get() = cartEntries.values.sumOf { it.quantity }
 
+    // --- Tazzzo Club --------------------------------------------------------
+
+    /**
+     * Local mirror of the customer's club standing. Authoritative only until
+     * a backend exists — see BLOCKERS.md, same caveat as coin balances.
+     */
+    var membership by mutableStateOf(com.tazzzo.app.data.model.MembershipState())
+
+    val isClubMember: Boolean get() = membership.isActive
+
+    /** Club eligibility for the CURRENT cart. One source, used by cart, checkout and CTAs. */
+    fun clubEligibility(lines: List<CartLine> = cartLines()) =
+        com.tazzzo.app.config.MembershipCalculator.evaluate(
+            itemTotalRupees = lines.sumOf { it.lineTotal },
+            isMember = isClubMember,
+            plan = com.tazzzo.app.config.MembershipConfig.plan,
+            cumulativeSpendRupees = membership.cumulativeSpendRupees
+        )
+
+    /**
+     * Coupon the customer typed. Cart context, not transient UI, so it lives
+     * here rather than in a screen's `remember` — leaving the cart and coming
+     * back must not silently drop a code the customer entered.
+     */
+    var couponCode by mutableStateOf<String?>(null)
+
+    /** Set when Help is opened FROM an order, so support is order-scoped. */
+    var helpOrderId by mutableStateOf<String?>(null)
+
     /** Delegates to [com.tazzzo.app.config.BillCalculator] — the one place money maths lives. */
     fun bill(lines: List<CartLine>): BillSummary =
-        com.tazzzo.app.config.BillCalculator.bill(lines)
+        com.tazzzo.app.config.BillCalculator.bill(
+            lines = lines,
+            isClubMember = isClubMember,
+            clubCumulativeSpendRupees = membership.cumulativeSpendRupees,
+            couponCode = couponCode,
+            slot = checkout?.slot,
+            // Zero until a session exists, so the cart's bill and the checkout
+            // bill agree until the customer actually chooses a tip.
+            tipRupees = checkout?.tipRupees ?: 0
+        )
 
     fun clearCart() { cartEntries.clear(); store?.clearCart() }
 

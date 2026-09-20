@@ -69,6 +69,11 @@ object TazType {
     val buttonSize: TextUnit = 15.sp
     val buttonWeight = FontWeight.SemiBold
     val navLabelSize: TextUnit = 11.sp
+
+    /** The number inside a quantity stepper. Heavier than body at the same size
+     *  so the count reads at a glance while the − and + stay quiet. */
+    val stepperCountSize: TextUnit = 14.sp
+    val stepperCountWeight = FontWeight.Bold
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +93,17 @@ object TazSpace {
 
     /** Standard horizontal page gutter. */
     val gutter: Dp = 16.dp
+
+    /**
+     * Tighter page gutter for DENSE merchandising surfaces — the 4-up category
+     * grid, the 4-up deals grid, the 2-up product grid.
+     *
+     * 12dp, not [gutter]. At four columns a 16dp gutter costs 8dp of cell width
+     * on each side, which is the difference between a product name wrapping to
+     * two lines and fitting on one. Reserved for grids; text screens keep 16dp
+     * so body copy never runs to the screen edge.
+     */
+    val screenEdge: Dp = 12.dp
 
     /** Bottom padding on scrollable content so the floating cart bar never covers it. */
     val cartBarClearance: Dp = 96.dp
@@ -121,9 +137,12 @@ object TazRadius {
 // ---------------------------------------------------------------------------
 
 object TazElevation {
+    // The design system's instruction is to "depart from muddy shadows" and
+    // rely on structural 1px borders with a targeted, tiny ambient shadow.
+    // Heavier shadows also cost more to render on every scroll frame.
     val flat: Dp = 0.dp
-    val raised: Dp = 3.dp     // cards at rest
-    val floating: Dp = 8.dp   // banners, cart bar
+    val raised: Dp = 1.dp     // cards at rest — the BORDER does the work
+    val floating: Dp = 6.dp   // cart bar, sticky headers
     val overlay: Dp = 14.dp   // sheets, dialogs
 }
 
@@ -135,6 +154,20 @@ object TazMotion {
     const val fast = 150      // taps, state flips
     const val normal = 300    // transitions, crossfades
     const val ambient = 700   // pulses, marquees
+
+    /**
+     * Screen-to-screen navigation.
+     *
+     * 240ms, not [normal]. A full-screen slide reads as slower than a fade of
+     * the same duration because the eye tracks the moving edge, so matching the
+     * crossfade's 300ms would have made navigation feel heavier than the screen
+     * it replaced. Long enough to establish direction, short enough that a
+     * customer tapping through four aisles never waits on the app.
+     */
+    const val nav = 240
+
+    /** Sheets travel further than screens, so they get slightly longer. */
+    const val sheet = 280
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +187,24 @@ object TazSize {
     val inputHeight: Dp = 54.dp
     val chipHeight: Dp = 36.dp
     val navBarHeight: Dp = 62.dp
+
+    /**
+     * Width of the quantity stepper when it sits BESIDE content rather than
+     * spanning it (cart rows, list rows).
+     *
+     * Needed because the stepper's interior fills its container so the − and +
+     * sit at the pill's edges. As an unweighted child of a Row that makes it
+     * claim all remaining width, which starved the cart row's name/price
+     * column to zero — the row rendered as an image and a stepper with no
+     * product on it. Callers that place the stepper alongside text pass this.
+     */
+    val stepperInlineWidth: Dp = 116.dp
+
+    /** Minimum ADD/stepper hit area — 64x32 per the design system, which is
+     *  smaller than [touchTarget] only because the pill sits inside a padded
+     *  card whose own press area extends past it. */
+    val stepperMinWidth: Dp = 64.dp
+    val stepperMinHeight: Dp = 32.dp
 
     val productCardWidth: Dp = 150.dp
     val productImageHeight: Dp = 96.dp

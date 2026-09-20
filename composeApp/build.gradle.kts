@@ -50,11 +50,27 @@ kotlin {
             implementation("com.russhwolf:multiplatform-settings-test:1.3.0")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
         }
+        // On-device UI/journey harness. Runs against the real activity on the
+        // emulator and asserts on the SEMANTICS tree — the same tree TalkBack
+        // reads — so accessibility claims are verified rather than assumed.
+        androidInstrumentedTest.dependencies {
+            implementation("androidx.compose.ui:ui-test-junit4:1.9.0")
+            implementation("androidx.test.ext:junit:1.2.1")
+            implementation("androidx.test:runner:1.6.2")
+            implementation("androidx.test:core:1.6.1")
+            // For TestState.reset(): clears the default SharedPreferences the app persists into.
+            implementation("androidx.preference:preference-ktx:1.2.1")
+        }
     }
 }
 
 compose.resources {
     packageOfResClass = "tazzzo.resources"
+}
+
+dependencies {
+    // Registers the test activity the Compose test rule needs. Debug only.
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.9.0")
 }
 
 android {
@@ -66,6 +82,7 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // BuildConfig.DEBUG is how the Android actual of isDebugBuild() decides the
     // environment. Without this the flag does not exist and every build would

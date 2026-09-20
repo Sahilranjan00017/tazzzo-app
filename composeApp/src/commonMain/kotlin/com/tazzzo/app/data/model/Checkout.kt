@@ -33,10 +33,26 @@ data class Address(
 @Serializable
 data class DeliverySlot(
     val id: String,
-    val label: String,            // "Today, 6–8 PM"
+    val label: String,            // "6 – 9 AM"
     val available: Boolean,
-    val etaMinutes: Int? = null   // only when backed by serviceability data
+    val etaMinutes: Int? = null,  // only when backed by serviceability data
+    /** Fee for THIS slot. 0 = free. Overrides the flat rule when a slot is chosen. */
+    val feeRupees: Int = 0,
+    /** Customer-facing reason for the fee, e.g. "Peak-hour slot". Null when free or unexplained. */
+    val feeReason: String? = null,
+    /** Section header: "Next available", "Today", "Tomorrow". Null = ungrouped. */
+    val group: String? = null,
+    /** Server-recommended (soonest reliable). Rendered as a small tag, never auto-selected silently. */
+    val recommended: Boolean = false
 )
+
+/**
+ * Optional delivery instructions the customer can attach. The set of options
+ * is configuration (`AppConfig.deliveryInstructions`) so a market can add
+ * "Leave with security" or remove "Ring the bell" without a code change.
+ */
+@Serializable
+data class DeliveryInstruction(val id: String, val label: String)
 
 @Serializable
 enum class PaymentMethodKind { COD, UPI, CARD }
@@ -91,7 +107,10 @@ data class OrderRequest(
     val addressId: String,
     val addressText: String,
     val slotId: String,
-    val payment: PaymentMethodKind
+    val payment: PaymentMethodKind,
+    /** The chosen slot itself, so the order can echo it without a lookup. */
+    val slot: DeliverySlot? = null,
+    val instructionIds: List<String> = emptyList()
 )
 
 /**
