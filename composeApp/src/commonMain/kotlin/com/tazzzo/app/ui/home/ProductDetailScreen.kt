@@ -301,14 +301,14 @@ private fun PurchaseFooter(product: Product) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        "₹${product.price}",
+                        "${product.price}",
                         fontSize = TazType.priceHeroSize, fontWeight = FontWeight.Bold,
                         color = TazColors.TextPrimary, maxLines = 1
                     )
                     if (product.mrp > product.price) {
                         Spacer(Modifier.width(TazSpace.sm))
                         Text(
-                            "₹${product.mrp}",
+                            "${product.mrp}",
                             fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
                             textDecoration = TextDecoration.LineThrough,
                             maxLines = 1, modifier = Modifier.padding(bottom = TazSpace.xxs)
@@ -318,7 +318,7 @@ private fun PurchaseFooter(product: Product) {
                 if (product.mrp > product.price) {
                     Spacer(Modifier.height(TazSpace.xxs))
                     Text(
-                        "You save ₹${product.mrp - product.price} (${product.discountPercent}% off)",
+                        "You save ${product.mrp - product.price} (${product.discountPercent}% off)",
                         fontSize = TazType.savingsSize, fontWeight = TazType.savingsWeight,
                         color = TazColors.Success, maxLines = 1,
                         overflow = TextOverflow.Ellipsis

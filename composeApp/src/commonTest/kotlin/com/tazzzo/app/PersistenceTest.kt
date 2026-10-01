@@ -3,6 +3,7 @@ package com.tazzzo.app
 import com.tazzzo.app.data.local.CartRestore
 import com.tazzzo.app.data.local.PersistentStore
 import com.tazzzo.app.data.model.Availability
+import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.model.Product
 import com.russhwolf.settings.MapSettings
 import kotlin.test.Test
@@ -11,18 +12,18 @@ import kotlin.test.assertTrue
 import kotlin.test.assertNull
 
 private fun product(
-    id: String, price: Int = 100,
+    id: String, price: Money = r(100),
     availability: Availability = Availability.InStock, maxQty: Int = 10
 ) = Product(
     id = id, name = "Item $id", brand = "B", emoji = "🧪", unit = "1 kg",
-    price = price, mrp = price + 20, categoryId = "c", subcategoryId = "s",
+    price = price, mrp = price + r(20), categoryId = "c", subcategoryId = "s",
     rating = 4.0, ratingCount = 5, availability = availability, maxOrderQuantity = maxQty
 )
 
 class CartRestoreTest {
 
-    private fun saved(id: String, qty: Int, price: Int) =
-        PersistentStore.SavedCartLine(id, qty, price)
+    private fun saved(id: String, qty: Int, rupees: Int) =
+        PersistentStore.SavedCartLine(id, qty, r(rupees).paise)
 
     @Test fun clean_restore_keeps_lines_and_reports_nothing() {
         val out = CartRestore.reconcile(listOf(saved("a", 2, 100))) { product(it) }
@@ -54,8 +55,8 @@ class CartRestoreTest {
     }
 
     @Test fun price_drift_restores_at_current_price_and_discloses() {
-        val out = CartRestore.reconcile(listOf(saved("a", 1, 80))) { product(it, price = 95) }
-        assertEquals(95, out.restored.first().first.price)   // current price wins
+        val out = CartRestore.reconcile(listOf(saved("a", 1, 80))) { product(it, price = r(95)) }
+        assertEquals(r(95), out.restored.first().first.price)   // current price wins
         assertTrue(out.notice()!!.contains("prices updated"))
     }
 
@@ -71,8 +72,8 @@ class PersistentStoreTest {
 
     @Test fun cart_round_trip() {
         val st = store()
-        st.saveCart(listOf(PersistentStore.SavedCartLine("p1", 2, 29)))
-        assertEquals(listOf(PersistentStore.SavedCartLine("p1", 2, 29)), st.loadCart())
+        st.saveCart(listOf(PersistentStore.SavedCartLine("p1", 2, 2_900L)))
+        assertEquals(listOf(PersistentStore.SavedCartLine("p1", 2, 2_900L)), st.loadCart())
         st.clearCart()
         assertTrue(st.loadCart().isEmpty())
     }

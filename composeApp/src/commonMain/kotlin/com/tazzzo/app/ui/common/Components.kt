@@ -1,5 +1,7 @@
 package com.tazzzo.app.ui.common
 
+import com.tazzzo.app.data.model.Money
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -444,8 +446,8 @@ fun EmojiBox(
 
 /** Rupee-off badge — the exact saving, which is what a customer can verify. */
 @Composable
-fun SavingsBadge(rupeesOff: Int, modifier: Modifier = Modifier) {
-    if (rupeesOff > 0) {
+fun SavingsBadge(rupeesOff: Money, modifier: Modifier = Modifier) {
+    if (rupeesOff.isPositive) {
         Box(
             modifier
                 .clip(RoundedCornerShape(topStart = TazRadius.cardDp, bottomEnd = TazRadius.chipDp))
@@ -453,7 +455,7 @@ fun SavingsBadge(rupeesOff: Int, modifier: Modifier = Modifier) {
                 .padding(horizontal = TazSpace.sm, vertical = 3.dp)
         ) {
             Text(
-                "₹$rupeesOff OFF", color = TazColors.White, fontSize = TazType.microSize,
+                "$rupeesOff OFF", color = TazColors.White, fontSize = TazType.microSize,
                 fontWeight = TazType.microWeight, maxLines = 1
             )
         }
@@ -522,15 +524,15 @@ fun RatingRow(rating: Double, count: Int) {
 }
 
 @Composable
-fun PriceColumn(price: Int, mrp: Int) {
+fun PriceColumn(price: Money, mrp: Money) {
     Column {
         Text(
-            "₹$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
+            "$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
             color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
         )
         if (mrp > price) {
             Text(
-                "₹$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                "$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
                 textDecoration = TextDecoration.LineThrough,
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
@@ -546,7 +548,7 @@ fun PriceColumn(price: Int, mrp: Int) {
  * first and always renders in full.
  */
 @Composable
-private fun CardPriceBlock(price: Int, mrp: Int, modifier: Modifier = Modifier) {
+private fun CardPriceBlock(price: Money, mrp: Money, modifier: Modifier = Modifier) {
     // Commerce hierarchy on the card: PRICE leads (bold), MRP struck beside it,
     // and the saving stated in RUPEES underneath — a ₹8 the customer can check
     // beats a 20% they cannot. One savings signal per card; the orange badge
@@ -555,13 +557,13 @@ private fun CardPriceBlock(price: Int, mrp: Int, modifier: Modifier = Modifier) 
     Column(modifier) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                "₹$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
+                "$price", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
                 color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
             if (mrp > price) {
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "₹$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                    "$mrp", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
                     textDecoration = TextDecoration.LineThrough,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -915,7 +917,7 @@ fun ProductCard(
             Column(Modifier.fillMaxWidth().padding(ProductCardPadding)) {
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        "₹${product.price}", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
+                        "${product.price}", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight,
                         color = TazColors.TextPrimary, maxLines = 1
                     )
                     // The struck MRP is dropped in compact cells. At four-up
@@ -926,7 +928,7 @@ fun ProductCard(
                     if (!compact && product.mrp > product.price) {
                         Spacer(Modifier.width(TazSpace.xs))
                         Text(
-                            "₹${product.mrp}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
+                            "${product.mrp}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
                             textDecoration = TextDecoration.LineThrough, maxLines = 1,
                             modifier = Modifier.weight(1f, fill = false)
                         )
@@ -935,7 +937,7 @@ fun ProductCard(
                 // The saving in rupees — one signal, verifiable, Tazzzo orange = savings.
                 if (product.mrp > product.price) {
                     Text(
-                        "₹${product.mrp - product.price} OFF", fontSize = TazType.microSize,
+                        "${product.mrp - product.price} OFF", fontSize = TazType.microSize,
                         fontWeight = TazType.microWeight, color = TazColors.Orange, maxLines = 1
                     )
                 }
@@ -1087,7 +1089,7 @@ fun BoxScope.CartBar(aboveNav: Boolean = false) {
             Column(Modifier.weight(1f)) {
                 val bill = app.bill(app.cartLines())
                 Text(
-                    "$count item${if (count > 1) "s" else ""} · ₹${bill.itemTotal}",
+                    "$count item${if (count > 1) "s" else ""} · ${bill.itemTotal}",
                     color = TazColors.White, fontSize = TazType.titleSize,
                     fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
@@ -1095,8 +1097,8 @@ fun BoxScope.CartBar(aboveNav: Boolean = false) {
                 // cart can never quote different gaps for one basket.
                 val progress = freeDeliveryProgress(bill)
                 Text(
-                    if (!progress.alreadyFree && progress.remainingRupees > 0)
-                        "Add ₹${progress.remainingRupees} more for free delivery"
+                    if (!progress.alreadyFree && progress.remaining.isPositive)
+                        "Add ${progress.remaining} more for free delivery"
                     else "Free delivery unlocked",
                     color = TazColors.White.copy(alpha = 0.8f), fontSize = TazType.microSize,
                     fontWeight = TazType.microWeight, maxLines = 1, overflow = TextOverflow.Ellipsis

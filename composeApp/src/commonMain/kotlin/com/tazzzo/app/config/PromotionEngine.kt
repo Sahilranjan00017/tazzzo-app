@@ -2,6 +2,8 @@ package com.tazzzo.app.config
 
 import com.tazzzo.app.data.model.AppliedPromotion
 import com.tazzzo.app.data.model.CartLine
+import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.sumOfMoney
 import com.tazzzo.app.data.model.DeclinedPromotion
 import com.tazzzo.app.data.model.Promotion
 import com.tazzzo.app.data.model.PromotionAudience
@@ -38,11 +40,11 @@ object PromotionEngine {
         promotions: List<Promotion>,
         isMember: Boolean,
         couponCode: String?,
-        clubDiscountRupees: Int,
+        clubDiscount: Money,
         policy: PromotionPolicy = PromotionConfig.policy
     ): PromotionResolution {
-        val itemTotal = lines.sumOf { it.lineTotal }
-        if (itemTotal == 0) return PromotionResolution.NONE
+        val itemTotal = lines.sumOfMoney { it.lineTotal }
+        if (itemTotal.isZero) return PromotionResolution.NONE
 
         // ---- 1. Evaluate every promotion independently -----------------------
         val candidates = mutableListOf<Pair<Promotion, AppliedPromotion>>()
@@ -61,7 +63,7 @@ object PromotionEngine {
 
         // Best exclusive by discount, then priority, then id — deterministic.
         val bestExclusive = exclusives.maxWithOrNull(
-            compareBy<Pair<Promotion, AppliedPromotion>> { it.second.discountRupees }
+            compareBy<Pair<Promotion, AppliedPromotion>> { it.second.discount }
                 .thenBy { it.first.priority }
                 .thenByDescending { it.first.id }
         )
@@ -69,50 +71,50 @@ object PromotionEngine {
             declined += DeclinedPromotion(
                 p.id, p.title,
                 reason = "A better offer was applied to this order.",
-                wouldHaveSavedRupees = a.discountRupees.takeIf { it > 0 }
+                wouldHaveSaved = a.discount.takeIf { it.isPositive }
             )
         }
 
         // ---- 3. Club vs the best exclusive ----------------------------------
-        var clubApplied = clubDiscountRupees > 0
+        var clubApplied = clubDiscount.isPositive
         var chosenExclusive = bestExclusive
         var note: String? = null
 
         if (!policy.clubStacksWithPromotions && clubApplied && bestExclusive != null) {
             val (p, a) = bestExclusive
-            if (a.discountRupees > clubDiscountRupees) {
+            if (a.discount > clubDiscount) {
                 // The promotion wins. Club is set aside for THIS order and the
                 // customer is told exactly what happened.
                 clubApplied = false
-                note = "Best offer applied — ${p.title} saves you ₹${a.discountRupees}; " +
-                    "your Club discount would have saved ₹$clubDiscountRupees."
+                note = "Best offer applied — ${p.title} saves you ${a.discount}; " +
+                    "your Club discount would have saved $clubDiscount."
             } else {
                 chosenExclusive = null
                 declined += DeclinedPromotion(
                     p.id, p.title,
                     reason = "Cannot be combined with your Club discount, which saves you more.",
-                    wouldHaveSavedRupees = a.discountRupees
+                    wouldHaveSaved = a.discount
                 )
-                note = "Best offer applied — Club saves you ₹$clubDiscountRupees; " +
-                    "${p.title} would have saved ₹${a.discountRupees}."
+                note = "Best offer applied — Club saves you $clubDiscount; " +
+                    "${p.title} would have saved ${a.discount}."
             }
         }
 
         val applied = (stackables + listOfNotNull(chosenExclusive)).map { it.second }
 
         // ---- 4. Money guards ------------------------------------------------
-        val effectiveClub = if (clubApplied) clubDiscountRupees else 0
-        val rawPromo = applied.sumOf { it.discountRupees }
+        val effectiveClub = if (clubApplied) clubDiscount else Money.ZERO
+        val rawPromo = applied.sumOfMoney { it.discount }
         // Discounts can never exceed what the items cost.
-        val promoDiscount = minOf(rawPromo, (itemTotal - effectiveClub).coerceAtLeast(0))
+        val promoDiscount = minOf(rawPromo, (itemTotal - effectiveClub).coerceAtLeast(Money.ZERO))
 
         return PromotionResolution(
             applied = applied,
             declined = declined,
-            promotionDiscountRupees = promoDiscount,
+            promotionDiscount = promoDiscount,
             freeDelivery = applied.any { it.freeDelivery },
             clubApplied = clubApplied,
-            clubDiscountRupees = effectiveClub,
+            clubDiscount = effectiveClub,
             bestOfferNote = note
         )
     }
@@ -153,8 +155,8 @@ object PromotionEngine {
                 PromotionScope.CATEGORY -> line.product.categoryId in p.scopeIds
             }
         }
-        val base = scoped.sumOf { it.lineTotal }
-        if (scoped.isEmpty() || base == 0) {
+        val base = scoped.sumOfMoney { it.lineTotal }
+        if (scoped.isEmpty() || base.isZero) {
             return Verdict.Ineligible(
                 when (p.scope) {
                     PromotionScope.CART -> "Your cart is empty."
@@ -165,29 +167,29 @@ object PromotionEngine {
                 showToCustomer = p.isCoupon
             )
         }
-        if (base < p.minOrderRupees) {
-            val gap = p.minOrderRupees - base
+        if (base < p.minOrder) {
+            val gap = p.minOrder - base
             return Verdict.Ineligible(
                 when (p.scope) {
-                    PromotionScope.CART -> "Add ₹$gap more to unlock this offer."
-                    else -> "Add ₹$gap more of eligible items to unlock this offer."
+                    PromotionScope.CART -> "Add $gap more to unlock this offer."
+                    else -> "Add $gap more of eligible items to unlock this offer."
                 },
                 showToCustomer = true
             )
         }
 
         // Value.
-        val raw: Int = when (p.type) {
-            PromotionType.PERCENT_OFF -> (base * (p.percent ?: 0)) / 100
-            PromotionType.FLAT_OFF -> p.flatRupees ?: 0
+        val raw: Money = when (p.type) {
+            PromotionType.PERCENT_OFF -> base.percentOf(p.percent ?: 0) // floor, integer paise
+            PromotionType.FLAT_OFF -> p.flat ?: Money.ZERO
             PromotionType.BUY_X_GET_Y -> buyXGetY(scoped, p.buyQuantity ?: 0, p.getQuantity ?: 0)
-            PromotionType.FREE_DELIVERY -> 0
+            PromotionType.FREE_DELIVERY -> Money.ZERO
         }
-        val capped = p.maxDiscountRupees?.let { minOf(raw, it) } ?: raw
+        val capped = p.maxDiscount?.let { minOf(raw, it) } ?: raw
         // Never more than the items it applies to.
-        val discount = minOf(capped, base).coerceAtLeast(0)
+        val discount = minOf(capped, base).coerceAtLeast(Money.ZERO)
 
-        if (p.type != PromotionType.FREE_DELIVERY && discount == 0) {
+        if (p.type != PromotionType.FREE_DELIVERY && discount.isZero) {
             return Verdict.Ineligible("This offer doesn't reduce your total.", showToCustomer = false)
         }
 
@@ -195,7 +197,7 @@ object PromotionEngine {
             AppliedPromotion(
                 promotionId = p.id,
                 title = p.title,
-                discountRupees = discount,
+                discount = discount,
                 explanation = explain(p, discount, capped != raw),
                 freeDelivery = p.type == PromotionType.FREE_DELIVERY
             )
@@ -206,19 +208,19 @@ object PromotionEngine {
      * Buy X get Y: for every full group of (X+Y) units of an eligible product,
      * the cheapest Y units are free. Computed per product line, then summed.
      */
-    private fun buyXGetY(scoped: List<CartLine>, buy: Int, get: Int): Int {
-        if (buy <= 0 || get <= 0) return 0
+    private fun buyXGetY(scoped: List<CartLine>, buy: Int, get: Int): Money {
+        if (buy <= 0 || get <= 0) return Money.ZERO
         val group = buy + get
-        return scoped.sumOf { line ->
+        return scoped.sumOfMoney { line ->
             val freeUnits = (line.quantity / group) * get
-            freeUnits * line.product.price
+            line.product.price * freeUnits
         }
     }
 
-    private fun explain(p: Promotion, discount: Int, wasCapped: Boolean): String = when (p.type) {
+    private fun explain(p: Promotion, discount: Money, wasCapped: Boolean): String = when (p.type) {
         PromotionType.PERCENT_OFF ->
-            "${p.percent}% off" + scopeWord(p) + if (wasCapped) ", capped at ₹${p.maxDiscountRupees}" else ""
-        PromotionType.FLAT_OFF -> "₹$discount off" + scopeWord(p)
+            "${p.percent}% off" + scopeWord(p) + if (wasCapped) ", capped at ${p.maxDiscount}" else ""
+        PromotionType.FLAT_OFF -> "$discount off" + scopeWord(p)
         PromotionType.BUY_X_GET_Y -> "Buy ${p.buyQuantity}, get ${p.getQuantity} free" + scopeWord(p)
         PromotionType.FREE_DELIVERY -> "Free delivery on this order"
     }

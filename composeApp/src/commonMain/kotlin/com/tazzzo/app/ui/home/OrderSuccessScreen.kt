@@ -121,7 +121,7 @@ fun OrderSuccessScreen(orderId: String) {
                     )
                     Spacer(Modifier.height(TazSpace.xxs))
                     Text(
-                        "₹${order.bill.grandTotal}",
+                        "${order.bill.grandTotal}",
                         fontSize = TazType.priceHeroSize, fontWeight = FontWeight.Bold,
                         color = TazColors.TextPrimary
                     )
@@ -138,7 +138,7 @@ fun OrderSuccessScreen(orderId: String) {
                     SummaryRow("Delivering to", order.address)
                     order.slot?.let { s ->
                         Spacer(Modifier.height(TazSpace.sm))
-                        SummaryRow("Delivery slot", s.label + (if (s.feeRupees == 0) " · Free" else " · ₹${s.feeRupees}"))
+                        SummaryRow("Delivery slot", s.label + (if (s.fee.isZero) " · Free" else " · ${s.fee}"))
                     }
                     if (order.instructionIds.isNotEmpty()) {
                         Spacer(Modifier.height(TazSpace.sm))
@@ -148,9 +148,9 @@ fun OrderSuccessScreen(orderId: String) {
                                 .filter { it.id in order.instructionIds }.joinToString(" · ") { it.label }
                         )
                     }
-                    if (order.bill.realisedSavings > 0) {
+                    if (order.bill.realisedSavings.isPositive) {
                         Spacer(Modifier.height(TazSpace.sm))
-                        SummaryRow("You saved", "₹${order.bill.realisedSavings}")
+                        SummaryRow("You saved", "${order.bill.realisedSavings}")
                     }
                     // Rendered only when the order actually carries a method.
                     order.payment?.let { method ->

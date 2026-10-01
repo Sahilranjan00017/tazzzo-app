@@ -228,8 +228,8 @@ private fun OfferCard(offer: Promotion) {
             color = TazColors.TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis
         )
         val conditions = buildList {
-            if (offer.minOrderRupees > 0) add("On orders above ₹${offer.minOrderRupees}")
-            offer.maxDiscountRupees?.let { add("Up to ₹$it off") }
+            if (offer.minOrder.isPositive) add("On orders above ${offer.minOrder}")
+            offer.maxDiscount?.let { add("Up to $it off") }
             if (offer.couponCode != null) add("Enter at cart") else add("Applied automatically")
             offer.validUntilLabel?.let { add("Until $it") }
         }

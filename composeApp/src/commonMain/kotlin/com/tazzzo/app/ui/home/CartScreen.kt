@@ -1,5 +1,7 @@
 package com.tazzzo.app.ui.home
 
+import com.tazzzo.app.data.model.Money
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -201,7 +203,7 @@ fun CartScreen() {
                                 Spacer(Modifier.height(TazSpace.xxs))
                                 Row(verticalAlignment = Alignment.Bottom) {
                                     Text(
-                                        "₹${line.lineTotal}",
+                                        "${line.lineTotal}",
                                         fontSize = TazType.priceSize,
                                         fontWeight = TazType.priceWeight,
                                         color = TazColors.TextPrimary, maxLines = 1
@@ -209,7 +211,7 @@ fun CartScreen() {
                                     if (line.lineMrp > line.lineTotal) {
                                         Spacer(Modifier.width(TazSpace.xs + TazSpace.xxs))
                                         Text(
-                                            "₹${line.lineMrp}",
+                                            "${line.lineMrp}",
                                             fontSize = TazType.mrpSize,
                                             color = TazColors.TextTertiary,
                                             textDecoration = TextDecoration.LineThrough,
@@ -246,7 +248,7 @@ fun CartScreen() {
                 PromotionsPanel(bill)
 
                 // ----- Savings strip -----
-                if (bill.saved > 0) {
+                if (bill.saved.isPositive) {
                     Spacer(Modifier.height(TazSpace.md))
                     Row(
                         Modifier.fillMaxWidth().clip(TazRadius.card)
@@ -260,7 +262,7 @@ fun CartScreen() {
                         )
                         Spacer(Modifier.width(TazSpace.sm))
                         Text(
-                            "₹${bill.saved} below MRP on these items",
+                            "${bill.saved} below MRP on these items",
                             fontSize = TazType.savingsSize, fontWeight = TazType.savingsWeight,
                             color = TazColors.Success, maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -284,13 +286,13 @@ fun CartScreen() {
                         BillRow(label = "Item total") {
                             if (bill.itemMrpTotal > bill.itemTotal) {
                                 Text(
-                                    "₹${bill.itemMrpTotal}",
+                                    "${bill.itemMrpTotal}",
                                     fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
                                     textDecoration = TextDecoration.LineThrough, maxLines = 1
                                 )
                                 Spacer(Modifier.width(TazSpace.sm))
                             }
-                            BillValue("₹${bill.itemTotal}")
+                            BillValue("${bill.itemTotal}")
                         }
                         Spacer(Modifier.height(TazSpace.md))
 
@@ -301,29 +303,29 @@ fun CartScreen() {
                                     "Delivery fee", fontSize = TazType.bodySize,
                                     color = TazColors.TextSecondary
                                 )
-                                if (bill.deliveryFee > 0) {
+                                if (bill.deliveryFee.isPositive) {
                                     Text(
-                                        "Free above ₹${AppConfig.charges.freeDeliveryAboveRupees}",
+                                        "Free above ${AppConfig.charges.freeDeliveryAbove}",
                                         fontSize = TazType.captionSize,
                                         color = TazColors.TextTertiary
                                     )
                                 }
                             }
-                            if (bill.deliveryFee == 0 && bill.deliveryFeeWaivedRupees > 0) {
+                            if (bill.deliveryFee.isZero && bill.deliveryFeeWaived.isPositive) {
                                 Text(
-                                    "₹${bill.deliveryFeeWaivedRupees}",
+                                    "${bill.deliveryFeeWaived}",
                                     fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
                                     textDecoration = TextDecoration.LineThrough
                                 )
                                 Spacer(Modifier.width(TazSpace.xs))
                             }
-                            if (bill.deliveryFee == 0) {
+                            if (bill.deliveryFee.isZero) {
                                 Text(
                                     "FREE", fontSize = TazType.bodySize,
                                     fontWeight = FontWeight.Bold, color = TazColors.Success
                                 )
                             } else {
-                                BillValue("₹${bill.deliveryFee}")
+                                BillValue("${bill.deliveryFee}")
                             }
                         }
                         Spacer(Modifier.height(TazSpace.md))
@@ -341,7 +343,7 @@ fun CartScreen() {
 
                         // Handling charge
                         BillRow(label = "Handling charge") {
-                            BillValue("₹${bill.handlingCharge}")
+                            BillValue("${bill.handlingCharge}")
                         }
                         Spacer(Modifier.height(TazSpace.md))
 
@@ -351,10 +353,10 @@ fun CartScreen() {
                         // Each applied promotion on its own line, with its own
                         // explanation. Only ever rendered when it actually
                         // reduced this bill — never an estimate.
-                        bill.appliedPromotions.filter { it.discountRupees > 0 }.forEach { promo ->
+                        bill.appliedPromotions.filter { it.discount.isPositive }.forEach { promo ->
                             BillRow(label = promo.title, sublabel = promo.explanation) {
                                 Text(
-                                    "−₹${promo.discountRupees}",
+                                    "−${promo.discount}",
                                     fontSize = TazType.bodySize,
                                     fontWeight = FontWeight.SemiBold,
                                     color = TazColors.Green
@@ -363,10 +365,10 @@ fun CartScreen() {
                             Spacer(Modifier.height(TazSpace.md))
                         }
 
-                        if (bill.clubDiscount > 0) {
+                        if (bill.clubDiscount.isPositive) {
                             BillRow(label = "Tazzzo Club savings") {
                                 Text(
-                                    "−₹${bill.clubDiscount}",
+                                    "−${bill.clubDiscount}",
                                     fontSize = TazType.bodySize,
                                     fontWeight = FontWeight.SemiBold,
                                     color = TazColors.Green
@@ -412,7 +414,7 @@ fun CartScreen() {
                                 )
                             }
                             Text(
-                                "₹${bill.grandTotal}", fontSize = TazType.titleSize,
+                                "${bill.grandTotal}", fontSize = TazType.titleSize,
                                 fontWeight = FontWeight.Bold, color = TazColors.TextPrimary
                             )
                         }
@@ -421,7 +423,7 @@ fun CartScreen() {
                         // taken off what the customer pays. MRP savings stay in
                         // their own strip above; blending them here is how a
                         // "you saved ₹60" appears that no bill line supports.
-                        if (bill.realisedSavings > 0) {
+                        if (bill.realisedSavings.isPositive) {
                             Spacer(Modifier.height(TazSpace.sm))
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                                 Text(
@@ -429,7 +431,7 @@ fun CartScreen() {
                                     color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
                                 )
                                 Text(
-                                    "₹${bill.realisedSavings}", fontSize = TazType.bodySize,
+                                    "${bill.realisedSavings}", fontSize = TazType.bodySize,
                                     fontWeight = FontWeight.Bold, color = TazColors.Green
                                 )
                             }
@@ -494,12 +496,12 @@ fun CartScreen() {
                         // Club and waived delivery. Never the MRP comparison,
                         // which has its own labelled strip and would produce a
                         // saving no bill line supports.
-                        if (bill.realisedSavings > 0) {
-                            TazChip("Saved ₹${bill.realisedSavings}", ChipTone.Savings, standalone = true)
+                        if (bill.realisedSavings.isPositive) {
+                            TazChip("Saved ${bill.realisedSavings}", ChipTone.Savings, standalone = true)
                             Spacer(Modifier.width(TazSpace.sm))
                         }
                         Text(
-                            "₹${bill.grandTotal}", fontSize = TazType.titleSize,
+                            "${bill.grandTotal}", fontSize = TazType.titleSize,
                             fontWeight = FontWeight.Bold, color = TazColors.TextPrimary
                         )
                     }
@@ -638,24 +640,24 @@ private fun ClubCartPrompt() {
     // contradiction that makes a customer stop trusting every number on screen.
     val bill = app.bill(app.cartLines())
     val (title, body) = when {
-        eligibility.isMember && eligibility.isEligible && bill.clubDiscount > 0 ->
-            "Club savings applied" to "₹${bill.clubDiscount} off this order."
+        eligibility.isMember && eligibility.isEligible && bill.clubDiscount.isPositive ->
+            "Club savings applied" to "${bill.clubDiscount} off this order."
         eligibility.isMember && eligibility.isEligible && bill.bestOfferNote != null ->
             "Club discount set aside for this order" to "A better offer applied — see your bill."
         eligibility.isMember ->
-            "Add ₹${eligibility.amountToUnlockRupees} more to unlock Club savings" to
-                "${plan.discountRule.percent}% off eligible orders ₹${plan.discountRule.minOrderValueRupees}+."
-        !eligibility.isMember && eligibility.amountToUnlockRupees == 0 -> {
+            "Add ${eligibility.amountToUnlock} more to unlock Club savings" to
+                "${plan.discountRule.percent}% off eligible orders ${plan.discountRule.minOrderValue}+."
+        !eligibility.isMember && eligibility.amountToUnlock.isZero -> {
             val wouldSave = plan.discountRule.discountFor(app.bill(app.cartLines()).itemTotal)
-            "Join Club — save ₹$wouldSave on this order" to
-                "₹${plan.priceRupees} membership. ${plan.discountRule.percent}% off eligible orders."
+            "Join Club — save $wouldSave on this order" to
+                "${plan.price} membership. ${plan.discountRule.percent}% off eligible orders."
         }
         else ->
             "Join Tazzzo Club" to
-                "${plan.discountRule.percent}% off eligible orders ₹${plan.discountRule.minOrderValueRupees}+, plus rewards."
+                "${plan.discountRule.percent}% off eligible orders ${plan.discountRule.minOrderValue}+, plus rewards."
     }
 
-    val isMemberBenefit = eligibility.isMember && eligibility.isEligible && bill.clubDiscount > 0
+    val isMemberBenefit = eligibility.isMember && eligibility.isEligible && bill.clubDiscount.isPositive
 
     Row(
         // No horizontal gutter here: this sits inside the cart's gutter-padded
@@ -786,8 +788,8 @@ private fun PromotionsPanel(bill: BillSummary) {
                             d.title, fontSize = TazType.bodySize, fontWeight = FontWeight.Medium,
                             color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
                         )
-                        d.wouldHaveSavedRupees?.let {
-                            Text("₹$it", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+                        d.wouldHaveSaved?.let {
+                            Text("$it", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
                         }
                     }
                     Text(
@@ -811,7 +813,7 @@ private fun PromotionsPanel(bill: BillSummary) {
  */
 @Composable
 private fun SavingsHeader(bill: BillSummary) {
-    if (bill.realisedSavings <= 0) return
+    if (!bill.realisedSavings.isPositive) return
     var open by rememberSaveable { mutableStateOf(false) }
     Column(
         Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.GreenSoft)
@@ -822,7 +824,7 @@ private fun SavingsHeader(bill: BillSummary) {
             TazIcon(TazIcons.Offer, null, size = TazSize.iconSm, tint = TazColors.Green)
             Spacer(Modifier.width(TazSpace.sm))
             Text(
-                "You're saving ₹${bill.realisedSavings} on this order",
+                "You're saving ${bill.realisedSavings} on this order",
                 fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
                 color = TazColors.Green, modifier = Modifier.weight(1f)
             )
@@ -833,12 +835,12 @@ private fun SavingsHeader(bill: BillSummary) {
         }
         AnimatedVisibility(open) {
             Column(Modifier.padding(top = TazSpace.sm)) {
-                bill.appliedPromotions.filter { it.discountRupees > 0 }.forEach {
-                    SavingsLine(it.title, it.discountRupees)
+                bill.appliedPromotions.filter { it.discount.isPositive }.forEach {
+                    SavingsLine(it.title, it.discount)
                 }
-                if (bill.clubDiscount > 0) SavingsLine("Tazzzo Club", bill.clubDiscount)
-                if (bill.deliveryFeeWaivedRupees > 0) {
-                    SavingsLine(bill.deliveryFeeReason ?: "Delivery fee", bill.deliveryFeeWaivedRupees)
+                if (bill.clubDiscount.isPositive) SavingsLine("Tazzzo Club", bill.clubDiscount)
+                if (bill.deliveryFeeWaived.isPositive) {
+                    SavingsLine(bill.deliveryFeeReason ?: "Delivery fee", bill.deliveryFeeWaived)
                 }
             }
         }
@@ -847,10 +849,10 @@ private fun SavingsHeader(bill: BillSummary) {
 }
 
 @Composable
-private fun SavingsLine(label: String, rupees: Int) {
+private fun SavingsLine(label: String, rupees: Money) {
     Row(Modifier.fillMaxWidth().padding(vertical = TazSpace.xxs)) {
         Text(label, fontSize = TazType.captionSize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
-        Text("₹$rupees", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Green)
+        Text("$rupees", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Green)
     }
 }
 
@@ -891,7 +893,7 @@ private fun DeliveryChoiceCard() {
                     // available · Next available · Free" and then truncated.
                     // Caught on a real phone, not the emulator.
                     next != null -> next.label +
-                        (if (next.feeRupees == 0) " · Free" else " · ₹${next.feeRupees}")
+                        (if (next.fee.isZero) " · Free" else " · ${next.fee}")
                     slots.state is UiState.Loading -> "Checking slots…"
                     else -> "Slots shown at checkout"
                 },
@@ -918,7 +920,7 @@ private fun DeliveryChoiceCard() {
  */
 @Composable
 private fun FreeDeliveryMilestone(bill: BillSummary) {
-    if (bill.itemTotal <= 0) return
+    if (!bill.itemTotal.isPositive) return
     val progress = freeDeliveryProgress(bill)
     val width by animateFloatAsState(
         targetValue = progress.fraction,
@@ -946,7 +948,7 @@ private fun FreeDeliveryMilestone(bill: BillSummary) {
             Text(
                 if (progress.alreadyFree)
                     progress.reason?.let { "Free delivery · $it" } ?: "Delivery is free on this order"
-                else "Add ₹${progress.remainingRupees} more for free delivery",
+                else "Add ${progress.remaining} more for free delivery",
                 fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
                 lineHeight = TazType.captionLine, color = TazColors.TextPrimary,
                 maxLines = 2, overflow = TextOverflow.Ellipsis
@@ -965,12 +967,12 @@ private fun FreeDeliveryMilestone(bill: BillSummary) {
         Spacer(Modifier.height(TazSpace.xs))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "₹${bill.itemTotal}", fontSize = TazType.microSize,
+                "${bill.itemTotal}", fontSize = TazType.microSize,
                 fontWeight = TazType.microWeight, color = TazColors.TextSecondary
             )
             Spacer(Modifier.weight(1f))
             Text(
-                "₹${progress.thresholdRupees} · free delivery",
+                "${progress.threshold} · free delivery",
                 fontSize = TazType.microSize,
                 color = if (progress.alreadyFree) TazColors.Success else TazColors.TextTertiary
             )

@@ -1,5 +1,7 @@
 package com.tazzzo.app.ui.club
 
+import com.tazzzo.app.data.model.Money
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -72,7 +74,7 @@ fun ClubScreen() {
             Column(
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
             ) {
-                ClubHero(plan.name, plan.tagline, plan.priceRupees, alreadyMember)
+                ClubHero(plan.name, plan.tagline, plan.price, alreadyMember)
 
                 Spacer(Modifier.height(TazSpace.xl))
                 SectionLabel("What you get")
@@ -93,7 +95,7 @@ fun ClubScreen() {
             // Sticky footer: the price and the ask, always visible.
             if (!alreadyMember) {
                 JoinFooter(
-                    priceRupees = plan.priceRupees,
+                    price = plan.price,
                     onJoin = {
                         Analytics.track(AnalyticsEvents.MEMBERSHIP_JOIN_TAP, mapOf("plan" to plan.id))
                         app.navigate(Screen.ClubCheckout)
@@ -105,7 +107,7 @@ fun ClubScreen() {
 }
 
 @Composable
-private fun ClubHero(name: String, tagline: String, priceRupees: Int, alreadyMember: Boolean) {
+private fun ClubHero(name: String, tagline: String, price: Money, alreadyMember: Boolean) {
     Column(
         Modifier.fillMaxWidth()
             .padding(horizontal = TazSpace.gutter)
@@ -140,7 +142,7 @@ private fun ClubHero(name: String, tagline: String, priceRupees: Int, alreadyMem
             }
         } else {
             Text(
-                "₹$priceRupees",
+                "$price",
                 fontSize = TazType.displaySize, fontWeight = TazType.displayWeight,
                 lineHeight = TazType.displayLine, color = TazColors.White
             )
@@ -206,7 +208,7 @@ private fun BenefitRow(benefit: MembershipBenefit) {
 @Composable
 private fun WhyJoinCard() {
     val plan = MembershipConfig.plan
-    val exampleOrder = plan.discountRule.minOrderValueRupees + 200   // a realistic eligible basket
+    val exampleOrder = plan.discountRule.minOrderValue + Money.ofRupees(200)   // a realistic eligible basket
     val saving = MembershipCalculator.exampleSavings(plan, exampleOrder)
 
     Column(
@@ -225,7 +227,7 @@ private fun WhyJoinCard() {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Example: a ₹$exampleOrder eligible order",
+                    "Example: a $exampleOrder eligible order",
                     fontSize = TazType.captionSize, lineHeight = TazType.captionLine,
                     color = TazColors.TextSecondary
                 )
@@ -237,7 +239,7 @@ private fun WhyJoinCard() {
                 )
             }
             Text(
-                "₹$saving",
+                "$saving",
                 fontSize = TazType.priceHeroSize, fontWeight = TazType.priceWeight,
                 color = TazColors.Green
             )
@@ -252,7 +254,7 @@ private fun WhyJoinCard() {
 }
 
 @Composable
-private fun JoinFooter(priceRupees: Int, onJoin: () -> Unit) {
+private fun JoinFooter(price: Money, onJoin: () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
             .background(TazColors.Surface)
@@ -262,7 +264,7 @@ private fun JoinFooter(priceRupees: Int, onJoin: () -> Unit) {
         // The CTA states the amount. "Join now" while charging ₹99 is the kind
         // of vagueness that turns a good deal into a complaint.
         PillButton(
-            text = "Join Tazzzo Club — ₹$priceRupees",
+            text = "Join Tazzzo Club — $price",
             onClick = onJoin,
             haptic = TazHaptic.Tap,
             modifier = Modifier.fillMaxWidth()

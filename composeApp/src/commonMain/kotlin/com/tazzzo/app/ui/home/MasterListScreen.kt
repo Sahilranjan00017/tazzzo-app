@@ -200,13 +200,13 @@ private fun MasterListRow(product: Product, timesOrdered: Int) {
             Spacer(Modifier.height(TazSpace.xxs))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    "₹${product.price}", fontSize = TazType.priceSize,
+                    "${product.price}", fontSize = TazType.priceSize,
                     fontWeight = TazType.priceWeight, color = TazColors.TextPrimary, maxLines = 1
                 )
                 if (product.mrp > product.price) {
                     Spacer(Modifier.width(TazSpace.xs))
                     Text(
-                        "₹${product.mrp}", fontSize = TazType.mrpSize,
+                        "${product.mrp}", fontSize = TazType.mrpSize,
                         color = TazColors.TextTertiary,
                         textDecoration = TextDecoration.LineThrough, maxLines = 1
                     )

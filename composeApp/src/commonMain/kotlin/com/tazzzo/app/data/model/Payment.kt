@@ -29,7 +29,7 @@ enum class PaymentProvider { RAZORPAY }
  */
 data class PaymentOrder(
     val orderId: String,
-    val amountRupees: Int,
+    val amount: Money,
     val provider: PaymentProvider,
     val receiptId: String,
     /** True when this order was created by MockPaymentGateway, not a real gateway. */

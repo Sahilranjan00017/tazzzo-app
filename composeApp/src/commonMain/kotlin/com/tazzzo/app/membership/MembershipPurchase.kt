@@ -98,7 +98,7 @@ object MembershipPurchase {
 
         val order = try {
             session.phase = MembershipPurchaseSession.Phase.CreatingOrder
-            gateway.createOrder(session.plan.priceRupees, session.receiptId)
+            gateway.createOrder(session.plan.price, session.receiptId)
         } catch (t: Throwable) {
             // Nothing was charged: Checkout never opened.
             session.phase = MembershipPurchaseSession.Phase.Failed(
@@ -169,7 +169,7 @@ object MembershipPurchase {
                     // replayed callback for one payment activates once.
                     id = result.paymentId,
                     planId = session.plan.id,
-                    amountRupees = session.plan.priceRupees,
+                    amount = session.plan.price,
                     status = MembershipStatus.ACTIVE,
                     paymentReference = result.paymentId,
                     isTestPayment = result.isTestMode,

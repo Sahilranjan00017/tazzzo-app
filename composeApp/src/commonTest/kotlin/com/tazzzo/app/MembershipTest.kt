@@ -20,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import com.tazzzo.app.data.model.Money
 
 /**
  * Tazzzo Club — discount maths, milestone progression, and the purchase state
@@ -36,87 +37,87 @@ class MembershipTest {
 
     private val plan = MembershipConfig.plan
 
-    private fun product(price: Int) = Product(
+    private fun product(price: Money) = Product(
         id = "p8", name = "Toned Milk Pouch", brand = "Amul", emoji = "🥛", unit = "500 ml",
-        price = price, mrp = price + 10, categoryId = "dairy", subcategoryId = "milk",
+        price = price, mrp = price + r(10), categoryId = "dairy", subcategoryId = "milk",
         rating = 4.7, ratingCount = 10
     )
 
     // ------------------------------------------------------------ discounts
 
     @Test fun member_below_threshold_gets_no_discount_and_an_honest_gap() {
-        val e = MembershipCalculator.evaluate(400, isMember = true, plan = plan)
-        assertEquals(0, e.discountRupees)
+        val e = MembershipCalculator.evaluate(r(400), isMember = true, plan = plan)
+        assertEquals(r(0), e.discount)
         assertEquals(false, e.isEligible)
-        assertEquals(100, e.amountToUnlockRupees, "must tell the customer exactly how much more")
+        assertEquals(r(100), e.amountToUnlock, "must tell the customer exactly how much more")
     }
 
     @Test fun member_at_threshold_gets_the_configured_percent() {
-        val e = MembershipCalculator.evaluate(500, isMember = true, plan = plan)
+        val e = MembershipCalculator.evaluate(r(500), isMember = true, plan = plan)
         assertTrue(e.isEligible)
-        assertEquals(25, e.discountRupees)   // 5% of 500, from config
+        assertEquals(r(25), e.discount)   // 5% of 500, from config
     }
 
     @Test fun non_member_never_receives_a_discount_but_still_sees_the_offer() {
-        val e = MembershipCalculator.evaluate(700, isMember = false, plan = plan)
-        assertEquals(0, e.discountRupees, "a non-member must never be charged a member price")
+        val e = MembershipCalculator.evaluate(r(700), isMember = false, plan = plan)
+        assertEquals(r(0), e.discount, "a non-member must never be charged a member price")
         assertEquals(false, e.isEligible)
     }
 
     @Test fun spend_milestone_replaces_the_base_rule_rather_than_stacking() {
-        val below = MembershipCalculator.activeDiscountRule(plan, 4_999)
-        val above = MembershipCalculator.activeDiscountRule(plan, 5_000)
+        val below = MembershipCalculator.activeDiscountRule(plan, r(4_999))
+        val above = MembershipCalculator.activeDiscountRule(plan, r(5_000))
         assertEquals(5, below.percent)
         assertEquals(10, above.percent)
         // 10% of 700, not 15% — the rules must not compound.
-        assertEquals(70, MembershipCalculator.evaluate(700, true, plan, 5_000).discountRupees)
+        assertEquals(r(70), MembershipCalculator.evaluate(r(700), true, plan, r(5_000)).discount)
     }
 
     @Test fun bill_applies_club_discount_only_for_members() {
-        val lines = listOf(CartLine(product(700), 1))
+        val lines = listOf(CartLine(product(r(700)), 1))
         // No promotions: this test is about Club alone. With the default set,
         // the dairy offer (₹40) legitimately out-competes Club (₹35) and sets
         // it aside — correct behaviour, separately tested in PromotionEngineTest.
         val guest = BillCalculator.bill(lines, isClubMember = false, promotions = emptyList())
         val member = BillCalculator.bill(lines, isClubMember = true, promotions = emptyList())
-        assertEquals(0, guest.clubDiscount)
-        assertEquals(35, member.clubDiscount)                       // 5% of 700
-        assertEquals(guest.grandTotal - 35, member.grandTotal)
+        assertEquals(r(0), guest.clubDiscount)
+        assertEquals(r(35), member.clubDiscount)                       // 5% of 700
+        assertEquals(guest.grandTotal - r(35), member.grandTotal)
     }
 
     @Test fun club_discount_is_reported_separately_from_mrp_savings() {
-        val lines = listOf(CartLine(product(700), 1))
+        val lines = listOf(CartLine(product(r(700)), 1))
         val member = BillCalculator.bill(lines, isClubMember = true, promotions = emptyList())
         // `saved` is MRP savings only; blending the two would overstate either.
-        assertEquals(10, member.saved)
-        assertEquals(35, member.clubDiscount)
+        assertEquals(r(10), member.saved)
+        assertEquals(r(35), member.clubDiscount)
     }
 
     // ----------------------------------------------------------- milestones
 
     @Test fun eligible_orders_advance_spend_savings_and_count() {
         var state = MembershipState(status = MembershipStatus.ACTIVE)
-        state = MembershipCalculator.applyEligibleOrder(plan, state, 700, 35, "5 Sep")
-        assertEquals(700, state.cumulativeSpendRupees)
-        assertEquals(35, state.cumulativeSavingsRupees)
+        state = MembershipCalculator.applyEligibleOrder(plan, state, r(700), r(35), "5 Sep")
+        assertEquals(r(700), state.cumulativeSpend)
+        assertEquals(r(35), state.cumulativeSavings)
         assertEquals(1, state.eligibleOrderCount)
     }
 
     @Test fun crossing_the_spend_milestone_unlocks_it_once() {
         var state = MembershipState(status = MembershipStatus.ACTIVE)
-        state = MembershipCalculator.applyEligibleOrder(plan, state, 5_000, 250, "5 Sep")
+        state = MembershipCalculator.applyEligibleOrder(plan, state, r(5_000), r(250), "5 Sep")
         assertTrue("spend-5000" in state.unlockedSpendMilestoneIds)
         val before = state.unlockedSpendMilestoneIds.size
-        state = MembershipCalculator.applyEligibleOrder(plan, state, 1_000, 100, "6 Sep")
+        state = MembershipCalculator.applyEligibleOrder(plan, state, r(1_000), r(100), "6 Sep")
         assertEquals(before, state.unlockedSpendMilestoneIds.size, "milestone must not re-unlock")
     }
 
     @Test fun order_milestone_unlocks_a_reward_exactly_once() {
         var state = MembershipState(status = MembershipStatus.ACTIVE)
-        repeat(3) { state = MembershipCalculator.applyEligibleOrder(plan, state, 600, 30, "5 Sep") }
+        repeat(3) { state = MembershipCalculator.applyEligibleOrder(plan, state, r(600), r(30), "5 Sep") }
         assertEquals(1, state.rewards.size)
         assertEquals(MembershipRewardStatus.UNLOCKED, state.rewards.first().status)
-        repeat(2) { state = MembershipCalculator.applyEligibleOrder(plan, state, 600, 30, "6 Sep") }
+        repeat(2) { state = MembershipCalculator.applyEligibleOrder(plan, state, r(600), r(30), "6 Sep") }
         assertEquals(1, state.rewards.size, "reward must not be granted again")
     }
 
@@ -207,28 +208,28 @@ class MembershipTest {
         val r = repo()
         r.activate(
             MembershipTransaction(
-                "pay_1", plan.id, plan.priceRupees, MembershipStatus.ACTIVE,
+                "pay_1", plan.id, plan.price, MembershipStatus.ACTIVE,
                 "pay_1", isTestPayment = true, placedAtLabel = "5 Sep"
             )
         )
-        r.recordEligibleOrder("TZ-1", 700, 35, "5 Sep")
+        r.recordEligibleOrder("TZ-1", r(700), r(35), "5 Sep")
         val once = r.getState()
-        r.recordEligibleOrder("TZ-1", 700, 35, "5 Sep")   // duplicate delivery
+        r.recordEligibleOrder("TZ-1", r(700), r(35), "5 Sep")   // duplicate delivery
         val twice = r.getState()
         assertEquals(once, twice, "a replayed order must not double-count spend or savings")
-        assertEquals(700, twice.cumulativeSpendRupees)
+        assertEquals(r(700), twice.cumulativeSpend)
         assertEquals(1, twice.eligibleOrderCount)
     }
 
     @Test fun progress_is_not_recorded_for_non_members() = runTest {
         val r = repo()
-        r.recordEligibleOrder("TZ-9", 700, 35, "5 Sep")
-        assertEquals(0, r.getState().cumulativeSpendRupees)
+        r.recordEligibleOrder("TZ-9", r(700), r(35), "5 Sep")
+        assertEquals(r(0), r.getState().cumulativeSpend)
     }
 
     @Test fun example_savings_are_computed_from_config_not_hardcoded() {
         // The landing page's illustrative figure must track the plan.
-        assertEquals(35, MembershipCalculator.exampleSavings(plan, 700))
+        assertEquals(r(35), MembershipCalculator.exampleSavings(plan, r(700)))
     }
 }
 
@@ -246,7 +247,7 @@ class MembershipOrderProgressTest {
         val r = LocalMembershipRepository(store = null)
         r.activate(
             MembershipTransaction(
-                "pay_a", plan.id, plan.priceRupees, MembershipStatus.ACTIVE,
+                "pay_a", plan.id, plan.price, MembershipStatus.ACTIVE,
                 "pay_a", isTestPayment = true, placedAtLabel = "5 Sep"
             )
         )
@@ -254,25 +255,25 @@ class MembershipOrderProgressTest {
         // applied, so nothing may be credited toward milestones.
         val before = r.getState()
         // Caller only records when clubDiscount > 0; simulate that contract.
-        val discount = MembershipCalculator.evaluate(300, true, plan).discountRupees
-        if (discount > 0) r.recordEligibleOrder("TZ-low", 300, discount, "5 Sep")
+        val discount = MembershipCalculator.evaluate(r(300), true, plan).discount
+        if (discount.isPositive) r.recordEligibleOrder("TZ-low", r(300), discount, "5 Sep")
         assertEquals(before.eligibleOrderCount, r.getState().eligibleOrderCount)
-        assertEquals(0, r.getState().cumulativeSpendRupees)
+        assertEquals(r(0), r.getState().cumulativeSpend)
     }
 
     @Test fun savings_accumulate_across_distinct_orders() = runTest {
         val r = LocalMembershipRepository(store = null)
         r.activate(
             MembershipTransaction(
-                "pay_b", plan.id, plan.priceRupees, MembershipStatus.ACTIVE,
+                "pay_b", plan.id, plan.price, MembershipStatus.ACTIVE,
                 "pay_b", isTestPayment = true, placedAtLabel = "5 Sep"
             )
         )
-        r.recordEligibleOrder("TZ-1", 700, 35, "5 Sep")
-        r.recordEligibleOrder("TZ-2", 900, 45, "6 Sep")
+        r.recordEligibleOrder("TZ-1", r(700), r(35), "5 Sep")
+        r.recordEligibleOrder("TZ-2", r(900), r(45), "6 Sep")
         val state = r.getState()
-        assertEquals(1_600, state.cumulativeSpendRupees)
-        assertEquals(80, state.cumulativeSavingsRupees)
+        assertEquals(r(1_600), state.cumulativeSpend)
+        assertEquals(r(80), state.cumulativeSavings)
         assertEquals(2, state.eligibleOrderCount)
     }
 }

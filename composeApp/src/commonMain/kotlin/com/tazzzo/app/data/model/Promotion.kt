@@ -24,7 +24,7 @@ import kotlinx.serialization.Serializable
 enum class PromotionType {
     /** `percent` off the eligible base, optionally capped. */
     PERCENT_OFF,
-    /** `flatRupees` off the eligible base. */
+    /** `flat` off the eligible base. */
     FLAT_OFF,
     /** Buy `buyQuantity` of a product, the cheapest `getQuantity` are free. */
     BUY_X_GET_Y,
@@ -54,7 +54,7 @@ enum class PromotionAudience { EVERYONE, MEMBERS_ONLY, NON_MEMBERS_ONLY }
  *   other stackables.
  * @param priority tie-break among equal-value candidates; higher wins. Never
  *   overrides "best discount wins" — it only decides ties, deterministically.
- * @param minOrderRupees measured against the promotion's OWN scope base, not
+ * @param minOrder measured against the promotion's OWN scope base, not
  *   the whole cart — a dairy offer's minimum is a minimum on dairy.
  * @param usageLimitPerUser null = unlimited. Enforced by the backend; carried
  *   here so the UI can explain "you've used this offer" when told so.
@@ -72,11 +72,11 @@ data class Promotion(
     val scopeIds: List<String> = emptyList(),
     val audience: PromotionAudience = PromotionAudience.EVERYONE,
     val percent: Int? = null,
-    val flatRupees: Int? = null,
+    val flat: Money? = null,
     val buyQuantity: Int? = null,
     val getQuantity: Int? = null,
-    val minOrderRupees: Int = 0,
-    val maxDiscountRupees: Int? = null,
+    val minOrder: Money = Money.ZERO,
+    val maxDiscount: Money? = null,
     val couponCode: String? = null,
     val stackable: Boolean = false,
     val priority: Int = 0,
@@ -85,6 +85,12 @@ data class Promotion(
     val validUntilLabel: String? = null,
     val excludedProductIds: List<String> = emptyList()
 ) {
+    init {
+        flat?.let { Money.requireNonNegative(it, "flat") }
+        Money.requireNonNegative(minOrder, "minOrder")
+        maxDiscount?.let { Money.requireNonNegative(it, "maxDiscount") }
+    }
+
     val isCoupon: Boolean get() = couponCode != null
 }
 
@@ -93,11 +99,13 @@ data class Promotion(
 data class AppliedPromotion(
     val promotionId: String,
     val title: String,
-    val discountRupees: Int,
+    val discount: Money,
     /** Customer-facing. "10% off dairy, capped at ₹40". */
     val explanation: String,
     val freeDelivery: Boolean = false
-)
+) {
+    init { Money.requireNonNegative(discount, "discount") }
+}
 
 /**
  * A promotion the customer could see but did not get, with the reason in
@@ -111,7 +119,7 @@ data class DeclinedPromotion(
     /** Customer-facing. "Add ₹72 more to dairy items", "Cannot be combined with your Club discount". */
     val reason: String,
     /** What it WOULD have saved, when that is meaningful to show. */
-    val wouldHaveSavedRupees: Int? = null
+    val wouldHaveSaved: Money? = null
 )
 
 /**
@@ -128,10 +136,10 @@ data class DeclinedPromotion(
 data class PromotionResolution(
     val applied: List<AppliedPromotion> = emptyList(),
     val declined: List<DeclinedPromotion> = emptyList(),
-    val promotionDiscountRupees: Int = 0,
+    val promotionDiscount: Money = Money.ZERO,
     val freeDelivery: Boolean = false,
     val clubApplied: Boolean = false,
-    val clubDiscountRupees: Int = 0,
+    val clubDiscount: Money = Money.ZERO,
     val bestOfferNote: String? = null
 ) {
     companion object {

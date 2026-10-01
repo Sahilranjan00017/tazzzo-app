@@ -51,7 +51,7 @@ object CartRestore {
 
             val allowed = minOf(line.qty, current.purchasableLimit)
             if (allowed < line.qty) limited += current.name
-            if (current.price != line.priceAtSave) repriced += current.name
+            if (current.price.paise != line.priceAtSavePaise) repriced += current.name
             if (allowed > 0) restored += current to allowed
         }
         return Outcome(restored, removed, limited, repriced)

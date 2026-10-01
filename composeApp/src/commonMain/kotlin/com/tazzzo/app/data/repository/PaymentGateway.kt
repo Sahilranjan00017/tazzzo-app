@@ -1,5 +1,7 @@
 package com.tazzzo.app.data.repository
 
+import com.tazzzo.app.data.model.Money
+
 import com.tazzzo.app.data.model.PaymentOrder
 import com.tazzzo.app.data.model.PaymentProvider
 import com.tazzzo.app.data.model.PaymentResult
@@ -28,7 +30,7 @@ interface PaymentGateway {
     val isTestMode: Boolean
 
     /** Server-side in production. Never mints an order id on the client for real money. */
-    suspend fun createOrder(amountRupees: Int, receiptId: String): PaymentOrder
+    suspend fun createOrder(amount: Money, receiptId: String): PaymentOrder
 
     /** The one genuinely client-side step: hand the order to the gateway's checkout UI. */
     suspend fun launchCheckout(order: PaymentOrder): PaymentResult
@@ -58,11 +60,11 @@ class MockPaymentGateway(
     override val provider: PaymentProvider = PaymentProvider.RAZORPAY
     override val isTestMode: Boolean = true
 
-    override suspend fun createOrder(amountRupees: Int, receiptId: String): PaymentOrder {
+    override suspend fun createOrder(amount: Money, receiptId: String): PaymentOrder {
         delay(500)
         return PaymentOrder(
             orderId = "order_test_$receiptId",
-            amountRupees = amountRupees,
+            amount = amount,
             provider = provider,
             receiptId = receiptId,
             isTestMode = true

@@ -499,7 +499,7 @@ private fun OrderContextCard(orderId: String) {
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
             )
             Text(
-                "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
+                "${order.bill.grandTotal}", fontSize = TazType.priceSize,
                 fontWeight = TazType.priceWeight, color = TazColors.TextPrimary, maxLines = 1
             )
         }

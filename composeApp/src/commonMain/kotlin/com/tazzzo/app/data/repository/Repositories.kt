@@ -86,7 +86,7 @@ class MockOrderRepository : OrderRepository {
                 CartLine(MockCatalog.products.first { it.id == "p34" }, 2),
                 CartLine(MockCatalog.products.first { it.id == "p8" }, 1)
             ),
-            bill = BillSummary(149, 158, 0, 5, 3, 154),
+            bill = BillSummary(Money.ofRupees(149), Money.ofRupees(158), Money.ofRupees(0), Money.ofRupees(5), 3, Money.ofRupees(154)),
             status = OrderStatus.DELIVERED,
             placedAtLabel = "Aug 20, 7:42 PM",
             address = "Home — 22, 14th Main, HSR Layout",
@@ -99,7 +99,7 @@ class MockOrderRepository : OrderRepository {
                 CartLine(MockCatalog.products.first { it.id == "p18" }, 1),
                 CartLine(MockCatalog.products.first { it.id == "p26" }, 2)
             ),
-            bill = BillSummary(579, 684, 0, 5, 11, 584),
+            bill = BillSummary(Money.ofRupees(579), Money.ofRupees(684), Money.ofRupees(0), Money.ofRupees(5), 11, Money.ofRupees(584)),
             status = OrderStatus.ON_THE_WAY,
             placedAtLabel = "Today, 5:10 PM",
             address = "Work — Tower B, Ecospace, Bellandur",
@@ -108,7 +108,7 @@ class MockOrderRepository : OrderRepository {
         Order(
             id = "TZ100480",
             lines = listOf(CartLine(MockCatalog.products.first { it.id == "p43" }, 1)),
-            bill = BillSummary(99, 132, 25, 5, 1, 129),
+            bill = BillSummary(Money.ofRupees(99), Money.ofRupees(132), Money.ofRupees(25), Money.ofRupees(5), 1, Money.ofRupees(129)),
             status = OrderStatus.PACKED,
             placedAtLabel = "Today, 6:02 PM",
             address = "Home — 22, 14th Main, HSR Layout",

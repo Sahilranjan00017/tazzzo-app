@@ -1,5 +1,7 @@
 package com.tazzzo.app.config
 
+import com.tazzzo.app.data.model.Money
+
 /**
  * Business-critical values that must NEVER be hard-coded into screens.
  *
@@ -73,8 +75,8 @@ object DeliveryCopy {
 data class CoinRules(
     /** Percent of item total earned as coins. */
     val earnPercent: Int = 2,
-    /** Rupee value of one coin. */
-    val rupeesPerCoin: Int = 1,
+    /** Value of one coin. */
+    val valuePerCoin: Money = Money.ofRupees(1),
     /** Max coins redeemable on a single order; null = uncapped. */
     val maxRedeemPerOrder: Int? = null,
     /** Days until earned coins expire; null = never. */
@@ -82,8 +84,9 @@ data class CoinRules(
     /** Master switch — false hides all coin UI. */
     val enabled: Boolean = true
 ) {
-    fun coinsFor(itemTotalRupees: Int): Int = (itemTotalRupees * earnPercent) / 100
-    val valueCopy: String get() = "1 Coin = ₹$rupeesPerCoin"
+    /** Coins earned: `floor(itemTotal * earnPercent / 100)` whole rupees, integer paise arithmetic. */
+    fun coinsFor(itemTotal: Money): Int = (itemTotal.percentOf(earnPercent).paise / 100L).toInt()
+    val valueCopy: String get() = "1 Coin = $valuePerCoin"
     val earnCopy: String get() = "Earn $earnPercent% back on every order"
 }
 
@@ -109,9 +112,9 @@ val defaultDeliveryInstructions = listOf(
 )
 
 data class ChargeRules(
-    val freeDeliveryAboveRupees: Int = 199,
-    val deliveryFeeRupees: Int = 25,
-    val handlingFeeRupees: Int = 5
+    val freeDeliveryAbove: Money = Money.ofRupees(199),
+    val deliveryFee: Money = Money.ofRupees(25),
+    val handlingFee: Money = Money.ofRupees(5)
 )
 
 // ---------------------------------------------------------------------------

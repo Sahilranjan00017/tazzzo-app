@@ -36,15 +36,17 @@ data class DeliverySlot(
     val label: String,            // "6 – 9 AM"
     val available: Boolean,
     val etaMinutes: Int? = null,  // only when backed by serviceability data
-    /** Fee for THIS slot. 0 = free. Overrides the flat rule when a slot is chosen. */
-    val feeRupees: Int = 0,
+    /** Fee for THIS slot. Zero = free. Overrides the flat rule when a slot is chosen. */
+    val fee: Money = Money.ZERO,
     /** Customer-facing reason for the fee, e.g. "Peak-hour slot". Null when free or unexplained. */
     val feeReason: String? = null,
     /** Section header: "Next available", "Today", "Tomorrow". Null = ungrouped. */
     val group: String? = null,
     /** Server-recommended (soonest reliable). Rendered as a small tag, never auto-selected silently. */
     val recommended: Boolean = false
-)
+) {
+    init { Money.requireNonNegative(fee, "slot fee") }
+}
 
 /**
  * Optional delivery instructions the customer can attach. The set of options
@@ -93,8 +95,8 @@ sealed interface CartIssue {
     data class PriceChanged(
         override val productId: String,
         override val productName: String,
-        val oldPrice: Int,
-        val newPrice: Int
+        val oldPrice: Money,
+        val newPrice: Money
     ) : CartIssue
 }
 

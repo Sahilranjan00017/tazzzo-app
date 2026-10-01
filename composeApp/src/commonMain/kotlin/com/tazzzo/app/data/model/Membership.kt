@@ -47,22 +47,27 @@ data class MembershipBenefit(
 /**
  * A percentage discount on eligible orders.
  *
- * @param minOrderValueRupees the cart must reach this item total before the
+ * @param minOrderValue the cart must reach this item total before the
  *   discount applies — "eligible order" throughout the UI means "meets this".
- * @param maxDiscountRupees cap on the rupee value of one discount; null =
+ * @param maxDiscount cap on the value of one discount; null =
  *   uncapped. Percent-only rules are dangerous on large baskets without one.
  */
 @Serializable
 data class MembershipDiscountRule(
     val percent: Int,
-    val minOrderValueRupees: Int,
-    val maxDiscountRupees: Int? = null
+    val minOrderValue: Money,
+    val maxDiscount: Money? = null
 ) {
-    /** Discount for one order, 0 if the order does not qualify. */
-    fun discountFor(itemTotalRupees: Int): Int {
-        if (itemTotalRupees < minOrderValueRupees) return 0
-        val raw = (itemTotalRupees * percent) / 100
-        return maxDiscountRupees?.let { minOf(raw, it) } ?: raw
+    init {
+        Money.requireNonNegative(minOrderValue, "minOrderValue")
+        maxDiscount?.let { Money.requireNonNegative(it, "maxDiscount") }
+    }
+
+    /** Discount for one order, zero if the order does not qualify. Floor, in integer paise. */
+    fun discountFor(itemTotal: Money): Money {
+        if (itemTotal < minOrderValue) return Money.ZERO
+        val raw = itemTotal.percentOf(percent)
+        return maxDiscount?.let { minOf(raw, it) } ?: raw
     }
 }
 
@@ -74,7 +79,7 @@ data class MembershipDiscountRule(
 @Serializable
 data class MembershipSpendMilestone(
     val id: String,
-    val thresholdRupees: Int,
+    val threshold: Money,
     val unlockedDiscount: MembershipDiscountRule,
     val title: String,
     val description: String
@@ -100,7 +105,7 @@ data class MembershipOrderMilestone(
     val requiredOrders: Int,
     val rewardType: MembershipRewardType,
     val rewardTitle: String,
-    val rewardValueRupees: Int?,
+    val rewardValue: Money?,
     val eligibleCategoryIds: List<String> = emptyList(),
     val expiryDaysAfterUnlock: Int? = null,
     val campaignId: String? = null
@@ -134,7 +139,7 @@ data class MembershipPlan(
     val id: String,
     val name: String,
     val tagline: String,
-    val priceRupees: Int,
+    val price: Money,
     /** null = active until cancelled; otherwise days from activation. */
     val periodDays: Int?,
     val discountRule: MembershipDiscountRule,
@@ -152,9 +157,9 @@ data class MembershipPlan(
 data class MembershipEligibility(
     val isMember: Boolean,
     val isEligible: Boolean,
-    val discountRupees: Int,
+    val discount: Money,
     /** How much MORE the cart needs to reach the active discount rule. 0 if already eligible or not a member. */
-    val amountToUnlockRupees: Int,
+    val amountToUnlock: Money,
     val appliedRule: MembershipDiscountRule?
 )
 
@@ -163,7 +168,7 @@ data class MembershipEligibility(
 data class MembershipTransaction(
     val id: String,
     val planId: String,
-    val amountRupees: Int,
+    val amount: Money,
     val status: MembershipStatus,
     val paymentReference: String?,
     val isTestPayment: Boolean,
@@ -174,7 +179,7 @@ data class MembershipTransaction(
  * The customer's live relationship with Tazzzo Club — persisted locally
  * (`PersistentStore`) and mirrored from the backend once one exists.
  *
- * `cumulativeSpendRupees` and `eligibleOrderCount` only advance on orders
+ * `cumulativeSpend` and `eligibleOrderCount` only advance on orders
  * where the club discount actually applied — see BLOCKERS.md: this must
  * become server-authoritative before launch, same as coin crediting.
  */
@@ -184,8 +189,8 @@ data class MembershipState(
     val planId: String? = null,
     val activatedAtLabel: String? = null,
     val expiresAtLabel: String? = null,
-    val cumulativeSpendRupees: Int = 0,
-    val cumulativeSavingsRupees: Int = 0,
+    val cumulativeSpend: Money = Money.ZERO,
+    val cumulativeSavings: Money = Money.ZERO,
     val eligibleOrderCount: Int = 0,
     val unlockedSpendMilestoneIds: Set<String> = emptySet(),
     val rewards: List<MembershipReward> = emptyList(),

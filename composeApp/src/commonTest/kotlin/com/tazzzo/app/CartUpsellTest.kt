@@ -27,8 +27,8 @@ class CartUpsellTest {
         // Not a hard business rule, a sanity bound: an upsell headed "add for
         // less" that opens with a four-figure item is selling the wrong thing.
         val rail = upsell(emptySet())
-        assertTrue(rail.first().price < 200,
-            "cheapest offer is ₹${rail.first().price}; 'add for less' should start low")
+        assertTrue(rail.first().price < r(200),
+            "cheapest offer is ${rail.first().price}; 'add for less' should start low")
     }
 
     @Test fun every_item_still_carries_a_real_discount() {
