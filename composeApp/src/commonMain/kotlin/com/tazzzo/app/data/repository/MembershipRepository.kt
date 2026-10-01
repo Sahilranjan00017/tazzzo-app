@@ -1,5 +1,7 @@
 package com.tazzzo.app.data.repository
 
+import com.tazzzo.app.data.model.Money
+
 import com.tazzzo.app.config.MembershipCalculator
 import com.tazzzo.app.config.MembershipConfig
 import com.tazzzo.app.data.local.PersistentStore
@@ -38,8 +40,8 @@ interface MembershipRepository {
      */
     suspend fun recordEligibleOrder(
         orderId: String,
-        itemTotalRupees: Int,
-        discountAppliedRupees: Int,
+        itemTotal: Money,
+        discountApplied: Money,
         placedAtLabel: String
     ): MembershipState
 
@@ -89,8 +91,8 @@ class LocalMembershipRepository(
 
     override suspend fun recordEligibleOrder(
         orderId: String,
-        itemTotalRupees: Int,
-        discountAppliedRupees: Int,
+        itemTotal: Money,
+        discountApplied: Money,
         placedAtLabel: String
     ): MembershipState {
         val current = getState()
@@ -99,8 +101,8 @@ class LocalMembershipRepository(
         val advanced = MembershipCalculator.applyEligibleOrder(
             plan = MembershipConfig.plan,
             state = current,
-            itemTotalRupees = itemTotalRupees,
-            discountAppliedRupees = discountAppliedRupees,
+            itemTotal = itemTotal,
+            discountApplied = discountApplied,
             unlockedAtLabel = placedAtLabel
         )
         return persist(advanced.copy(countedOrderIds = current.countedOrderIds + orderId))

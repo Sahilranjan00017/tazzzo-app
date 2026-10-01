@@ -294,13 +294,13 @@ private fun OrderCard(order: Order) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
+                    "${order.bill.grandTotal}", fontSize = TazType.priceSize,
                     fontWeight = TazType.priceWeight, color = TazColors.TextPrimary
                 )
                 // What this order actually saved — realised, never MRP theatre.
-                if (order.bill.realisedSavings > 0) {
+                if (order.bill.realisedSavings.isPositive) {
                     Text(
-                        "Saved ₹${order.bill.realisedSavings}", fontSize = TazType.captionSize,
+                        "Saved ${order.bill.realisedSavings}", fontSize = TazType.captionSize,
                         fontWeight = FontWeight.SemiBold, color = TazColors.Green
                     )
                 }

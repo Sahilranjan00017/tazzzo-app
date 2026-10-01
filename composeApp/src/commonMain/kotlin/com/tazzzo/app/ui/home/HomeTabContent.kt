@@ -650,12 +650,12 @@ private fun CouponRail() {
                     .padding(TazSpace.md)
             ) {
                 Text(
-                    c.flatRupees?.let { "FLAT ₹$it OFF" } ?: c.percent?.let { "$it% OFF" } ?: c.title,
+                    c.flat?.let { "FLAT $it OFF" } ?: c.percent?.let { "$it% OFF" } ?: c.title,
                     fontSize = TazType.titleSize, fontWeight = TazType.titleWeight, color = TazColors.Green
                 )
                 Spacer(Modifier.height(TazSpace.xxs))
                 Text(
-                    if (c.minOrderRupees > 0) "above ₹${c.minOrderRupees}" else "no minimum",
+                    if (c.minOrder.isPositive) "above ${c.minOrder}" else "no minimum",
                     fontSize = TazType.captionSize, color = TazColors.TextSecondary
                 )
                 Spacer(Modifier.height(TazSpace.sm))

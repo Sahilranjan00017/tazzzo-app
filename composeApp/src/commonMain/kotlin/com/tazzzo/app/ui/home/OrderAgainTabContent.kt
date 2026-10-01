@@ -183,7 +183,7 @@ private fun OrderAgainCard(order: Order, modifier: Modifier = Modifier) {
                 )
                 Spacer(Modifier.width(TazSpace.md))
                 Text(
-                    "₹${line.lineTotal}", fontSize = TazType.priceSize,
+                    "${line.lineTotal}", fontSize = TazType.priceSize,
                     fontWeight = TazType.priceWeight, color = TazColors.TextPrimary
                 )
             }
@@ -194,7 +194,7 @@ private fun OrderAgainCard(order: Order, modifier: Modifier = Modifier) {
         // Footer: total + reorder
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "₹${order.bill.grandTotal}", fontSize = TazType.priceSize,
+                "${order.bill.grandTotal}", fontSize = TazType.priceSize,
                 fontWeight = TazType.priceWeight, color = TazColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )

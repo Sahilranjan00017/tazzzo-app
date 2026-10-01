@@ -2,6 +2,7 @@ package com.tazzzo.app.config
 
 import com.tazzzo.app.data.model.MembershipBenefit
 import com.tazzzo.app.data.model.MembershipDiscountRule
+import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.model.MembershipOrderMilestone
 import com.tazzzo.app.data.model.MembershipPlan
 import com.tazzzo.app.data.model.MembershipRewardType
@@ -26,19 +27,19 @@ object MembershipConfig {
 
     private val baseDiscount = MembershipDiscountRule(
         percent = 5,
-        minOrderValueRupees = 500,
-        maxDiscountRupees = null
+        minOrderValue = Money.ofRupees(500),
+        maxDiscount = null
     )
 
     private val higherDiscount = MembershipDiscountRule(
         percent = 10,
-        minOrderValueRupees = 500,
-        maxDiscountRupees = null
+        minOrderValue = Money.ofRupees(500),
+        maxDiscount = null
     )
 
     private val spendMilestone5000 = MembershipSpendMilestone(
         id = "spend-5000",
-        thresholdRupees = 5_000,
+        threshold = Money.ofRupees(5_000),
         unlockedDiscount = higherDiscount,
         title = "Higher savings unlocked",
         description = "10% off eligible orders ₹500+, for the rest of your membership."
@@ -50,7 +51,7 @@ object MembershipConfig {
         requiredOrders = 3,
         rewardType = MembershipRewardType.FREE_ITEM_CREDIT,
         rewardTitle = "Fresh fruits up to ₹100",
-        rewardValueRupees = 100,
+        rewardValue = Money.ofRupees(100),
         eligibleCategoryIds = listOf("fruits"),   // Category id from MockCatalog — a real aisle, not invented.
         expiryDaysAfterUnlock = 14
     )
@@ -91,7 +92,7 @@ object MembershipConfig {
         id = "club-99",
         name = "Tazzzo Club",
         tagline = "More you shop. More you save. More you unlock.",
-        priceRupees = 99,
+        price = Money.ofRupees(99),
         periodDays = 365,
         discountRule = baseDiscount,
         spendMilestones = listOf(spendMilestone5000),

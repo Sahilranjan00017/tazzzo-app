@@ -1,12 +1,15 @@
 package com.tazzzo.app.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /*
  * Wire format for the catalogue and order models.
  *
  * Ground rules, all of them load-bearing:
- *  - Money is INTEGER RUPEES everywhere. No floats, no strings, no paise.
+ *  - Money is INTEGER PAISE everywhere (PR-04B): the [Money] value class, serialized as a
+ *    bare paise `Long`. No floats, no strings, no rupee `Int`. Customer-facing amounts reject
+ *    a negative value at construction.
  *  - Computed properties (discountPercent, purchasableLimit, lineTotal, saved,
  *    ok) are derived on the client and are NOT part of any payload.
  *  - `Availability` and `CartIssue` are sealed types whose documented JSON is
@@ -72,8 +75,8 @@ data class Product(
      */
     val emoji: String = "",
     val unit: String,           // "500 g", "1 L", "6 pcs"
-    val price: Int,             // selling price in ₹
-    val mrp: Int,               // strike-through price in ₹
+    @SerialName("pricePaise") val price: Money,           // selling price
+    @SerialName("mrpPaise") val mrp: Money,             // strike-through price
     val categoryId: String,
     val subcategoryId: String,
     val rating: Double,
@@ -111,7 +114,14 @@ data class Product(
      */
     val verticalId: String? = null
 ) {
-    val discountPercent: Int get() = if (mrp > price) ((mrp - price) * 100) / mrp else 0
+    init {
+        Money.requireNonNegative(price, "price")
+        Money.requireNonNegative(mrp, "mrp")
+    }
+
+    /** Floor of `(mrp - price) * 100 / mrp`, in integer paise arithmetic. */
+    val discountPercent: Int
+        get() = if (mrp > price) ((mrp - price).paise * 100L / mrp.paise).toInt() else 0
 
     /**
      * Price per standard unit — "₹32/kg", "₹58/L", "₹7/pc" — derived from the
@@ -146,27 +156,27 @@ data class PromoBanner(
 
 @Serializable
 data class CartLine(val product: Product, val quantity: Int) {
-    val lineTotal: Int get() = product.price * quantity
-    val lineMrp: Int get() = product.mrp * quantity
+    val lineTotal: Money get() = product.price * quantity
+    val lineMrp: Money get() = product.mrp * quantity
 }
 
 @Serializable
 data class BillSummary(
-    val itemTotal: Int,
-    val itemMrpTotal: Int,
-    val deliveryFee: Int,
-    val handlingCharge: Int,
+    @SerialName("itemTotalPaise") val itemTotal: Money,
+    @SerialName("itemMrpTotalPaise") val itemMrpTotal: Money,
+    @SerialName("deliveryFeePaise") val deliveryFee: Money,
+    @SerialName("handlingChargePaise") val handlingCharge: Money,
     val coinsEarned: Int,
-    val grandTotal: Int,
+    @SerialName("grandTotalPaise") val grandTotal: Money,
     /**
-     * Rupees off from Tazzzo Club for THIS order. 0 for non-members and
+     * Amount off from Tazzzo Club for THIS order. 0 for non-members and
      * ineligible orders. Placed AFTER grandTotal and defaulted so every
      * existing positional BillSummary(...) fixture keeps compiling and every
      * value it constructs keeps meaning what it always meant.
      */
-    val clubDiscount: Int = 0,
-    /** Rupees off from promotions/coupons on THIS order. 0 when none applied. */
-    val promotionDiscount: Int = 0,
+    @SerialName("clubDiscountPaise") val clubDiscount: Money = Money.ZERO,
+    /** Amount off from promotions/coupons on THIS order. Zero when none applied. */
+    @SerialName("promotionDiscountPaise") val promotionDiscount: Money = Money.ZERO,
     /** Each promotion that applied, with its customer-facing explanation. */
     val appliedPromotions: List<AppliedPromotion> = emptyList(),
     /** Offers the customer could see but did not get, and why. */
@@ -181,7 +191,7 @@ data class BillSummary(
      * Money genuinely not charged, so it counts toward realised savings; the
      * reason is carried so the bill can say WHY it was free.
      */
-    val deliveryFeeWaivedRupees: Int = 0,
+    @SerialName("deliveryFeeWaivedPaise") val deliveryFeeWaived: Money = Money.ZERO,
     val deliveryFeeReason: String? = null,
     /**
      * A voluntary amount added to this order.
@@ -190,10 +200,19 @@ data class BillSummary(
      * money the customer ADDS, and folding it anywhere near savings would make
      * the bill unreadable. It is added to [grandTotal] and shown on its own row.
      */
-    val tip: Int = 0
+    @SerialName("tipPaise") val tip: Money = Money.ZERO
 ) {
+    init {
+        // Every field here is a customer-facing charge or a discount MAGNITUDE (subtracted, never negative).
+        for ((name, m) in listOf(
+            "itemTotal" to itemTotal, "itemMrpTotal" to itemMrpTotal, "deliveryFee" to deliveryFee,
+            "handlingCharge" to handlingCharge, "grandTotal" to grandTotal, "clubDiscount" to clubDiscount,
+            "promotionDiscount" to promotionDiscount, "deliveryFeeWaived" to deliveryFeeWaived, "tip" to tip
+        )) Money.requireNonNegative(m, name)
+    }
+
     /** MRP savings only — a list-price comparison, not money taken off the payable. */
-    val saved: Int get() = itemMrpTotal - itemTotal
+    val saved: Money get() = itemMrpTotal - itemTotal
 
     /**
      * Money ACTUALLY taken off the payable amount: promotions + Club. This is
@@ -201,7 +220,7 @@ data class BillSummary(
      * excluded — blending a strike-through comparison with a real discount is
      * how a "you saved ₹60" is born that the customer cannot find on the bill.
      */
-    val realisedSavings: Int get() = promotionDiscount + clubDiscount + deliveryFeeWaivedRupees
+    val realisedSavings: Money get() = promotionDiscount + clubDiscount + deliveryFeeWaived
 }
 
 @Serializable
@@ -250,29 +269,53 @@ data class FaqItem(val question: String, val answer: String)
  * would overstate the value by four times). Returns null for anything it cannot
  * measure rather than guessing.
  */
-internal fun unitPriceLabel(price: Int, unit: String): String? {
+internal fun unitPriceLabel(price: Money, unit: String): String? {
+    if (price.paise > MAX_LABELLED_PAISE) return null // keeps every product below inside Long
     val u = unit.lowercase()
     val multi = Regex("""(\d+)\s*[x\u00d7]\s*(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b""").find(u)
     val mass = multi ?: Regex("""(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b""").find(u)
     if (mass != null) {
         val g = mass.groupValues
-        val qty: Double
+        // Pack size in THOUSANDTHS of the stated unit (500 g = 500_000, 0.5 kg = 500), integers only.
+        val milli: Long
         val suffix: String
-        if (multi != null) { qty = g[1].toDouble() * g[2].toDouble(); suffix = g[3] }
-        else { qty = g[1].toDouble(); suffix = g[2] }
-        if (qty <= 0.0) return null
+        if (multi != null) {
+            val count = g[1].toLongOrNull()?.takeIf { it in 1..1_000_000 } ?: return null
+            milli = count * (decimalMilli(g[2]) ?: return null)
+            suffix = g[3]
+        } else {
+            milli = decimalMilli(g[1]) ?: return null
+            suffix = g[2]
+        }
+        if (milli <= 0L) return null
+        // price(paise)/100 rupees over a pack of milli/1000 kg  =  price*10/milli  rupees per kg.
+        // Stated in grams the same pack is milli/1000 g, so per kg it is price*10_000/milli.
         return when (suffix) {
-            "kg" -> "\u20b9${(price / qty).roundToWhole()}/kg"
-            "g"  -> if (qty < 20) null else "\u20b9${(price * 1000 / qty).roundToWhole()}/kg"
-            "l"  -> "\u20b9${(price / qty).roundToWhole()}/L"
-            "ml" -> if (qty < 20) null else "\u20b9${(price * 1000 / qty).roundToWhole()}/L"
+            "kg" -> "\u20b9${roundHalfUp(price.paise * 10L, milli)}/kg"
+            "g"  -> if (milli < 20_000L) null else "\u20b9${roundHalfUp(price.paise * 10_000L, milli)}/kg"
+            "l"  -> "\u20b9${roundHalfUp(price.paise * 10L, milli)}/L"
+            "ml" -> if (milli < 20_000L) null else "\u20b9${roundHalfUp(price.paise * 10_000L, milli)}/L"
             else -> null
         }
     }
     val pieces = Regex("""(\d+)\s*(pcs|pc|pieces|piece)\b""").find(u) ?: return null
-    val n = pieces.groupValues[1].toIntOrNull() ?: return null
-    if (n <= 1) return null
-    return "\u20b9${(price.toDouble() / n).roundToWhole()}/pc"
+    val n = pieces.groupValues[1].toLongOrNull()?.takeIf { it <= 1_000_000 } ?: return null
+    if (n <= 1L) return null
+    // price(paise)/100 rupees over n pieces, rounded to a whole rupee.
+    return "\u20b9${roundHalfUp(price.paise, 100L * n)}/pc"
 }
 
-private fun Double.roundToWhole(): Int = (this + 0.5).toInt()
+private const val MAX_LABELLED_PAISE = 100_000_000_000L // ₹1,000,000,000: far past any shelf price
+
+/** `round(num / den)`, halves up, integers only (non-negative inputs). */
+private fun roundHalfUp(num: Long, den: Long): Long = (2L * num + den) / (2L * den)
+
+/** "0.5" -> 500, "1.25" -> 1250, "3" -> 3000. Null for more than three decimals or garbage. */
+private fun decimalMilli(text: String): Long? {
+    val parts = text.split('.')
+    if (parts.size > 2) return null
+    val whole = parts[0].toLongOrNull() ?: return null
+    val frac = parts.getOrNull(1) ?: ""
+    if (frac.length > 3 || frac.any { it !in '0'..'9' }) return null
+    return whole * 1000L + (frac.padEnd(3, '0').toLongOrNull() ?: 0L)
+}

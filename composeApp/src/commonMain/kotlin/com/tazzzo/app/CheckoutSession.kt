@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tazzzo.app.data.model.Address
 import com.tazzzo.app.data.model.CartValidation
 import com.tazzzo.app.data.model.DeliverySlot
+import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.model.Order
 import com.tazzzo.app.data.model.PaymentMethodKind
 import kotlin.random.Random
@@ -55,7 +56,7 @@ class CheckoutSession(
      * order, and silently carrying it into the next one would take money
      * nobody offered again.
      */
-    var tipRupees by mutableStateOf(0)
+    var tip by mutableStateOf(Money.ZERO)
     fun toggleInstruction(id: String) {
         instructionIds = if (id in instructionIds) instructionIds - id else instructionIds + id
     }

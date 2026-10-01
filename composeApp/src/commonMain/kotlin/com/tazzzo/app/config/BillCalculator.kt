@@ -5,6 +5,8 @@ import com.tazzzo.app.data.model.CartLine
 import com.tazzzo.app.data.model.MembershipPlan
 import com.tazzzo.app.data.model.Promotion
 import com.tazzzo.app.data.model.DeliverySlot
+import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.sumOfMoney
 
 /**
  * The single source of truth for order money maths.
@@ -23,24 +25,25 @@ object BillCalculator {
         redeemCoins: Int = 0,
         isClubMember: Boolean = false,
         clubPlan: MembershipPlan = MembershipConfig.plan,
-        clubCumulativeSpendRupees: Int = 0,
+        clubCumulativeSpend: Money = Money.ZERO,
         promotions: List<Promotion> = PromotionConfig.active,
         couponCode: String? = null,
         promotionPolicy: PromotionPolicy = PromotionConfig.policy,
         slot: DeliverySlot? = null,
         /** Voluntary amount added to this order. Never discounted, never netted. */
-        tipRupees: Int = 0
+        tip: Money = Money.ZERO
     ): BillSummary {
-        val itemTotal = lines.sumOf { it.lineTotal }
-        val mrpTotal = lines.sumOf { it.lineMrp }
-        val handling = if (itemTotal == 0) 0 else charges.handlingFeeRupees
+        val itemTotal = lines.sumOfMoney { it.lineTotal }
+        val mrpTotal = lines.sumOfMoney { it.lineMrp }
+        val empty = itemTotal.isZero
+        val handling = if (empty) Money.ZERO else charges.handlingFee
         val earned = if (coins.enabled) coins.coinsFor(itemTotal) else 0
 
         // Club's candidate discount, BEFORE stacking. The engine decides whether
         // it survives against a competing non-stackable promotion.
-        val clubCandidate = if (itemTotal == 0) 0 else
-            MembershipCalculator.evaluate(itemTotal, isClubMember, clubPlan, clubCumulativeSpendRupees)
-                .discountRupees
+        val clubCandidate = if (empty) Money.ZERO else
+            MembershipCalculator.evaluate(itemTotal, isClubMember, clubPlan, clubCumulativeSpend)
+                .discount
 
         // One resolution, one place. Screens render it; nothing recomputes it.
         val promo = PromotionEngine.evaluate(
@@ -48,34 +51,33 @@ object BillCalculator {
             promotions = promotions,
             isMember = isClubMember,
             couponCode = couponCode,
-            clubDiscountRupees = clubCandidate,
+            clubDiscount = clubCandidate,
             policy = promotionPolicy
         )
-        val clubDiscount = promo.clubDiscountRupees
-        val promotionDiscount = promo.promotionDiscountRupees
+        val clubDiscount = promo.clubDiscount
+        val promotionDiscount = promo.promotionDiscount
 
         // Delivery: the chosen slot's own fee when one is chosen, else the flat
         // rule. Whatever the fee WOULD have been, if it is not charged the
         // difference is money the customer kept — reported as its own realised
         // line with the reason, so "Delivery FREE" is never an unexplained gift.
-        val baseDeliveryFee = if (itemTotal == 0) 0 else (slot?.feeRupees ?: charges.deliveryFeeRupees)
         val (delivery, deliveryReason) = when {
-            itemTotal == 0 -> 0 to null
-            promo.freeDelivery -> 0 to "Free delivery offer applied"
-            itemTotal >= charges.freeDeliveryAboveRupees ->
-                0 to "Free on orders above ₹${charges.freeDeliveryAboveRupees}"
-            slot != null && slot.feeRupees == 0 -> 0 to "Free for this slot"
-            slot != null -> slot.feeRupees to slot.feeReason
-            else -> charges.deliveryFeeRupees to null
+            empty -> Money.ZERO to null
+            promo.freeDelivery -> Money.ZERO to "Free delivery offer applied"
+            itemTotal >= charges.freeDeliveryAbove ->
+                Money.ZERO to "Free on orders above ${charges.freeDeliveryAbove}"
+            slot != null && slot.fee.isZero -> Money.ZERO to "Free for this slot"
+            slot != null -> slot.fee to slot.feeReason
+            else -> charges.deliveryFee to null
         }
         // What was waived: the flat fee is the honest reference when the slot is
         // free or unknown; a paid slot waived by threshold/promo saves its own fee.
-        val referenceFee = if (slot != null && slot.feeRupees > 0) slot.feeRupees else charges.deliveryFeeRupees
-        val deliveryWaived = if (itemTotal > 0 && delivery == 0) referenceFee else 0
+        val referenceFee = if (slot != null && slot.fee.isPositive) slot.fee else charges.deliveryFee
+        val deliveryWaived = if (!empty && delivery.isZero) referenceFee else Money.ZERO
 
         // Coins redeem against what is left AFTER discounts, never against
         // rupees that were already taken off.
-        val discountedItems = (itemTotal - clubDiscount - promotionDiscount).coerceAtLeast(0)
+        val discountedItems = (itemTotal - clubDiscount - promotionDiscount).coerceAtLeast(Money.ZERO)
         val redemption = redeemableValue(redeemCoins, discountedItems, coins)
 
         return BillSummary(
@@ -85,16 +87,16 @@ object BillCalculator {
             handlingCharge = handling,
             coinsEarned = earned,
             // Items can be discounted to zero; fees are never discounted below zero.
-            grandTotal = discountedItems + delivery + handling - redemption + tipRupees,
+            grandTotal = discountedItems + delivery + handling - redemption + tip,
             clubDiscount = clubDiscount,
             promotionDiscount = promotionDiscount,
             appliedPromotions = promo.applied,
             declinedPromotions = promo.declined,
             bestOfferNote = promo.bestOfferNote,
             freeDeliveryByPromotion = promo.freeDelivery,
-            deliveryFeeWaivedRupees = deliveryWaived,
+            deliveryFeeWaived = deliveryWaived,
             deliveryFeeReason = deliveryReason,
-            tip = tipRupees
+            tip = tip
         )
     }
 
@@ -105,10 +107,10 @@ object BillCalculator {
      * NOTE: redemption is exercised by tests but not yet exposed in the UI —
      * coin economics (decision D5) are not approved as production policy.
      */
-    fun redeemableValue(requestedCoins: Int, itemTotalRupees: Int, coins: CoinRules = AppConfig.coins): Int {
-        if (!coins.enabled || requestedCoins <= 0) return 0
+    fun redeemableValue(requestedCoins: Int, itemTotal: Money, coins: CoinRules = AppConfig.coins): Money {
+        if (!coins.enabled || requestedCoins <= 0) return Money.ZERO
         val capped = coins.maxRedeemPerOrder?.let { minOf(requestedCoins, it) } ?: requestedCoins
-        return minOf(capped * coins.rupeesPerCoin, itemTotalRupees)
+        return minOf(coins.valuePerCoin * capped, itemTotal)
     }
 }
 
@@ -117,15 +119,15 @@ object BillCalculator {
  *
  * @param alreadyFree delivery costs nothing on this order
  * @param reason why it is free, when it already is
- * @param thresholdRupees the spend that earns free delivery
- * @param remainingRupees how much more to spend; 0 once [alreadyFree]
+ * @param threshold the spend that earns free delivery
+ * @param remaining how much more to spend; 0 once [alreadyFree]
  * @param fraction 0f..1f progress toward the threshold, for the track
  */
 data class FreeDeliveryProgress(
     val alreadyFree: Boolean,
     val reason: String?,
-    val thresholdRupees: Int,
-    val remainingRupees: Int,
+    val threshold: Money,
+    val remaining: Money,
     val fraction: Float,
 )
 
@@ -135,7 +137,7 @@ data class FreeDeliveryProgress(
  *
  * The supplied cart mockup hard-codes "Shop for ₹176 more" against a ₹499
  * target. Neither figure belongs to this app — the threshold is
- * [AppConfig.charges.freeDeliveryAboveRupees] and it can change without a
+ * [AppConfig.charges.freeDeliveryAbove] and it can change without a
  * release, so a literal here would start lying the first time ops moved it.
  *
  * The [alreadyFree] case matters as much as the progress one: when a promotion
@@ -143,16 +145,17 @@ data class FreeDeliveryProgress(
  * unlock what they have would invent a hurdle to sell against.
  */
 fun freeDeliveryProgress(bill: BillSummary): FreeDeliveryProgress {
-    val threshold = AppConfig.charges.freeDeliveryAboveRupees
-    val free = bill.deliveryFee == 0 && bill.itemTotal > 0
-    val remaining = (threshold - bill.itemTotal).coerceAtLeast(0)
+    val threshold = AppConfig.charges.freeDeliveryAbove
+    val free = bill.deliveryFee.isZero && bill.itemTotal.isPositive
+    val remaining = (threshold - bill.itemTotal).coerceAtLeast(Money.ZERO)
     return FreeDeliveryProgress(
         alreadyFree = free,
         reason = bill.deliveryFeeReason,
-        thresholdRupees = threshold,
-        remainingRupees = if (free) 0 else remaining,
-        fraction = if (threshold <= 0) 1f
-        else (bill.itemTotal.toFloat() / threshold).coerceIn(0f, 1f),
+        threshold = threshold,
+        remaining = if (free) Money.ZERO else remaining,
+        // Display-only progress bar fraction (0..1); not money, never fed back into any amount.
+        fraction = if (!threshold.isPositive) 1f
+        else (bill.itemTotal.paise.toFloat() / threshold.paise.toFloat()).coerceIn(0f, 1f),
     )
 }
 
@@ -167,10 +170,10 @@ fun freeDeliveryProgress(bill: BillSummary): FreeDeliveryProgress {
  *
  * Returns null above the top band, where "under" stops being a selling point.
  */
-fun priceBandLabel(priceRupees: Int): String? = when {
-    priceRupees <= 0 -> null
-    priceRupees < 29 -> "Under ₹29"
-    priceRupees < 49 -> "Under ₹49"
-    priceRupees < 99 -> "Under ₹99"
+fun priceBandLabel(price: Money): String? = when {
+    !price.isPositive -> null
+    price < Money.ofRupees(29) -> "Under ₹29"
+    price < Money.ofRupees(49) -> "Under ₹49"
+    price < Money.ofRupees(99) -> "Under ₹99"
     else -> null
 }

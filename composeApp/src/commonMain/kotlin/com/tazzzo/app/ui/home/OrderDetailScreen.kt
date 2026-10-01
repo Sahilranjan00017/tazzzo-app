@@ -134,7 +134,7 @@ private fun StatusCard(order: Order) = Card {
         Spacer(Modifier.height(TazSpace.md))
         HorizontalDivider(color = TazColors.CardBorder)
         Spacer(Modifier.height(TazSpace.md))
-        KeyValue("Delivery slot", s.label + (if (s.feeRupees == 0) " · Free" else " · ₹${s.feeRupees}"))
+        KeyValue("Delivery slot", s.label + (if (s.fee.isZero) " · Free" else " · ${s.fee}"))
     }
 }
 
@@ -152,8 +152,8 @@ private fun ItemsCard(order: Order) = Card {
                 Text("${line.product.unit} · ${line.quantity} unit${if (line.quantity == 1) "" else "s"}", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("₹${line.lineTotal}", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight, color = TazColors.TextPrimary)
-                if (line.lineMrp > line.lineTotal) Text("₹${line.lineMrp}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough)
+                Text("${line.lineTotal}", fontSize = TazType.priceSize, fontWeight = TazType.priceWeight, color = TazColors.TextPrimary)
+                if (line.lineMrp > line.lineTotal) Text("${line.lineMrp}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough)
             }
         }
         if (i < order.lines.lastIndex) { Spacer(Modifier.height(TazSpace.sm)); HorizontalDivider(color = TazColors.CardBorder); Spacer(Modifier.height(TazSpace.sm)) }
@@ -167,23 +167,23 @@ private fun BillCard(order: Order) = Card {
     Spacer(Modifier.height(TazSpace.md))
     Row(Modifier.fillMaxWidth()) {
         Text("Item total", fontSize = TazType.bodySize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
-        if (b.itemMrpTotal > b.itemTotal) { Text("₹${b.itemMrpTotal}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough); Spacer(Modifier.width(TazSpace.xs)) }
-        Text("₹${b.itemTotal}", fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary)
+        if (b.itemMrpTotal > b.itemTotal) { Text("${b.itemMrpTotal}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough); Spacer(Modifier.width(TazSpace.xs)) }
+        Text("${b.itemTotal}", fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary)
     }
-    b.appliedPromotions.filter { it.discountRupees > 0 }.forEach { KeyValue(it.title, "−₹${it.discountRupees}", TazColors.Green) }
-    if (b.clubDiscount > 0) KeyValue("Tazzzo Club savings", "−₹${b.clubDiscount}", TazColors.Green)
+    b.appliedPromotions.filter { it.discount.isPositive }.forEach { KeyValue(it.title, "−${it.discount}", TazColors.Green) }
+    if (b.clubDiscount.isPositive) KeyValue("Tazzzo Club savings", "−${b.clubDiscount}", TazColors.Green)
     Row(Modifier.fillMaxWidth().padding(top = TazSpace.sm)) {
         Text("Delivery fee", fontSize = TazType.bodySize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
-        if (b.deliveryFee == 0 && b.deliveryFeeWaivedRupees > 0) { Text("₹${b.deliveryFeeWaivedRupees}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough); Spacer(Modifier.width(TazSpace.xs)) }
-        Text(if (b.deliveryFee == 0) "FREE" else "₹${b.deliveryFee}", fontSize = TazType.bodySize, fontWeight = FontWeight.Bold, color = if (b.deliveryFee == 0) TazColors.Success else TazColors.TextPrimary)
+        if (b.deliveryFee.isZero && b.deliveryFeeWaived.isPositive) { Text("${b.deliveryFeeWaived}", fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough); Spacer(Modifier.width(TazSpace.xs)) }
+        Text(if (b.deliveryFee.isZero) "FREE" else "${b.deliveryFee}", fontSize = TazType.bodySize, fontWeight = FontWeight.Bold, color = if (b.deliveryFee.isZero) TazColors.Success else TazColors.TextPrimary)
     }
-    KeyValue("Handling charge", "₹${b.handlingCharge}")
+    KeyValue("Handling charge", "${b.handlingCharge}")
     Spacer(Modifier.height(TazSpace.sm)); HorizontalDivider(color = TazColors.CardBorder); Spacer(Modifier.height(TazSpace.sm))
     Row(Modifier.fillMaxWidth()) {
         Text("Total paid", fontSize = TazType.titleSize, fontWeight = TazType.titleWeight, color = TazColors.TextPrimary, modifier = Modifier.weight(1f))
-        Text("₹${b.grandTotal}", fontSize = TazType.titleSize, fontWeight = TazType.titleWeight, color = TazColors.TextPrimary)
+        Text("${b.grandTotal}", fontSize = TazType.titleSize, fontWeight = TazType.titleWeight, color = TazColors.TextPrimary)
     }
-    if (b.realisedSavings > 0) KeyValue("You saved", "₹${b.realisedSavings}", TazColors.Green)
+    if (b.realisedSavings.isPositive) KeyValue("You saved", "${b.realisedSavings}", TazColors.Green)
 }
 
 @Composable

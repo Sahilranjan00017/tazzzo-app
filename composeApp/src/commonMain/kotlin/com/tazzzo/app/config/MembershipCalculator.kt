@@ -7,6 +7,7 @@ import com.tazzzo.app.data.model.MembershipPlan
 import com.tazzzo.app.data.model.MembershipReward
 import com.tazzzo.app.data.model.MembershipRewardStatus
 import com.tazzzo.app.data.model.MembershipState
+import com.tazzzo.app.data.model.Money
 
 /**
  * Pure membership maths — no I/O, no Compose, trivially unit-tested.
@@ -21,10 +22,10 @@ object MembershipCalculator {
      * cumulative spend. A spend milestone's [MembershipSpendMilestone] rule
      * REPLACES the plan's base rule once crossed — it does not stack with it.
      */
-    fun activeDiscountRule(plan: MembershipPlan, cumulativeSpendRupees: Int): MembershipDiscountRule {
+    fun activeDiscountRule(plan: MembershipPlan, cumulativeSpend: Money): MembershipDiscountRule {
         val unlocked = plan.spendMilestones
-            .filter { cumulativeSpendRupees >= it.thresholdRupees }
-            .maxByOrNull { it.thresholdRupees }
+            .filter { cumulativeSpend >= it.threshold }
+            .maxByOrNull { it.threshold }
         return unlocked?.unlockedDiscount ?: plan.discountRule
     }
 
@@ -32,24 +33,24 @@ object MembershipCalculator {
      * Evaluates one cart/order against the customer's plan and standing.
      *
      * Not a member → [MembershipEligibility.isMember] false and a real
-     * `amountToUnlockRupees` computed against the BASE rule, so a non-member
+     * `amountToUnlock` computed against the BASE rule, so a non-member
      * still sees an honest "join to save ₹X" number rather than a zero.
      */
     fun evaluate(
-        itemTotalRupees: Int,
+        itemTotal: Money,
         isMember: Boolean,
         plan: MembershipPlan,
-        cumulativeSpendRupees: Int = 0
+        cumulativeSpend: Money = Money.ZERO
     ): MembershipEligibility {
-        val rule = if (isMember) activeDiscountRule(plan, cumulativeSpendRupees) else plan.discountRule
-        val eligible = itemTotalRupees >= rule.minOrderValueRupees
-        val discount = if (isMember) rule.discountFor(itemTotalRupees) else 0
-        val amountToUnlock = if (eligible) 0 else (rule.minOrderValueRupees - itemTotalRupees).coerceAtLeast(0)
+        val rule = if (isMember) activeDiscountRule(plan, cumulativeSpend) else plan.discountRule
+        val eligible = itemTotal >= rule.minOrderValue
+        val discount = if (isMember) rule.discountFor(itemTotal) else Money.ZERO
+        val amountToUnlock = if (eligible) Money.ZERO else (rule.minOrderValue - itemTotal).coerceAtLeast(Money.ZERO)
         return MembershipEligibility(
             isMember = isMember,
             isEligible = isMember && eligible,
-            discountRupees = discount,
-            amountToUnlockRupees = amountToUnlock,
+            discount = discount,
+            amountToUnlock = amountToUnlock,
             appliedRule = if (isMember) rule else null
         )
     }
@@ -59,18 +60,18 @@ object MembershipCalculator {
      * a promise. The landing screen is responsible for labelling it as such;
      * this function only does the maths against a sample order value.
      */
-    fun exampleSavings(plan: MembershipPlan, exampleOrderRupees: Int): Int =
-        plan.discountRule.discountFor(exampleOrderRupees)
+    fun exampleSavings(plan: MembershipPlan, exampleOrder: Money): Money =
+        plan.discountRule.discountFor(exampleOrder)
 
     /** Progress toward the next unclaimed spend milestone, or null if all are unlocked. */
     fun nextSpendMilestone(
         plan: MembershipPlan,
-        cumulativeSpendRupees: Int
-    ): Pair<com.tazzzo.app.data.model.MembershipSpendMilestone, Int>? {
+        cumulativeSpend: Money
+    ): Pair<com.tazzzo.app.data.model.MembershipSpendMilestone, Money>? {
         val next = plan.spendMilestones
-            .filter { cumulativeSpendRupees < it.thresholdRupees }
-            .minByOrNull { it.thresholdRupees } ?: return null
-        return next to (next.thresholdRupees - cumulativeSpendRupees).coerceAtLeast(0)
+            .filter { cumulativeSpend < it.threshold }
+            .minByOrNull { it.threshold } ?: return null
+        return next to (next.threshold - cumulativeSpend).coerceAtLeast(Money.ZERO)
     }
 
     /** Progress toward the next order-count milestone whose reward has not yet been unlocked. */
@@ -99,16 +100,16 @@ object MembershipCalculator {
     fun applyEligibleOrder(
         plan: MembershipPlan,
         state: MembershipState,
-        itemTotalRupees: Int,
-        discountAppliedRupees: Int,
+        itemTotal: Money,
+        discountApplied: Money,
         unlockedAtLabel: String
     ): MembershipState {
-        val newSpend = state.cumulativeSpendRupees + itemTotalRupees
-        val newSavings = state.cumulativeSavingsRupees + discountAppliedRupees
+        val newSpend = state.cumulativeSpend + itemTotal
+        val newSavings = state.cumulativeSavings + discountApplied
         val newOrderCount = state.eligibleOrderCount + 1
 
         val newlyUnlockedSpend = plan.spendMilestones
-            .filter { it.thresholdRupees <= newSpend && it.id !in state.unlockedSpendMilestoneIds }
+            .filter { it.threshold <= newSpend && it.id !in state.unlockedSpendMilestoneIds }
             .map { it.id }
         val unlockedSpendIds = state.unlockedSpendMilestoneIds + newlyUnlockedSpend
 
@@ -125,8 +126,8 @@ object MembershipCalculator {
             }
 
         return state.copy(
-            cumulativeSpendRupees = newSpend,
-            cumulativeSavingsRupees = newSavings,
+            cumulativeSpend = newSpend,
+            cumulativeSavings = newSavings,
             eligibleOrderCount = newOrderCount,
             unlockedSpendMilestoneIds = unlockedSpendIds,
             rewards = state.rewards + newlyUnlockedRewards

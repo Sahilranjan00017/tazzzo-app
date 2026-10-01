@@ -156,8 +156,8 @@ fun AccountTabContent() {
                 icon = TazIcons.Coin,
                 title = MembershipConfig.plan.name,
                 subtitle = if (app.isClubMember)
-                    "₹${app.membership.cumulativeSavingsRupees} saved · ${app.membership.eligibleOrderCount} eligible orders"
-                else "₹${MembershipConfig.plan.priceRupees} · ${MembershipConfig.plan.discountRule.percent}% off eligible orders",
+                    "${app.membership.cumulativeSavings} saved · ${app.membership.eligibleOrderCount} eligible orders"
+                else "${MembershipConfig.plan.price} · ${MembershipConfig.plan.discountRule.percent}% off eligible orders",
                 titleChip = if (app.isClubMember) "Active" else null,
                 titleChipTone = ChipTone.Success,
                 onClick = { app.navigate(Screen.Club) }

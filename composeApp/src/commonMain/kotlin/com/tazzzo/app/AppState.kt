@@ -301,7 +301,12 @@ class TazzzoAppState(
         if (recentSearches.isEmpty() && searches.isNotEmpty()) {
             recentSearches.addAll(searches)
         }
+        // A pre-paise cart (rupees, mock product ids) is dropped, never reinterpreted — tell the customer once.
+        val obsoleteCart = st.discardObsoleteCart()
         val saved = st.loadCart()
+        if (obsoleteCart && saved.isEmpty() && cartEntries.isEmpty()) {
+            restoreNotice = "Your saved basket was from an earlier version of the app and couldn't be restored."
+        }
         if (saved.isNotEmpty() && cartEntries.isEmpty()) {
             val products = saved.map { it.id }.distinct().associateWith {
                 com.tazzzo.app.data.repository.ServiceLocator.catalog.getProduct(it)
@@ -382,10 +387,10 @@ class TazzzoAppState(
     /** Club eligibility for the CURRENT cart. One source, used by cart, checkout and CTAs. */
     fun clubEligibility(lines: List<CartLine> = cartLines()) =
         com.tazzzo.app.config.MembershipCalculator.evaluate(
-            itemTotalRupees = lines.sumOf { it.lineTotal },
+            itemTotal = lines.sumOfMoney { it.lineTotal },
             isMember = isClubMember,
             plan = com.tazzzo.app.config.MembershipConfig.plan,
-            cumulativeSpendRupees = membership.cumulativeSpendRupees
+            cumulativeSpend = membership.cumulativeSpend
         )
 
     /**
@@ -403,12 +408,12 @@ class TazzzoAppState(
         com.tazzzo.app.config.BillCalculator.bill(
             lines = lines,
             isClubMember = isClubMember,
-            clubCumulativeSpendRupees = membership.cumulativeSpendRupees,
+            clubCumulativeSpend = membership.cumulativeSpend,
             couponCode = couponCode,
             slot = checkout?.slot,
             // Zero until a session exists, so the cart's bill and the checkout
             // bill agree until the customer actually chooses a tip.
-            tipRupees = checkout?.tipRupees ?: 0
+            tip = checkout?.tip ?: Money.ZERO
         )
 
     fun clearCart() { cartEntries.clear(); store?.clearCart() }
@@ -416,7 +421,7 @@ class TazzzoAppState(
     private fun persistCart() {
         store?.saveCart(cartEntries.values.map {
             com.tazzzo.app.data.local.PersistentStore.SavedCartLine(
-                it.product.id, it.quantity, it.product.price
+                it.product.id, it.quantity, it.product.price.paise
             )
         })
     }

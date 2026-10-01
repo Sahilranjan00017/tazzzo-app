@@ -1,5 +1,6 @@
 package com.tazzzo.app.config
 
+import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.model.Promotion
 import com.tazzzo.app.data.model.PromotionAudience
 import com.tazzzo.app.data.model.PromotionScope
@@ -44,7 +45,7 @@ object PromotionConfig {
             type = PromotionType.FLAT_OFF,
             scope = PromotionScope.PRODUCT,
             scopeIds = listOf("p8"),
-            flatRupees = 5,
+            flat = Money.ofRupees(5),
             stackable = true,
             priority = 1
         ),
@@ -58,8 +59,8 @@ object PromotionConfig {
             scope = PromotionScope.CATEGORY,
             scopeIds = listOf("dairy"),
             percent = 10,
-            minOrderRupees = 150,
-            maxDiscountRupees = 40,
+            minOrder = Money.ofRupees(150),
+            maxDiscount = Money.ofRupees(40),
             stackable = false,
             priority = 10
         ),
@@ -71,8 +72,8 @@ object PromotionConfig {
             description = "₹50 off orders of ₹400 or more.",
             type = PromotionType.FLAT_OFF,
             scope = PromotionScope.CART,
-            flatRupees = 50,
-            minOrderRupees = 400,
+            flat = Money.ofRupees(50),
+            minOrder = Money.ofRupees(400),
             couponCode = "TAZZZO50",
             stackable = false,
             priority = 20,

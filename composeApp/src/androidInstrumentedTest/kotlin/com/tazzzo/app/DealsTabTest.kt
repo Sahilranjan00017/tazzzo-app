@@ -99,10 +99,10 @@ class DealsTabTest {
         val everyone = PromotionConfig.active.filter { it.audience != PromotionAudience.MEMBERS_ONLY }
         assert(everyone.isNotEmpty()) { "fixture must contain at least one open offer" }
         assert(present(hasText("Offers you can use"))) { "offers section missing" }
-        everyone.firstOrNull { it.minOrderRupees > 0 }?.let { gated ->
+        everyone.firstOrNull { it.minOrder.isPositive }?.let { gated ->
             rule.onNodeWithTag("dealsGrid").performScrollToNode(hasText(gated.title))
             rule.waitForIdle()
-            assert(present(hasText("On orders above ₹${gated.minOrderRupees}", substring = true))) {
+            assert(present(hasText("On orders above ${gated.minOrder}", substring = true))) {
                 "the minimum spend on '${gated.title}' must be stated up front, not at the till"
             }
         }
@@ -121,7 +121,7 @@ class DealsTabTest {
         assert(top.mrp > top.price) { "the deals list must only contain genuine discounts" }
         rule.onNodeWithTag("dealsGrid").performScrollToNode(hasText(top.name))
         rule.waitForIdle()
-        assert(present(hasText("₹${top.mrp - top.price} OFF"))) {
+        assert(present(hasText("${top.mrp - top.price} OFF"))) {
             "the deepest saving (${top.name}) must lead and state its rupees off"
         }
         snapshot("n2_01_deals_tab")

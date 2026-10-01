@@ -1,5 +1,7 @@
 package com.tazzzo.app.order
 
+import com.tazzzo.app.data.model.Money
+
 import com.tazzzo.app.CheckoutSession
 import com.tazzzo.app.Screen
 import com.tazzzo.app.TazzzoAppState
@@ -94,8 +96,8 @@ object OrderPlacement {
                         memberships = memberships,
                         orderId = result.order.id,
                         coinsEarned = orderBill.coinsEarned,
-                        itemTotalRupees = orderBill.itemTotal,
-                        clubDiscountRupees = orderBill.clubDiscount
+                        itemTotal = orderBill.itemTotal,
+                        clubDiscount = orderBill.clubDiscount
                     )
                 }
                 // Idempotent on repeat: showing the same order again is safe.
@@ -136,8 +138,8 @@ object OrderPlacement {
         memberships: MembershipRepository,
         orderId: String,
         coinsEarned: Int,
-        itemTotalRupees: Int,
-        clubDiscountRupees: Int
+        itemTotal: Money,
+        clubDiscount: Money
     ) {
         coins.credit(coinsEarned, "Order $orderId cashback")
         app.user = app.user.copy(coinBalance = app.user.coinBalance + coinsEarned)
@@ -148,11 +150,11 @@ object OrderPlacement {
         // guarded twice: once by !replayed here, once by the order ledger
         // there. Progress that can be double-counted is progress a customer
         // will eventually notice is wrong.
-        if (clubDiscountRupees > 0) {
+        if (clubDiscount.isPositive) {
             memberships.recordEligibleOrder(
                 orderId = orderId,
-                itemTotalRupees = itemTotalRupees,
-                discountAppliedRupees = clubDiscountRupees,
+                itemTotal = itemTotal,
+                discountApplied = clubDiscount,
                 placedAtLabel = "Today"
             )
             app.membership = memberships.getState()

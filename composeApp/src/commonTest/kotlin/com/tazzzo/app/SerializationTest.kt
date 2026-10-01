@@ -48,7 +48,7 @@ class SerializationTest {
         emoji: String = "🥛"
     ) = Product(
         id = "p8", name = "Toned Milk Pouch", brand = "Amul", emoji = emoji,
-        unit = "500 ml", price = 29, mrp = 30, categoryId = "dairy",
+        unit = "500 ml", price = r(29), mrp = r(30), categoryId = "dairy",
         subcategoryId = "milk", rating = 4.7, ratingCount = 8804,
         tags = listOf("Bestseller"), highlights = listOf("Chilled"),
         availability = availability, maxOrderQuantity = 10,
@@ -91,7 +91,7 @@ class SerializationTest {
     }
 
     @Test fun bill_cart_and_order_round_trip() {
-        val bill = BillSummary(58, 60, 0, 4, 1, 62)
+        val bill = BillSummary(r(58), r(60), r(0), r(4), 1, r(62))
         assertEquals(bill, roundTrip(bill))
         val line = CartLine(product(), 2)
         assertEquals(line, roundTrip(line))
@@ -105,7 +105,7 @@ class SerializationTest {
     @Test fun order_without_payment_round_trips() {
         // payment is nullable so historical orders stay valid.
         val order = Order(
-            "TZ-0", emptyList(), BillSummary(0, 0, 0, 0, 0, 0),
+            "TZ-0", emptyList(), BillSummary(r(0), r(0), r(0), r(0), 0, r(0)),
             OrderStatus.DELIVERED, "Yesterday", "HSR", payment = null
         )
         assertEquals(order, roundTrip(order))
@@ -119,7 +119,7 @@ class SerializationTest {
         val m = PaymentMethod(PaymentMethodKind.UPI, "UPI", enabled = false, note = "Coming soon")
         assertEquals(m, roundTrip(m))
         val r = OrderRequest(
-            "chk-123456789012", listOf(CartLine(product(), 1)), BillSummary(29, 30, 0, 4, 0, 33),
+            "chk-123456789012", listOf(CartLine(product(), 1)), BillSummary(r(29), r(30), r(0), r(4), 0, r(33)),
             "a1", "Home — 22, 14th Main", "s1", PaymentMethodKind.COD
         )
         assertEquals(r, roundTrip(r))
@@ -130,7 +130,7 @@ class SerializationTest {
             listOf(
                 CartIssue.OutOfStock("p23", "Rohu Fish"),
                 CartIssue.QuantityReduced("p2", "Fresh Tomato", requested = 5, available = 3),
-                CartIssue.PriceChanged("p8", "Toned Milk", oldPrice = 29, newPrice = 32)
+                CartIssue.PriceChanged("p8", "Toned Milk", oldPrice = r(29), newPrice = r(32))
             )
         )
         assertEquals(v, roundTrip(v))
@@ -188,9 +188,9 @@ class SerializationTest {
             )
         )
         assertEquals(
-            """{"type":"PRICE_CHANGED","productId":"p8","productName":"Milk","oldPrice":29,"newPrice":32}""",
+            """{"type":"PRICE_CHANGED","productId":"p8","productName":"Milk","oldPricePaise":2900,"newPricePaise":3200}""",
             strict.encodeToString<CartIssue>(
-                CartIssue.PriceChanged("p8", "Milk", oldPrice = 29, newPrice = 32)
+                CartIssue.PriceChanged("p8", "Milk", oldPrice = r(29), newPrice = r(32))
             )
         )
     }
@@ -232,8 +232,8 @@ class SerializationTest {
         // emoji is a temporary placeholder; a payload that omits it must not
         // take the whole catalogue down.
         val body = """
-            {"id":"p1","name":"Atta","brand":"Shudh","unit":"5 kg","price":249,
-             "mrp":299,"categoryId":"atta","subcategoryId":"atta-s",
+            {"id":"p1","name":"Atta","brand":"Shudh","unit":"5 kg","pricePaise":24900,
+             "mrpPaise":29900,"categoryId":"atta","subcategoryId":"atta-s",
              "rating":4.5,"ratingCount":100}
         """.trimIndent()
         val p = json.decodeFromString<Product>(body)
@@ -242,11 +242,11 @@ class SerializationTest {
         assertEquals(null, p.imageUrl)
     }
 
-    @Test fun money_is_encoded_as_integer_rupees() {
-        val obj = strict.encodeToString(BillSummary(58, 60, 0, 4, 1, 62)).let {
+    @Test fun money_is_encoded_as_integer_paise() {
+        val obj = strict.encodeToString(BillSummary(r(58), r(60), r(0), r(4), 1, r(62))).let {
             strict.parseToJsonElement(it).jsonObject
         }
-        listOf("itemTotal", "itemMrpTotal", "deliveryFee", "handlingCharge", "grandTotal")
+        listOf("itemTotalPaise", "itemMrpTotalPaise", "deliveryFeePaise", "handlingChargePaise", "grandTotalPaise")
             .forEach { key ->
                 val raw = obj.getValue(key).jsonPrimitive.content
                 assertTrue(raw.toIntOrNull() != null, "$key must be an integer, was '$raw'")
@@ -261,7 +261,7 @@ class SerializationTest {
         listOf("discountPercent", "purchasableLimit", "isPurchasable").forEach {
             assertTrue(!encoded.contains(it), "$it leaked into the Product payload")
         }
-        assertTrue(!strict.encodeToString(BillSummary(1, 2, 0, 0, 0, 1)).contains("saved"))
+        assertTrue(!strict.encodeToString(BillSummary(r(1), r(2), r(0), r(0), 0, r(1))).contains("saved"))
         assertTrue(!strict.encodeToString(CartLine(product(), 1)).contains("lineTotal"))
         assertTrue(!strict.encodeToString(CartValidation(emptyList())).contains("\"ok\""))
     }

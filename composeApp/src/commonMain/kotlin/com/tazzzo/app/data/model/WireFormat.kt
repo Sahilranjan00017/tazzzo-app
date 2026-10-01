@@ -81,7 +81,7 @@ object AvailabilitySerializer : KSerializer<Availability> {
 //   {"type":"OUT_OF_STOCK|QUANTITY_REDUCED|PRICE_CHANGED",
 //    "productId":"p8","productName":"Toned Milk Pouch",
 //    "requested":3,"available":1,          // QUANTITY_REDUCED
-//    "oldPrice":29,"newPrice":32}          // PRICE_CHANGED
+//    "oldPricePaise":2900,"newPricePaise":3200}  // PRICE_CHANGED (integer paise)
 //
 // The three type codes are the ones in the readiness report §5. The envelope
 // key ("type") and the per-issue field names are specified HERE because the
@@ -95,8 +95,8 @@ private data class CartIssueSurrogate(
     val productName: String,
     val requested: Int? = null,
     val available: Int? = null,
-    val oldPrice: Int? = null,
-    val newPrice: Int? = null
+    val oldPricePaise: Long? = null,
+    val newPricePaise: Long? = null
 )
 
 object CartIssueSerializer : KSerializer<CartIssue> {
@@ -118,7 +118,7 @@ object CartIssueSerializer : KSerializer<CartIssue> {
             )
             is CartIssue.PriceChanged -> CartIssueSurrogate(
                 PRICE_CHANGED, value.productId, value.productName,
-                oldPrice = value.oldPrice, newPrice = value.newPrice
+                oldPricePaise = value.oldPrice.paise, newPricePaise = value.newPrice.paise
             )
         }
         encoder.encodeSerializableValue(delegate, surrogate)
@@ -141,10 +141,12 @@ object CartIssueSerializer : KSerializer<CartIssue> {
             )
             PRICE_CHANGED -> CartIssue.PriceChanged(
                 s.productId, s.productName,
-                oldPrice = s.oldPrice
-                    ?: throw SerializationException("PRICE_CHANGED requires 'oldPrice'"),
-                newPrice = s.newPrice
-                    ?: throw SerializationException("PRICE_CHANGED requires 'newPrice'")
+                oldPrice = Money.ofPaise(
+                    s.oldPricePaise ?: throw SerializationException("PRICE_CHANGED requires 'oldPricePaise'")
+                ),
+                newPrice = Money.ofPaise(
+                    s.newPricePaise ?: throw SerializationException("PRICE_CHANGED requires 'newPricePaise'")
+                )
             )
             else -> throw SerializationException("Unknown cart issue type '${s.type}'")
         }

@@ -1,5 +1,7 @@
 package com.tazzzo.app.ui.club
 
+import com.tazzzo.app.data.model.Money
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -43,7 +45,7 @@ import com.tazzzo.app.theme.TazType
 @Composable
 fun ClubProgressCard(state: MembershipState, modifier: Modifier = Modifier) {
     val plan = MembershipConfig.plan
-    val nextSpend = MembershipCalculator.nextSpendMilestone(plan, state.cumulativeSpendRupees)
+    val nextSpend = MembershipCalculator.nextSpendMilestone(plan, state.cumulativeSpend)
     val nextOrder = MembershipCalculator.nextOrderMilestone(plan, state)
 
     Column(
@@ -57,23 +59,23 @@ fun ClubProgressCard(state: MembershipState, modifier: Modifier = Modifier) {
                 color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
             )
             Text(
-                "₹${state.cumulativeSavingsRupees} saved", fontSize = TazType.captionSize,
+                "${state.cumulativeSavings} saved", fontSize = TazType.captionSize,
                 fontWeight = FontWeight.SemiBold, color = TazColors.Green
             )
         }
 
         if (nextSpend != null) {
             val (milestone, remaining) = nextSpend
-            val fraction = (state.cumulativeSpendRupees.toFloat() / milestone.thresholdRupees).coerceIn(0f, 1f)
+            val fraction = (state.cumulativeSpend.paise.toFloat() / milestone.threshold.paise.toFloat()).coerceIn(0f, 1f)
             val animated by animateFloatAsState(fraction, tween(TazMotion.normal), label = "clubProgress")
             Spacer(Modifier.height(TazSpace.md))
             Row(Modifier.fillMaxWidth()) {
                 Text(
-                    "₹${state.cumulativeSpendRupees} / ₹${milestone.thresholdRupees}",
+                    "${state.cumulativeSpend} / ${milestone.threshold}",
                     fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
                     color = TazColors.TextPrimary, modifier = Modifier.weight(1f)
                 )
-                Text("₹$remaining to go", fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+                Text("$remaining to go", fontSize = TazType.captionSize, color = TazColors.TextSecondary)
             }
             Spacer(Modifier.height(TazSpace.xs))
             Box(Modifier.fillMaxWidth().height(8.dp).clip(TazRadius.pill).background(TazColors.SurfaceSunken)) {

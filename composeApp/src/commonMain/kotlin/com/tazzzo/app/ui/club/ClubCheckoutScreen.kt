@@ -1,5 +1,7 @@
 package com.tazzzo.app.ui.club
 
+import com.tazzzo.app.data.model.Money
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -115,7 +117,7 @@ fun ClubCheckoutScreen() {
                 when (val p = phase) {
                     is MembershipPurchaseSession.Phase.Success -> WelcomeToClub(p)
                     else -> {
-                        OrderSummaryCard(plan.name, plan.priceRupees, ServiceLocator.payments.isTestMode)
+                        OrderSummaryCard(plan.name, plan.price, ServiceLocator.payments.isTestMode)
                         Spacer(Modifier.height(TazSpace.lg))
                         PhaseMessage(p)
                     }
@@ -124,7 +126,7 @@ fun ClubCheckoutScreen() {
 
             PaymentFooter(
                 phase = phase,
-                priceRupees = plan.priceRupees,
+                price = plan.price,
                 onPay = ::pay,
                 onDone = {
                     app.goHome()
@@ -136,7 +138,7 @@ fun ClubCheckoutScreen() {
 }
 
 @Composable
-private fun OrderSummaryCard(planName: String, priceRupees: Int, isTestMode: Boolean) {
+private fun OrderSummaryCard(planName: String, price: Money, isTestMode: Boolean) {
     Column(
         Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface)
             .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
@@ -154,7 +156,7 @@ private fun OrderSummaryCard(planName: String, priceRupees: Int, isTestMode: Boo
                 )
             }
             Text(
-                "₹$priceRupees", fontSize = TazType.priceHeroSize,
+                "$price", fontSize = TazType.priceHeroSize,
                 fontWeight = TazType.priceWeight, color = TazColors.TextPrimary
             )
         }
@@ -287,7 +289,7 @@ private fun WelcomeToClub(success: MembershipPurchaseSession.Phase.Success) {
                 .border(BorderStroke(1.dp, TazColors.CardBorder), TazRadius.card)
                 .padding(TazSpace.lg)
         ) {
-            ReceiptRow("Membership fee", "₹${success.transaction.amountRupees}")
+            ReceiptRow("Membership fee", "${success.transaction.amount}")
             ReceiptRow("Payment status", "✓ Paid")
             ReceiptRow("Reference", success.transaction.paymentReference ?: "—")
             if (success.transaction.isTestPayment) {
@@ -319,7 +321,7 @@ private fun ReceiptRow(label: String, value: String) {
 @Composable
 private fun PaymentFooter(
     phase: MembershipPurchaseSession.Phase,
-    priceRupees: Int,
+    price: Money,
     onPay: () -> Unit,
     onDone: () -> Unit,
     onBackToClub: () -> Unit
@@ -350,7 +352,7 @@ private fun PaymentFooter(
             else -> {
                 val busy = phase !is MembershipPurchaseSession.Phase.Idle
                 PillButton(
-                    text = "Pay ₹$priceRupees",
+                    text = "Pay $price",
                     onClick = onPay,
                     modifier = Modifier.fillMaxWidth(),
                     loading = busy,

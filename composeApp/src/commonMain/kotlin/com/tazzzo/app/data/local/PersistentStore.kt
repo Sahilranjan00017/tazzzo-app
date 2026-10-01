@@ -2,9 +2,15 @@ package com.tazzzo.app.data.local
 
 import com.russhwolf.settings.Settings
 import com.tazzzo.app.data.model.MembershipState
+import com.tazzzo.app.data.model.Money
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 
 /**
  * Local persistence — NSUserDefaults on iOS, SharedPreferences on Android,
@@ -36,7 +42,7 @@ class PersistentStore(provided: Settings? = null) {
     // ---- cart --------------------------------------------------------------
 
     @Serializable
-    data class SavedCartLine(val id: String, val qty: Int, val priceAtSave: Int)
+    data class SavedCartLine(val id: String, val qty: Int, val priceAtSavePaise: Long)
 
     fun saveCart(lines: List<SavedCartLine>) {
         settings.putString(KEY_CART, json.encodeToString(lines))
@@ -45,6 +51,19 @@ class PersistentStore(provided: Settings? = null) {
     fun loadCart(): List<SavedCartLine> = decodeList(KEY_CART)
 
     fun clearCart() = settings.remove(KEY_CART)
+
+    /**
+     * The v1 cart stored `priceAtSave` as whole RUPEES against MOCK product ids. It is neither
+     * reinterpreted as paise nor converted: it is dropped, once, and the caller tells the
+     * customer. The v2 key (integer paise) is the only cart representation read from here on.
+     *
+     * @return true if an obsolete v1 cart was found and discarded.
+     */
+    fun discardObsoleteCart(): Boolean {
+        if (settings.getStringOrNull(KEY_CART_V1) == null) return false
+        settings.remove(KEY_CART_V1)
+        return true
+    }
 
     // ---- session -----------------------------------------------------------
 
@@ -98,12 +117,35 @@ class PersistentStore(provided: Settings? = null) {
     fun saveMembership(state: MembershipState) =
         settings.putString(KEY_MEMBERSHIP, json.encodeToString(state))
 
-    fun loadMembership(): MembershipState? =
+    fun loadMembership(): MembershipState? {
         settings.getStringOrNull(KEY_MEMBERSHIP)?.let {
-            runCatching { json.decodeFromString<MembershipState>(it) }.getOrNull()
+            return runCatching { json.decodeFromString<MembershipState>(it) }.getOrNull()
         }
+        return migrateMembershipV1()
+    }
 
-    fun clearMembership() = settings.remove(KEY_MEMBERSHIP)
+    /**
+     * v1 stored `cumulativeSpendRupees` / `cumulativeSavingsRupees` as whole rupees. Whole rupees
+     * convert to paise exactly (x 100), so unlike the cart this IS migrated losslessly, once, then
+     * the v1 entry is removed. Anything unreadable is dropped rather than guessed at.
+     */
+    private fun migrateMembershipV1(): MembershipState? {
+        val raw = settings.getStringOrNull(KEY_MEMBERSHIP_V1) ?: return null
+        settings.remove(KEY_MEMBERSHIP_V1)
+        val state = runCatching {
+            val obj = json.parseToJsonElement(raw).jsonObject
+            fun paise(key: String) = JsonPrimitive(Money.ofRupees(obj[key]?.jsonPrimitive?.long ?: 0L).paise)
+            val migrated = JsonObject(
+                obj.filterKeys { it != "cumulativeSpendRupees" && it != "cumulativeSavingsRupees" } +
+                    mapOf("cumulativeSpendPaise" to paise("cumulativeSpendRupees"), "cumulativeSavingsPaise" to paise("cumulativeSavingsRupees"))
+            )
+            json.decodeFromJsonElement(MembershipState.serializer(), migrated)
+        }.getOrNull() ?: return null
+        saveMembership(state)
+        return state
+    }
+
+    fun clearMembership() { settings.remove(KEY_MEMBERSHIP); settings.remove(KEY_MEMBERSHIP_V1) }
 
     // ---- one-time flags ----------------------------------------------------
 
@@ -162,14 +204,16 @@ class PersistentStore(provided: Settings? = null) {
             ?: emptyList()
 
     private companion object {
-        const val KEY_CART = "tazzzo.cart.v1"
+        const val KEY_CART = "tazzzo.cart.v2"           // integer paise (PR-04B)
+        const val KEY_CART_V1 = "tazzzo.cart.v1"        // whole rupees, mock ids: discarded, never read
         const val KEY_NOTIFICATIONS = "tazzzo.prefs.notifications.v1"
         const val KEY_SESSION = "tazzzo.session.v1"
         const val KEY_ADDRESSES = "tazzzo.addresses.v1"
         const val KEY_SEARCHES = "tazzzo.searches.v1"
         const val KEY_TOUR_SEEN = "tazzzo.tourSeen.v1"
         const val KEY_ONBOARDED = "tazzzo.onboarded.v1"
-        const val KEY_MEMBERSHIP = "tazzzo.membership.v1"
+        const val KEY_MEMBERSHIP = "tazzzo.membership.v2" // Money as integer paise (PR-04B)
+        const val KEY_MEMBERSHIP_V1 = "tazzzo.membership.v1"
         const val KEY_AUTH_INSTALL = "tazzzo.authInstall.v1"
         const val KEY_INSTALLATION_ID = "tazzzo.installationId.v1"
         const val KEY_LAUNCH_PIN = "tazzzo.launchPin.v1"

@@ -47,7 +47,7 @@ class OrderPlacementTest {
     /** p8 exactly as the catalogue holds it, so validateCart passes. */
     private fun milk() = Product(
         id = "p8", name = "Toned Milk Pouch", brand = "Amul", emoji = "🥛", unit = "500 ml",
-        price = 29, mrp = 30, categoryId = "dairy", subcategoryId = "milk",
+        price = r(29), mrp = r(30), categoryId = "dairy", subcategoryId = "milk",
         rating = 4.7, ratingCount = 8804
     )
 

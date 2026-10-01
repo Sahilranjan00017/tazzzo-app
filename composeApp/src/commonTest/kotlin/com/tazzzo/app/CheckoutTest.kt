@@ -75,7 +75,7 @@ class CheckoutRepositoryTest {
 
     private fun inStock() = Product(
         id = "p8", name = "Toned Milk Pouch", brand = "Amul", emoji = "🥛", unit = "500 ml",
-        price = 29, mrp = 30, categoryId = "dairy", subcategoryId = "milk",
+        price = r(29), mrp = r(30), categoryId = "dairy", subcategoryId = "milk",
         rating = 4.7, ratingCount = 8804
     )
 
@@ -105,7 +105,7 @@ class CheckoutRepositoryTest {
     }
 
     @Test fun price_drift_is_reported() = runTest {
-        val stale = inStock().copy(price = 25)   // catalogue says 29
+        val stale = inStock().copy(price = r(25))   // catalogue says 29
         val validation = repo().validateCart(listOf(line(stale, 1)))
         assertIs<CartIssue.PriceChanged>(validation.issues.first())
     }
@@ -119,7 +119,7 @@ class CheckoutRepositoryTest {
         val result = repo().placeOrder(request(listOf(line(inStock(), 2)), "key-1"))
         assertIs<PlaceOrderResult.Placed>(result)
         assertEquals(false, result.replayed)
-        assertEquals(58, result.order.bill.itemTotal)
+        assertEquals(r(58), result.order.bill.itemTotal)
     }
 
     @Test fun duplicate_key_replays_same_order_not_a_new_one() = runTest {

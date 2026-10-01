@@ -243,7 +243,7 @@ fun CheckoutScreen() {
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "₹${bill.grandTotal}",
+                        "${bill.grandTotal}",
                         fontSize = TazType.titleSize, fontWeight = FontWeight.Bold,
                         color = TazColors.TextPrimary
                     )
@@ -312,7 +312,7 @@ fun CheckoutScreen() {
                                 session.payment != null
                             PillButton(
                                 text = if (placement is CheckoutSession.Placement.Failed) "Try again"
-                                else "Place order  ·  ₹${bill.grandTotal}",
+                                else "Place order  ·  ${bill.grandTotal}",
                                 enabled = enabled,
                                 // The single most consequential button in the
                                 // app. While a placement is in flight it must
@@ -478,7 +478,7 @@ private fun IssuesCard(issues: List<CartIssue>, onFix: (CartIssue) -> Unit) {
                         is CartIssue.QuantityReduced ->
                             "Only ${issue.available} of ${issue.productName} available"
                         is CartIssue.PriceChanged ->
-                            "${issue.productName} is now ₹${issue.newPrice} (was ₹${issue.oldPrice}) — " +
+                            "${issue.productName} is now ${issue.newPrice} (was ${issue.oldPrice}) — " +
                                 "remove it and add it again at the new price"
                     },
                     fontSize = TazType.bodySize, color = TazColors.TextPrimary,
@@ -838,9 +838,9 @@ private fun SlotStep(session: CheckoutSession) {
                         trailing = {
                             if (!slot.available) StatusChip("Full", warning = true)
                             else Text(
-                                if (slot.feeRupees == 0) "Free" else "₹${slot.feeRupees}",
+                                if (slot.fee.isZero) "Free" else "${slot.fee}",
                                 fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
-                                color = if (slot.feeRupees == 0) TazColors.Success else TazColors.TextPrimary
+                                color = if (slot.fee.isZero) TazColors.Success else TazColors.TextPrimary
                             )
                         }
                     ) {
@@ -856,7 +856,7 @@ private fun SlotStep(session: CheckoutSession) {
                                 StatusChip("Recommended", warning = false)
                             }
                         }
-                        slot.feeReason?.takeIf { slot.available && slot.feeRupees > 0 }?.let {
+                        slot.feeReason?.takeIf { slot.available && slot.fee.isPositive }?.let {
                             Text(it, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
                         }
                     }
@@ -959,7 +959,7 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                     )
                     Spacer(Modifier.width(TazSpace.md))
                     Text(
-                        "₹${line.lineTotal}",
+                        "${line.lineTotal}",
                         fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold,
                         color = TazColors.TextPrimary
                     )
@@ -979,7 +979,7 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
             Spacer(Modifier.height(TazSpace.xxs))
             Text(
                 session.slot?.let { s ->
-                    s.label + (if (s.feeRupees == 0) " · Free" else " · ₹${s.feeRupees}")
+                    s.label + (if (s.fee.isZero) " · Free" else " · ${s.fee}")
                 } ?: "—",
                 fontSize = TazType.captionSize, color = TazColors.TextSecondary
             )
@@ -1039,14 +1039,14 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                 )
                 if (bill.itemMrpTotal > bill.itemTotal) {
                     Text(
-                        "₹${bill.itemMrpTotal}",
+                        "${bill.itemMrpTotal}",
                         fontSize = TazType.mrpSize, color = TazColors.TextTertiary,
                         textDecoration = TextDecoration.LineThrough
                     )
                     Spacer(Modifier.width(TazSpace.sm))
                 }
                 Text(
-                    "₹${bill.itemTotal}", fontSize = TazType.bodySize,
+                    "${bill.itemTotal}", fontSize = TazType.bodySize,
                     fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary
                 )
             }
@@ -1054,7 +1054,7 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
             // The review is the last place a total can surprise someone. Every
             // rupee taken off is itemised here exactly as on the cart; nothing
             // is folded into "item total".
-            bill.appliedPromotions.filter { it.discountRupees > 0 }.forEach { promo ->
+            bill.appliedPromotions.filter { it.discount.isPositive }.forEach { promo ->
                 Spacer(Modifier.height(TazSpace.md))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -1065,12 +1065,12 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                         )
                     }
                     Text(
-                        "−₹${promo.discountRupees}", fontSize = TazType.bodySize,
+                        "−${promo.discount}", fontSize = TazType.bodySize,
                         fontWeight = FontWeight.SemiBold, color = TazColors.Green
                     )
                 }
             }
-            if (bill.clubDiscount > 0) {
+            if (bill.clubDiscount.isPositive) {
                 Spacer(Modifier.height(TazSpace.md))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -1078,7 +1078,7 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                         color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
                     )
                     Text(
-                        "−₹${bill.clubDiscount}", fontSize = TazType.bodySize,
+                        "−${bill.clubDiscount}", fontSize = TazType.bodySize,
                         fontWeight = FontWeight.SemiBold, color = TazColors.Green
                     )
                 }
@@ -1096,14 +1096,14 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                     "Delivery fee", fontSize = TazType.bodySize,
                     color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
                 )
-                if (bill.deliveryFee == 0) {
+                if (bill.deliveryFee.isZero) {
                     Text(
                         "FREE", fontSize = TazType.bodySize,
                         fontWeight = FontWeight.Bold, color = TazColors.Success
                     )
                 } else {
                     Text(
-                        "₹${bill.deliveryFee}", fontSize = TazType.bodySize,
+                        "${bill.deliveryFee}", fontSize = TazType.bodySize,
                         fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary
                     )
                 }
@@ -1115,7 +1115,7 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                     color = TazColors.TextSecondary, modifier = Modifier.weight(1f)
                 )
                 Text(
-                    "₹${bill.handlingCharge}", fontSize = TazType.bodySize,
+                    "${bill.handlingCharge}", fontSize = TazType.bodySize,
                     fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary
                 )
             }
@@ -1142,7 +1142,7 @@ private fun ReviewStep(session: CheckoutSession, app: TazzzoAppState) {
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    "₹${bill.grandTotal}", fontSize = TazType.titleSize,
+                    "${bill.grandTotal}", fontSize = TazType.titleSize,
                     fontWeight = FontWeight.Bold, color = TazColors.TextPrimary
                 )
             }

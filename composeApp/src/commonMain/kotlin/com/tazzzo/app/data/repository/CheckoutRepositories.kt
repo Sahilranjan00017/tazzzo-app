@@ -1,5 +1,7 @@
 package com.tazzzo.app.data.repository
 
+import com.tazzzo.app.data.model.Money
+
 import com.tazzzo.app.data.model.Address
 import com.tazzzo.app.data.model.CartIssue
 import com.tazzzo.app.data.model.CartLine
@@ -114,11 +116,11 @@ class MockCheckoutRepository(
         // The serving store does, when real slots are [BACKEND REQUIRED].
         return listOf(
             DeliverySlot("slot-morning", "6 – 9 AM", available = true, group = "Delivery window",
-                recommended = true, feeRupees = 0),
+                recommended = true, fee = Money.ZERO),
             DeliverySlot("slot-midday", "12 – 3 PM", available = true, group = "Delivery window",
-                feeRupees = 0),
+                fee = Money.ZERO),
             DeliverySlot("slot-evening", "6 – 9 PM", available = true, group = "Delivery window",
-                feeRupees = 0)
+                fee = Money.ZERO)
         )
     }
 
