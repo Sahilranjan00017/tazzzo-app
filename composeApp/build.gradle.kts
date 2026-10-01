@@ -41,12 +41,20 @@ kotlin {
             implementation(compose.components.uiToolingPreview)
             implementation(libs.multiplatform.settings)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.ktor.client.okhttp)
+        }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.ktor.client.mock)
             implementation("com.russhwolf:multiplatform-settings-test:1.3.0")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
         }
