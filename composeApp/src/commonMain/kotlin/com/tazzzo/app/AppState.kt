@@ -231,7 +231,8 @@ class TazzzoAppState(
     /** Guided tour requested only on the first ever skip/login. Also marks
      *  the user as onboarded so later launches route straight to Home. */
     fun requestGuidedTourIfFirstTime() {
-        guidedJourneyPending = store?.tourSeen != true
+        // The tour spotlights widgets of the (mock) Home feed; the REMOTE Home does not have them.
+        guidedJourneyPending = store?.tourSeen != true && ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK
         store?.onboarded = true
     }
 
@@ -307,7 +308,10 @@ class TazzzoAppState(
         if (obsoleteCart && saved.isEmpty() && cartEntries.isEmpty()) {
             restoreNotice = "Your saved basket was from an earlier version of the app and couldn't be restored."
         }
-        if (saved.isNotEmpty() && cartEntries.isEmpty()) {
+        // REMOTE mode has no cart yet (cartIntegration = false), and restoring would look every saved
+        // line up in the MOCK catalogue — exactly the real/mock mixture this mode forbids.
+        val cartRestorable = ServiceLocator.catalogCapabilities.cartIntegration
+        if (cartRestorable && saved.isNotEmpty() && cartEntries.isEmpty()) {
             val products = saved.map { it.id }.distinct().associateWith {
                 com.tazzzo.app.data.repository.ServiceLocator.catalog.getProduct(it)
             }

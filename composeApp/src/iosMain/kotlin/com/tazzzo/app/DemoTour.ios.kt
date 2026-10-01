@@ -15,3 +15,5 @@ actual fun isDemoTourEnabled(): Boolean = demoFlag("TAZZZO_DEMO_TOUR")
 actual fun isDemoHomeEnabled(): Boolean = demoFlag("TAZZZO_DEMO_HOME")
 
 actual fun isDemoFailLoadEnabled(): Boolean = demoFlag("TAZZZO_DEMO_FAIL_LOAD")
+
+actual fun isMockCatalogRequested(): Boolean = demoFlag("TAZZZO_MOCK_CATALOG")

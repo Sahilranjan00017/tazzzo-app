@@ -23,6 +23,9 @@ expect fun isDemoHomeEnabled(): Boolean
  *  error/retry state on a real device. Dev tool; inert in production. */
 expect fun isDemoFailLoadEnabled(): Boolean
 
+/** Explicit developer/demo request for the MOCK catalogue (debug builds only; see CatalogSource). */
+expect fun isMockCatalogRequested(): Boolean
+
 @Composable
 fun DemoTourRunner() {
     val app = LocalAppState.current
