@@ -440,3 +440,34 @@ where the backend is absent, the app either uses a labelled mock or renders noth
   counts, offers or SLAs — if the server can't back it, the app doesn't say it.
 - UI is **frozen**. Integration must not require redesign; if it does, that is a
   contract problem to raise, not a screen to redraw.
+
+
+---
+
+## 6. Catalogue + serviceability: the RUNNING contract (PR-04A)
+
+The app-side data foundation is implemented in `data/catalog/` (not yet wired to
+any screen — PR-04C does that). It targets what the backend ACTUALLY sends on
+`origin/main`, which is thinner than its OpenAPI:
+
+| Call | Endpoint | Notes |
+|---|---|---|
+| categories | `GET /v1/categories` | 7 super categories `{id,name}`; ETag + 304; `max-age=300` |
+| children | `GET /v1/categories/{id}/children` | immediate children; empty categories hidden |
+| product list | `GET /v1/categories/{id}/products?page_size&cursor&pin` | opaque cursor bound to node, page size and **PIN**; `404` = nothing to list |
+| PDP | `GET /v1/products/{id}?pin` | flat card fields + `gallery[]` + `attributes[]` |
+| serviceability | `GET /v1/serviceability?pin=` | `serviceable` never null; ETA not populated |
+
+Rules the client follows: anonymous (no token), `X-Tazzzo-Installation-Id` on every
+call, never `lat`/`lng`/`release`, money is integer paise, `buyable` is the only
+purchase signal, `stockState` may be `UNKNOWN`. Never populated today (treat as
+absent): `brandName`, `packSize`, `unit`, `rating`, `ratingCount`, `badges`,
+`description`, `highlights`, `variants`, `legal`, ETA. There is no search, banners,
+bestsellers, deals, counts, or category imagery/ordering endpoint.
+
+**BACKEND CONTRACT / ENVIRONMENT REQUEST** — a non-production environment where the
+five endpoints can be exercised with representative data: taxonomy, products, prices,
+inventory, at least one service area including PIN 560047, thumbnail/gallery media
+configuration, cursor signing key, `tazzzo.freshness.enabled`, a configured
+consumer rate-limit mode, and a provisioned gateway host. Not blocking for
+PR-04A's automated work; blocking for real-environment sign-off before launch.

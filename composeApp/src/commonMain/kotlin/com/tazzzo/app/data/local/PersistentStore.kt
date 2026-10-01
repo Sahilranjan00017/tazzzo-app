@@ -141,6 +141,19 @@ class PersistentStore(provided: Settings? = null) {
         get() = settings.getBoolean(KEY_AUTH_INSTALL, false)
         set(v) = settings.putBoolean(KEY_AUTH_INSTALL, v)
 
+    /**
+     * Random, non-secret per-install id for the `X-Tazzzo-Installation-Id` header
+     * (see `data/catalog/InstallationId`). Not an account, device or ad identifier.
+     */
+    var installationId: String?
+        get() = settings.getStringOrNull(KEY_INSTALLATION_ID)
+        set(v) { if (v == null) settings.remove(KEY_INSTALLATION_ID) else settings.putString(KEY_INSTALLATION_ID, v) }
+
+    /** The delivery PIN used for catalogue/serviceability reads. Non-secret app state. */
+    var launchPin: String?
+        get() = settings.getStringOrNull(KEY_LAUNCH_PIN)
+        set(v) { if (v == null) settings.remove(KEY_LAUNCH_PIN) else settings.putString(KEY_LAUNCH_PIN, v) }
+
     // ---- helpers -----------------------------------------------------------
 
     private inline fun <reified T> decodeList(key: String): List<T> =
@@ -158,5 +171,7 @@ class PersistentStore(provided: Settings? = null) {
         const val KEY_ONBOARDED = "tazzzo.onboarded.v1"
         const val KEY_MEMBERSHIP = "tazzzo.membership.v1"
         const val KEY_AUTH_INSTALL = "tazzzo.authInstall.v1"
+        const val KEY_INSTALLATION_ID = "tazzzo.installationId.v1"
+        const val KEY_LAUNCH_PIN = "tazzzo.launchPin.v1"
     }
 }

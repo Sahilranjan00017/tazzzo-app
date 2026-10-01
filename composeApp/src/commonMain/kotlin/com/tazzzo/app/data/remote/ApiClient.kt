@@ -46,8 +46,26 @@ data class ApiRequest(
      */
     val bearerToken: String? = null,
     /** Set false for a call that must not trigger 401 recovery. */
-    val recoverOn401: Boolean = true
+    val recoverOn401: Boolean = true,
+    /**
+     * Extra non-secret request headers (e.g. the installation id). `Authorization`,
+     * `If-Match`, `If-None-Match` and `Idempotency-Key` have their own fields and
+     * cannot be set here.
+     */
+    val headers: Map<String, String> = emptyMap(),
+    /**
+     * Revalidation: sends `If-None-Match`. Only meaningful with
+     * [ApiClient.executeConditional], which is also the only call that treats a
+     * `304 Not Modified` as success rather than as an error.
+     */
+    val ifNoneMatch: String? = null
 )
+
+/** Result of a conditional GET: fresh content, or "your cached copy is still current". */
+sealed interface Conditional<out T> {
+    data class Modified<T>(val response: ApiResponse<T>) : Conditional<T>
+    data class NotModified(val etag: String?) : Conditional<Nothing>
+}
 
 /** A decoded success. [etag] is surfaced because cart/address/profile versions ride on it. */
 data class ApiResponse<out T>(val body: T, val status: Int, val etag: String?, val requestId: String? = null)
@@ -108,6 +126,26 @@ class ApiClient(
         }
     }
 
+    /**
+     * A GET revalidated with `If-None-Match`. A `304` is a normal outcome
+     * ([Conditional.NotModified]), never an [ApiException]; every other
+     * non-2xx still throws.
+     */
+    suspend fun <T> executeConditional(request: ApiRequest, deserializer: DeserializationStrategy<T>): Conditional<T> {
+        val response = send(request, allowNotModified = request.ifNoneMatch != null)
+        if (response.status.value == 304) return Conditional.NotModified(response.headers[HttpHeaders.ETag])
+        val text = readBody(response)
+        val requestId = response.headers["X-Request-Id"]?.takeIf { it.length <= 128 }
+        return try {
+            Conditional.Modified(
+                ApiResponse(json.decodeFromString(deserializer, text), response.status.value, response.headers[HttpHeaders.ETag], requestId)
+            )
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            throw ApiException(ApiError.Decoding(requestId), e)
+        }
+    }
+
     /** For 2xx responses with no body (204 logout/delete). */
     suspend fun executeUnit(request: ApiRequest): ApiResponse<Unit> {
         val response = send(request)
@@ -122,7 +160,7 @@ class ApiClient(
     }
 
     /** Performs the call and throws [ApiException] for transport failures and non-2xx statuses. */
-    private suspend fun send(request: ApiRequest): HttpResponse {
+    private suspend fun send(request: ApiRequest, allowNotModified: Boolean = false): HttpResponse {
         request.idempotencyKey?.let { IdempotencyKey.require(it) }
         val explicit = request.bearerToken?.takeIf { it.isNotBlank() }
         val token = explicit ?: if (request.authenticated) tokenProvider?.accessToken()?.takeIf { it.isNotBlank() } else null
@@ -136,7 +174,7 @@ class ApiClient(
             response = call(request, fresh)
         }
 
-        if (!response.status.isSuccess()) {
+        if (!response.status.isSuccess() && !(allowNotModified && response.status.value == 304)) {
             val body = runCatching { response.bodyAsText() }.getOrNull()
             throw ApiException(
                 ErrorEnvelope.parse(response.status.value, body, response.headers[HttpHeaders.RetryAfter], json)
@@ -156,6 +194,8 @@ class ApiClient(
             header(HttpHeaders.Accept, ContentType.Application.Json.toString())
             if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
             request.ifMatch?.let { header(HttpHeaders.IfMatch, it) }
+            request.ifNoneMatch?.let { header(HttpHeaders.IfNoneMatch, it) }
+            request.headers.forEach { (k, v) -> header(k, v) }
             request.idempotencyKey?.let { header("Idempotency-Key", it) }
             if (request.body != null) {
                 contentType(ContentType.Application.Json)
@@ -200,3 +240,6 @@ class ApiClient(
 /** Convenience for typed calls: `client.execute<CategoriesResponse>(request)`. */
 suspend inline fun <reified T> ApiClient.execute(request: ApiRequest): ApiResponse<T> =
     execute(request, json.serializersModule.serializer<T>())
+
+suspend inline fun <reified T> ApiClient.executeConditional(request: ApiRequest): Conditional<T> =
+    executeConditional(request, json.serializersModule.serializer<T>())

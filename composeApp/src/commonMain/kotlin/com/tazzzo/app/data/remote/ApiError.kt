@@ -67,8 +67,9 @@ class ApiException(val error: ApiError, cause: Throwable? = null) : Exception(de
  * The backend has several shapes — commerce reads
  * `{code, message, requestId, retryable, retryAfterSeconds, details}`, OTP
  * `{code, message, requestId, retryAfterSeconds}`, session/profile/address/cart/
- * order `{code, message, requestId}`, checkout adding `items[]`, and the older
- * `/catalog/v1` `{code, message, request_id}`. Every field is therefore
+ * order `{code, message, requestId}`, checkout adding `items[]`, the older
+ * `/catalog/v1` `{code, message, request_id}`, and the legacy nested
+ * `{error:{code, message, request_id}}`. Every field is therefore
  * optional and looked up independently; a body that is empty, not JSON, or not
  * an object yields an [ApiError.Http] carrying only the status.
  *
@@ -80,9 +81,12 @@ internal object ErrorEnvelope {
     private val ID = Regex("^[A-Za-z0-9_.:\\-]{1,128}$")
 
     fun parse(status: Int, body: String?, retryAfterHeader: String?, json: Json): ApiError.Http {
-        val obj = body
+        val root = body
             ?.takeIf { it.isNotBlank() }
             ?.let { runCatching { json.parseToJsonElement(it) }.getOrNull() } as? JsonObject
+        // The legacy gateway envelope nests everything: `{"error":{"code","message","request_id"}}`
+        // (framework errors, 404 NO_SUCH_ENDPOINT). Flat envelopes are read as-is.
+        val obj = (root?.get("error") as? JsonObject)?.takeIf { root.get("code") == null } ?: root
 
         val retryAfter = obj?.get("retryAfterSeconds")?.asLong()
             ?: retryAfterHeader?.trim()?.toLongOrNull()

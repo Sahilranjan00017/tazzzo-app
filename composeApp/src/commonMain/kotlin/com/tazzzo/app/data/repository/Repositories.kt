@@ -188,6 +188,28 @@ object ServiceLocator {
         com.tazzzo.app.data.remote.ApiClient(tokenProvider = authSession, recovery = authSession)
     }
 
+    // --- remote catalogue + serviceability (PR-04A: data foundation, NOT wired to any screen yet) ---
+    // Screens still read `catalog` (mock) above; PR-04C switches them using CatalogSource.current.
+    private val catalogClient: com.tazzzo.app.data.remote.ApiClient by lazy { com.tazzzo.app.data.remote.ApiClient() }
+    private val persistentStoreForCatalog: com.tazzzo.app.data.local.PersistentStore by lazy { com.tazzzo.app.data.local.PersistentStore() }
+    private val installationId: () -> com.tazzzo.app.data.catalog.InstallationId = {
+        com.tazzzo.app.data.catalog.InstallationId.getOrCreate(persistentStoreForCatalog)
+    }
+    val catalogMode: com.tazzzo.app.data.catalog.CatalogMode get() = com.tazzzo.app.data.catalog.CatalogSource.current
+    val catalogCapabilities: com.tazzzo.app.data.catalog.CatalogCapabilities get() =
+        com.tazzzo.app.data.catalog.CatalogCapabilities.forMode(catalogMode)
+    val remoteCatalog: com.tazzzo.app.data.catalog.CatalogReader by lazy {
+        val source = com.tazzzo.app.data.catalog.RemoteCatalogDataSource(catalogClient, installationId)
+        com.tazzzo.app.data.catalog.CatalogReader(source, com.tazzzo.app.data.catalog.TaxonomyCache(source))
+    }
+    val launchContext: com.tazzzo.app.data.catalog.LaunchContext by lazy {
+        com.tazzzo.app.data.catalog.LaunchContext(
+            com.tazzzo.app.data.catalog.PersistentPinStore(persistentStoreForCatalog),
+            com.tazzzo.app.data.catalog.RemoteServiceabilityDataSource(catalogClient, installationId),
+            authScope
+        )
+    }
+
     val auth: com.tazzzo.app.data.auth.AuthRepository by lazy {
         com.tazzzo.app.data.auth.RemoteAuthRepository(authRemote, authSession)
     }
