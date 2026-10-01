@@ -61,7 +61,7 @@ class MockCatalogRepository : CatalogRepository {
     private fun maybeFailForDemo() {
         if (com.tazzzo.app.isDemoFailLoadEnabled() && !failedOnce) {
             failedOnce = true
-            throw RuntimeException("Simulated network failure (TAZZZO_DEMO_FAIL_LOAD)")
+            throw com.tazzzo.app.data.remote.ApiException(com.tazzzo.app.data.remote.ApiError.Network)
         }
     }
 

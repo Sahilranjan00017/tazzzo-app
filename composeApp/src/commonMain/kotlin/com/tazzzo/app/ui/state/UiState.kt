@@ -6,6 +6,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.tazzzo.app.data.remote.ApiError
+import com.tazzzo.app.data.remote.ApiException
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -54,21 +56,36 @@ data class LoadError(
 /**
  * Maps a thrown exception to a classified error.
  *
- * Kept deliberately simple until the HTTP client lands; the Ktor-specific
- * branches (timeouts, status codes) plug in here and nowhere else.
+ * Classification comes from the typed transport error carried by
+ * [ApiException]; message text is never inspected. Anything that is not an
+ * [ApiException] is [LoadError.Kind.Unknown].
+ *
+ * Mapping (customer copy is unchanged from before typed errors existed):
+ *  - Timeout                          -> Timeout
+ *  - Network failure                  -> Network
+ *  - HTTP 401 / 403                   -> Unauthorized
+ *  - HTTP 429 and 5xx                 -> Server
+ *  - other HTTP statuses, decoding    -> Unknown
+ *
+ * Feature-specific recovery (price changed, quote expired, ...) belongs to the
+ * feature, which reads [ApiException.error] directly.
  */
 fun Throwable.toLoadError(): LoadError {
-    val name = this::class.simpleName.orEmpty()
-    val text = message.orEmpty()
-    val kind = when {
-        name.contains("Timeout", true) || text.contains("timeout", true) -> LoadError.Kind.Timeout
-        name.contains("UnknownHost", true) || name.contains("IO", true) ||
-            text.contains("network", true) || text.contains("connect", true) -> LoadError.Kind.Network
-        text.contains("401") || text.contains("403") -> LoadError.Kind.Unauthorized
-        text.contains("50") && text.contains("server", true) -> LoadError.Kind.Server
-        else -> LoadError.Kind.Unknown
+    val api = (this as? ApiException)?.error
+    val kind = when (api) {
+        ApiError.Timeout -> LoadError.Kind.Timeout
+        ApiError.Network -> LoadError.Kind.Network
+        is ApiError.Http -> when {
+            api.status == 401 || api.status == 403 -> LoadError.Kind.Unauthorized
+            api.status == 429 || api.status in 500..599 -> LoadError.Kind.Server
+            else -> LoadError.Kind.Unknown
+        }
+        is ApiError.Decoding, null -> LoadError.Kind.Unknown
     }
-    return LoadError(kind, technical = "$name: $text".take(200))
+    // `technical` is for logs/QA only and never rendered; ApiException's message
+    // is built from sanitised fields, other types contribute their name only.
+    val technical = if (this is ApiException) message.orEmpty() else this::class.simpleName.orEmpty()
+    return LoadError(kind, technical = technical.take(200))
 }
 
 /**
