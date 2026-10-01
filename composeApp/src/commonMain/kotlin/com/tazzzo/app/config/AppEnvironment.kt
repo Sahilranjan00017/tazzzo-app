@@ -16,13 +16,13 @@ package com.tazzzo.app.config
  */
 enum class BuildEnvironment(val gatewayBaseUrl: String) {
     /** Local / on-device development. */
-    DEV("https://dev-api.tazzzo.in"),
+    DEV("https://dev-api.tazzzo.com"),
 
     /** Pre-production verification against real services. */
-    STAGING("https://staging-api.tazzzo.in"),
+    STAGING("https://staging-api.tazzzo.com"),
 
     /** Customers. */
-    PROD("https://api.tazzzo.in");
+    PROD("https://api.tazzzo.com");
 }
 
 /**

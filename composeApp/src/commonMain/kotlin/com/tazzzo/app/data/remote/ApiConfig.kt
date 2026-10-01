@@ -36,5 +36,5 @@ object ApiConfig {
      * No credentials, tokens or secrets belong in this file or anywhere else
      * in source. See `data/local/SecureStore` for where auth material lives.
      */
-    const val GATEWAY_BASE_URL: String = "https://api.tazzzo.in"
+    const val GATEWAY_BASE_URL: String = "https://api.tazzzo.com"
 }
