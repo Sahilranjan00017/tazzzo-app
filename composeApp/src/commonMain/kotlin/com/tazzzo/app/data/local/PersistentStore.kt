@@ -23,7 +23,13 @@ import kotlinx.serialization.json.Json
  *    BLOCKERS.md (P0 backend).
  *  - Bounded: recent searches capped at 8, addresses at 20.
  */
-class PersistentStore(private val settings: Settings = Settings()) {
+class PersistentStore(provided: Settings? = null) {
+
+    // Resolved on first read or write, never at construction. The no-arg
+    // `Settings()` needs an Android Context, so building it eagerly made merely
+    // loading `ServiceLocator` fail in a plain-JVM unit test. In the app the
+    // first access happens on the same default store as before.
+    private val settings: Settings by lazy { provided ?: Settings() }
 
     private val json = Json { ignoreUnknownKeys = true }
 
