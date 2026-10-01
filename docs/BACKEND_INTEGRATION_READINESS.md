@@ -126,7 +126,7 @@ Serialize to these exact shapes (`kotlinx.serialization`, models in `data/model/
 - **`etaMinutes` is dead** — declared on `Product` and `DeliverySlot`, read
   nowhere. Every delivery string comes from serviceability via `DeliveryCopy`
   (§6). Do not build per-SKU ETA plumbing; nothing consumes it.
-- **Money is integer PAISE everywhere (PR-04B).** The `Money` value class, serialized as a bare `Long` of paise (₹49.50 = `4950`). No floats, no strings, no rupee `Int`. Server-supplied amounts are authoritative and are never recomputed; proportional client-side amounts use `floor(paise × percent / 100)` in integer arithmetic. Customer-facing amounts are never negative.
+- **Money is integer PAISE everywhere (PR-04B).** The `Money` value class, serialized as a bare `Long` of paise whose JSON key NAMES the unit (`pricePaise: 4950` = ₹49.50; the Kotlin property stays `price: Money`). Persisted entries are versioned the same way (`tazzzo.cart.v2` → `priceAtSavePaise`, `tazzzo.membership.v2` → `cumulativeSpendPaise`). No floats, no strings, no rupee `Int`. Server-supplied amounts are authoritative and are never recomputed; proportional client-side amounts use `floor(paise × percent / 100)` in integer arithmetic. Customer-facing amounts are never negative.
 - `rating`/`ratingCount`: send `0` until a real ratings system exists. The UI
   renders nothing at `ratingCount <= 0` by design — do **not** send placeholders.
 

@@ -1,5 +1,6 @@
 package com.tazzzo.app.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /*
@@ -72,11 +73,11 @@ data class Promotion(
     val scopeIds: List<String> = emptyList(),
     val audience: PromotionAudience = PromotionAudience.EVERYONE,
     val percent: Int? = null,
-    val flat: Money? = null,
+    @SerialName("flatPaise") val flat: Money? = null,
     val buyQuantity: Int? = null,
     val getQuantity: Int? = null,
-    val minOrder: Money = Money.ZERO,
-    val maxDiscount: Money? = null,
+    @SerialName("minOrderPaise") val minOrder: Money = Money.ZERO,
+    @SerialName("maxDiscountPaise") val maxDiscount: Money? = null,
     val couponCode: String? = null,
     val stackable: Boolean = false,
     val priority: Int = 0,
@@ -99,7 +100,7 @@ data class Promotion(
 data class AppliedPromotion(
     val promotionId: String,
     val title: String,
-    val discount: Money,
+    @SerialName("discountPaise") val discount: Money,
     /** Customer-facing. "10% off dairy, capped at ₹40". */
     val explanation: String,
     val freeDelivery: Boolean = false
@@ -119,7 +120,7 @@ data class DeclinedPromotion(
     /** Customer-facing. "Add ₹72 more to dairy items", "Cannot be combined with your Club discount". */
     val reason: String,
     /** What it WOULD have saved, when that is meaningful to show. */
-    val wouldHaveSaved: Money? = null
+    @SerialName("wouldHaveSavedPaise") val wouldHaveSaved: Money? = null
 )
 
 /**
@@ -136,10 +137,10 @@ data class DeclinedPromotion(
 data class PromotionResolution(
     val applied: List<AppliedPromotion> = emptyList(),
     val declined: List<DeclinedPromotion> = emptyList(),
-    val promotionDiscount: Money = Money.ZERO,
+    @SerialName("promotionDiscountPaise") val promotionDiscount: Money = Money.ZERO,
     val freeDelivery: Boolean = false,
     val clubApplied: Boolean = false,
-    val clubDiscount: Money = Money.ZERO,
+    @SerialName("clubDiscountPaise") val clubDiscount: Money = Money.ZERO,
     val bestOfferNote: String? = null
 ) {
     companion object {

@@ -232,8 +232,8 @@ class SerializationTest {
         // emoji is a temporary placeholder; a payload that omits it must not
         // take the whole catalogue down.
         val body = """
-            {"id":"p1","name":"Atta","brand":"Shudh","unit":"5 kg","price":249,
-             "mrp":299,"categoryId":"atta","subcategoryId":"atta-s",
+            {"id":"p1","name":"Atta","brand":"Shudh","unit":"5 kg","pricePaise":24900,
+             "mrpPaise":29900,"categoryId":"atta","subcategoryId":"atta-s",
              "rating":4.5,"ratingCount":100}
         """.trimIndent()
         val p = json.decodeFromString<Product>(body)
@@ -242,11 +242,11 @@ class SerializationTest {
         assertEquals(null, p.imageUrl)
     }
 
-    @Test fun money_is_encoded_as_integer_rupees() {
+    @Test fun money_is_encoded_as_integer_paise() {
         val obj = strict.encodeToString(BillSummary(r(58), r(60), r(0), r(4), 1, r(62))).let {
             strict.parseToJsonElement(it).jsonObject
         }
-        listOf("itemTotal", "itemMrpTotal", "deliveryFee", "handlingCharge", "grandTotal")
+        listOf("itemTotalPaise", "itemMrpTotalPaise", "deliveryFeePaise", "handlingChargePaise", "grandTotalPaise")
             .forEach { key ->
                 val raw = obj.getValue(key).jsonPrimitive.content
                 assertTrue(raw.toIntOrNull() != null, "$key must be an integer, was '$raw'")

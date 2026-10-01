@@ -192,14 +192,14 @@ class MoneyPolicyTest {
     @Test fun productJsonCarriesPaiseNotRupees() {
         val json = Json { encodeDefaults = true }
         val text = json.encodeToString(p(Money.ofPaise(2_950), Money.ofPaise(3_000)))
-        assertTrue(text.contains("\"price\":2950") && text.contains("\"mrp\":3000"), text)
+        assertTrue(text.contains("\"pricePaise\":2950") && text.contains("\"mrpPaise\":3000"), text)
         assertEquals(Money.ofPaise(2_950), json.decodeFromString<Product>(text).price)
     }
 
     @Test fun aNegativePriceInAPayloadIsRejectedOnDecode() {
         val json = Json { encodeDefaults = true }
         val ok = json.encodeToString(p(r(10)))
-        assertFailsWith<Exception> { json.decodeFromString<Product>(ok.replace("\"price\":1000", "\"price\":-1000")) }
+        assertFailsWith<Exception> { json.decodeFromString<Product>(ok.replace("\"pricePaise\":1000", "\"pricePaise\":-1000")) }
     }
 
     @Test fun discountPercentIsFlooredInPaise() {

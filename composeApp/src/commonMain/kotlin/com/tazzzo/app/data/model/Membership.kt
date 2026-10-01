@@ -1,5 +1,6 @@
 package com.tazzzo.app.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /*
@@ -55,8 +56,8 @@ data class MembershipBenefit(
 @Serializable
 data class MembershipDiscountRule(
     val percent: Int,
-    val minOrderValue: Money,
-    val maxDiscount: Money? = null
+    @SerialName("minOrderValuePaise") val minOrderValue: Money,
+    @SerialName("maxDiscountPaise") val maxDiscount: Money? = null
 ) {
     init {
         Money.requireNonNegative(minOrderValue, "minOrderValue")
@@ -79,7 +80,7 @@ data class MembershipDiscountRule(
 @Serializable
 data class MembershipSpendMilestone(
     val id: String,
-    val threshold: Money,
+    @SerialName("thresholdPaise") val threshold: Money,
     val unlockedDiscount: MembershipDiscountRule,
     val title: String,
     val description: String
@@ -105,7 +106,7 @@ data class MembershipOrderMilestone(
     val requiredOrders: Int,
     val rewardType: MembershipRewardType,
     val rewardTitle: String,
-    val rewardValue: Money?,
+    @SerialName("rewardValuePaise") val rewardValue: Money?,
     val eligibleCategoryIds: List<String> = emptyList(),
     val expiryDaysAfterUnlock: Int? = null,
     val campaignId: String? = null
@@ -139,7 +140,7 @@ data class MembershipPlan(
     val id: String,
     val name: String,
     val tagline: String,
-    val price: Money,
+    @SerialName("pricePaise") val price: Money,
     /** null = active until cancelled; otherwise days from activation. */
     val periodDays: Int?,
     val discountRule: MembershipDiscountRule,
@@ -157,9 +158,9 @@ data class MembershipPlan(
 data class MembershipEligibility(
     val isMember: Boolean,
     val isEligible: Boolean,
-    val discount: Money,
+    @SerialName("discountPaise") val discount: Money,
     /** How much MORE the cart needs to reach the active discount rule. 0 if already eligible or not a member. */
-    val amountToUnlock: Money,
+    @SerialName("amountToUnlockPaise") val amountToUnlock: Money,
     val appliedRule: MembershipDiscountRule?
 )
 
@@ -168,7 +169,7 @@ data class MembershipEligibility(
 data class MembershipTransaction(
     val id: String,
     val planId: String,
-    val amount: Money,
+    @SerialName("amountPaise") val amount: Money,
     val status: MembershipStatus,
     val paymentReference: String?,
     val isTestPayment: Boolean,
@@ -189,8 +190,8 @@ data class MembershipState(
     val planId: String? = null,
     val activatedAtLabel: String? = null,
     val expiresAtLabel: String? = null,
-    val cumulativeSpend: Money = Money.ZERO,
-    val cumulativeSavings: Money = Money.ZERO,
+    @SerialName("cumulativeSpendPaise") val cumulativeSpend: Money = Money.ZERO,
+    @SerialName("cumulativeSavingsPaise") val cumulativeSavings: Money = Money.ZERO,
     val eligibleOrderCount: Int = 0,
     val unlockedSpendMilestoneIds: Set<String> = emptySet(),
     val rewards: List<MembershipReward> = emptyList(),

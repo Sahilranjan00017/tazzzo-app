@@ -1,5 +1,6 @@
 package com.tazzzo.app.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -37,7 +38,7 @@ data class DeliverySlot(
     val available: Boolean,
     val etaMinutes: Int? = null,  // only when backed by serviceability data
     /** Fee for THIS slot. Zero = free. Overrides the flat rule when a slot is chosen. */
-    val fee: Money = Money.ZERO,
+    @SerialName("feePaise") val fee: Money = Money.ZERO,
     /** Customer-facing reason for the fee, e.g. "Peak-hour slot". Null when free or unexplained. */
     val feeReason: String? = null,
     /** Section header: "Next available", "Today", "Tomorrow". Null = ungrouped. */

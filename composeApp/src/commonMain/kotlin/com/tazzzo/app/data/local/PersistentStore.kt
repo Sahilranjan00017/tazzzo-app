@@ -137,7 +137,7 @@ class PersistentStore(provided: Settings? = null) {
             fun paise(key: String) = JsonPrimitive(Money.ofRupees(obj[key]?.jsonPrimitive?.long ?: 0L).paise)
             val migrated = JsonObject(
                 obj.filterKeys { it != "cumulativeSpendRupees" && it != "cumulativeSavingsRupees" } +
-                    mapOf("cumulativeSpend" to paise("cumulativeSpendRupees"), "cumulativeSavings" to paise("cumulativeSavingsRupees"))
+                    mapOf("cumulativeSpendPaise" to paise("cumulativeSpendRupees"), "cumulativeSavingsPaise" to paise("cumulativeSavingsRupees"))
             )
             json.decodeFromJsonElement(MembershipState.serializer(), migrated)
         }.getOrNull() ?: return null

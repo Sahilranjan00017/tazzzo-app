@@ -1,5 +1,6 @@
 package com.tazzzo.app.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /*
@@ -74,8 +75,8 @@ data class Product(
      */
     val emoji: String = "",
     val unit: String,           // "500 g", "1 L", "6 pcs"
-    val price: Money,           // selling price
-    val mrp: Money,             // strike-through price
+    @SerialName("pricePaise") val price: Money,           // selling price
+    @SerialName("mrpPaise") val mrp: Money,             // strike-through price
     val categoryId: String,
     val subcategoryId: String,
     val rating: Double,
@@ -161,21 +162,21 @@ data class CartLine(val product: Product, val quantity: Int) {
 
 @Serializable
 data class BillSummary(
-    val itemTotal: Money,
-    val itemMrpTotal: Money,
-    val deliveryFee: Money,
-    val handlingCharge: Money,
+    @SerialName("itemTotalPaise") val itemTotal: Money,
+    @SerialName("itemMrpTotalPaise") val itemMrpTotal: Money,
+    @SerialName("deliveryFeePaise") val deliveryFee: Money,
+    @SerialName("handlingChargePaise") val handlingCharge: Money,
     val coinsEarned: Int,
-    val grandTotal: Money,
+    @SerialName("grandTotalPaise") val grandTotal: Money,
     /**
      * Amount off from Tazzzo Club for THIS order. 0 for non-members and
      * ineligible orders. Placed AFTER grandTotal and defaulted so every
      * existing positional BillSummary(...) fixture keeps compiling and every
      * value it constructs keeps meaning what it always meant.
      */
-    val clubDiscount: Money = Money.ZERO,
+    @SerialName("clubDiscountPaise") val clubDiscount: Money = Money.ZERO,
     /** Amount off from promotions/coupons on THIS order. Zero when none applied. */
-    val promotionDiscount: Money = Money.ZERO,
+    @SerialName("promotionDiscountPaise") val promotionDiscount: Money = Money.ZERO,
     /** Each promotion that applied, with its customer-facing explanation. */
     val appliedPromotions: List<AppliedPromotion> = emptyList(),
     /** Offers the customer could see but did not get, and why. */
@@ -190,7 +191,7 @@ data class BillSummary(
      * Money genuinely not charged, so it counts toward realised savings; the
      * reason is carried so the bill can say WHY it was free.
      */
-    val deliveryFeeWaived: Money = Money.ZERO,
+    @SerialName("deliveryFeeWaivedPaise") val deliveryFeeWaived: Money = Money.ZERO,
     val deliveryFeeReason: String? = null,
     /**
      * A voluntary amount added to this order.
@@ -199,7 +200,7 @@ data class BillSummary(
      * money the customer ADDS, and folding it anywhere near savings would make
      * the bill unreadable. It is added to [grandTotal] and shown on its own row.
      */
-    val tip: Money = Money.ZERO
+    @SerialName("tipPaise") val tip: Money = Money.ZERO
 ) {
     init {
         // Every field here is a customer-facing charge or a discount MAGNITUDE (subtracted, never negative).
