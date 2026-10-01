@@ -123,11 +123,19 @@ class PagedLoader<K : Any, T>(
     }
 }
 
-/** The catalogue's product list: cursor pagination keyed by (category, PIN). */
+/**
+ * The catalogue's product list: cursor pagination keyed by (category, PIN).
+ *
+ * List identity is [CatalogProduct.skuId], NOT `productId`: a list row is a SKU-level,
+ * purchasable card (price and inventory are SKU-oriented, and the backend states "nothing
+ * here may ever assume equality" of the two ids — they are equal only at launch). Keying on
+ * `productId` would silently collapse two purchasable SKUs of one product once variants exist.
+ * `productId` stays on the item for product-detail navigation.
+ */
 data class ProductListKey(val nodeId: String, val pin: Pincode?)
 
 fun productPager(scope: CoroutineScope, reader: CatalogReader, pageSize: Int = RemoteCatalogDataSource.DEFAULT_PAGE_SIZE) =
-    PagedLoader<ProductListKey, CatalogProduct>(scope, { it.productId }) { key, cursor ->
+    PagedLoader<ProductListKey, CatalogProduct>(scope, { it.skuId }) { key, cursor ->
         val p = reader.productPage(key.nodeId, key.pin, cursor, pageSize)
         Page(p.items, p.nextCursor, p.hasMore)
     }

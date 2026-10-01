@@ -170,4 +170,41 @@ class PagedLoaderTest {
         withContext(Dispatchers.Default) { withTimeout(5_000) { while (pager.state.value !is PagedState.Empty) delay(5) } }
         assertEquals(PagedState.Empty, pager.state.value)
     }
+
+    // ---- list identity is skuId (verified against backend source: rows are SKU-level cards) ---------------
+
+    private fun card(sku: String, product: String) =
+        cardJson(product).replace("\"skuId\":\"$product\"", "\"skuId\":\"$sku\"")
+
+    private suspend fun awaitContent(p: PagedLoader<ProductListKey, com.tazzzo.app.data.catalog.CatalogProduct>, size: Int) =
+        withContext(Dispatchers.Default) {
+            withTimeout(5_000) { while ((p.state.value as? PagedState.Content<*>)?.items?.size != size) delay(5) }
+        }
+
+    @Test fun twoSkusOfTheSameProductArePreserved() = runTest {
+        val r = reader { respond(pageJson(listOf(card("SKU-A", "TZP-1"), card("SKU-B", "TZP-1"))), HttpStatusCode.OK, JSON) }
+        val pager = productPager(kotlinx.coroutines.CoroutineScope(Dispatchers.Default), r)
+        pager.setKey(ProductListKey("TZC-000010", Pincode.LAUNCH))
+        awaitContent(pager, 2)
+        val items = (pager.state.value as PagedState.Content).items
+        assertEquals(listOf("SKU-A", "SKU-B"), items.map { it.skuId })
+        assertEquals(listOf("TZP-1", "TZP-1"), items.map { it.productId }) // productId kept for navigation
+    }
+
+    @Test fun theSameSkuRepeatedAcrossPagesIsStillCollapsed() = runTest {
+        val r = reader { req ->
+            val page2 = req.url.parameters["cursor"] != null
+            respond(
+                if (page2) pageJson(listOf(card("SKU-B", "TZP-1"), card("SKU-C", "TZP-2")))
+                else pageJson(listOf(card("SKU-A", "TZP-1"), card("SKU-B", "TZP-1")), next = "C1"),
+                HttpStatusCode.OK, JSON
+            )
+        }
+        val pager = productPager(kotlinx.coroutines.CoroutineScope(Dispatchers.Default), r)
+        pager.setKey(ProductListKey("TZC-000010", Pincode.LAUNCH))
+        awaitContent(pager, 2)
+        pager.loadMore()
+        awaitContent(pager, 3)
+        assertEquals(listOf("SKU-A", "SKU-B", "SKU-C"), (pager.state.value as PagedState.Content).items.map { it.skuId })
+    }
 }
