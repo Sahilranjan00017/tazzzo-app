@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and below (android:fullBackupContent). Targeted exclusion only:
+     the encrypted session blob is useless without its Keystore key, which is
+     never backed up, so it must not be restored. Everything else stays eligible. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="tazzzo_secure_auth.xml" />
+</full-backup-content>

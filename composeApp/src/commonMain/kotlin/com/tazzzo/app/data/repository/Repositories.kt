@@ -25,11 +25,6 @@ interface CatalogRepository {
     suspend fun search(query: String): List<Product>
 }
 
-interface AuthRepository {
-    suspend fun requestOtp(phone: String): Boolean
-    suspend fun verifyOtp(phone: String, otp: String): UserProfile?
-}
-
 interface OrderRepository {
     suspend fun placeOrder(
         lines: List<CartLine>,
@@ -75,17 +70,6 @@ class MockCatalogRepository : CatalogRepository {
         delay(FAKE_LATENCY_MS); return MockCatalog.productsFor(categoryId, subcategoryId)
     }
     override suspend fun search(query: String): List<Product> { delay(200); return engine.search(query) }
-}
-
-class MockAuthRepository : AuthRepository {
-    override suspend fun requestOtp(phone: String): Boolean { delay(400); return phone.length == 10 }
-    override suspend fun verifyOtp(phone: String, otp: String): UserProfile? {
-        delay(400)
-        return if (otp.length == 4) UserProfile(
-            name = "Tazzzo Shopper", phone = "+91 $phone", isGuest = false,
-            coinBalance = 40, address = "HSR Layout, Bengaluru"
-        ) else null
-    }
 }
 
 class MockOrderRepository : OrderRepository {
@@ -172,7 +156,41 @@ class MockCoinRepository : CoinRepository {
 /** Poor-man's DI — swap Mock* for Remote* here when the JS microservices land. */
 object ServiceLocator {
     val catalog: CatalogRepository = MockCatalogRepository()
-    val auth: AuthRepository = MockAuthRepository()
+
+    // --- authentication (PR-03A) --------------------------------------------
+    // Lazy: building the secure store needs the platform (an Android Context),
+    // and loading ServiceLocator in a plain-JVM unit test must stay possible.
+    private val authScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default
+    )
+
+    /** Auth calls: no token provider, no recovery hook — they must never recurse into refresh. */
+    private val authClient: com.tazzzo.app.data.remote.ApiClient by lazy { com.tazzzo.app.data.remote.ApiClient() }
+    private val authRemote: com.tazzzo.app.data.auth.RemoteAuthDataSource by lazy {
+        com.tazzzo.app.data.auth.RemoteAuthDataSource(authClient)
+    }
+
+    val secureTokenStore: com.tazzzo.app.data.auth.SecureTokenStore by lazy {
+        com.tazzzo.app.data.auth.BlobSecureTokenStore(com.tazzzo.app.data.auth.createSecureBlobStore()).also {
+            // A reinstall must not inherit the previous install's (Keychain) credentials.
+            com.tazzzo.app.data.auth.AuthInstallGuard.clearStaleCredentialsOnFreshInstall(
+                com.tazzzo.app.data.local.PersistentStore(), it
+            )
+        }
+    }
+
+    val authSession: com.tazzzo.app.data.auth.AuthSessionManager by lazy {
+        com.tazzzo.app.data.auth.AuthSessionManager(authRemote, secureTokenStore, authScope)
+    }
+
+    /** The gateway client for authenticated features: attaches the token and recovers from one 401. */
+    val apiClient: com.tazzzo.app.data.remote.ApiClient by lazy {
+        com.tazzzo.app.data.remote.ApiClient(tokenProvider = authSession, recovery = authSession)
+    }
+
+    val auth: com.tazzzo.app.data.auth.AuthRepository by lazy {
+        com.tazzzo.app.data.auth.RemoteAuthRepository(authRemote, authSession)
+    }
     val orders: OrderRepository = MockOrderRepository()
     val coins: CoinRepository = MockCoinRepository()
     val addresses: AddressRepository = MockAddressRepository()

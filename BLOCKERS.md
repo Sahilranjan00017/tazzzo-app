@@ -16,10 +16,11 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
 - [x] Persistence — resolved 2026-08-30, verified by 8 on-device process-death
       tests (see PRODUCTION_READINESS.md log). Checkout session intentionally
       does not persist. NOTE: storage is plain NSUserDefaults/SharedPreferences;
-      auth tokens (when real auth lands) must move to Keychain/Encrypted
-      storage — tracked under Real backend.
-- [ ] Real backend: auth, catalogue, stock, serviceability, orders, payments
-      all mocked. Contracts: docs/BACKEND_CONTRACTS.md.
+      auth tokens now live in Keystore/Keychain (PR-03A), never here.
+- [ ] Real backend: auth is REAL as of PR-03A (code + automated tests);
+      real-device SMS sign-off is BLOCKED on a non-prod OTP mechanism (see
+      "BACKEND CONTRACT / ENVIRONMENT REQUEST" in the PR-03A description).
+      Catalogue, stock, serviceability, orders, payments all mocked. Contracts: docs/BACKEND_CONTRACTS.md.
 - [ ] Real payments: COD only; UPI/card disabled placeholders.
 - [ ] D4 delivery promise unapproved — app ships neutral "Fast delivery" copy.
 - [ ] D5 coin economics unapproved — current values are dev config only.

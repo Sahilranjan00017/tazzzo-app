@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.LocalAppState
+import kotlinx.coroutines.launch
 import com.tazzzo.app.Screen
 import com.tazzzo.app.config.MembershipConfig
 import com.tazzzo.app.data.model.OrderStatus
@@ -202,12 +203,13 @@ fun AccountTabContent() {
 
         Spacer(Modifier.height(TazSpace.lg))
 
-        if (!app.user.isGuest) {
+        if (app.isAuthenticated) {
+            val logoutScope = rememberCoroutineScope()
             Row(
                 Modifier.fillMaxWidth()
                     .clip(TazRadius.card)
                     .background(TazColors.DangerSoft)
-                    .tazPressable(onClick = { app.markLoggedOut() }, pressScale = TazPress.compact)
+                    .tazPressable(onClick = { logoutScope.launch { app.logout() } }, pressScale = TazPress.compact)
                     .defaultMinSize(minHeight = TazSize.touchTarget)
                     .padding(TazSpace.lg),
                 verticalAlignment = Alignment.CenterVertically,
@@ -282,7 +284,7 @@ private fun ProfileHeaderCard() {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    app.user.name, fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
+                    app.user.name.ifBlank { "Your account" }, fontSize = TazType.titleSize, fontWeight = TazType.titleWeight,
                     color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )

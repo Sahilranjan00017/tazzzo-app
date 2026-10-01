@@ -69,8 +69,9 @@ test doubles. Do not delete them when `Remote*` lands.
 | `search(query)` | `GET /catalog/v1/search?q=&sort=&in_stock=&brand=&limit=&offset=` | See §2a |
 | `getBestsellers()` | `GET /catalog/v1/bestsellers` | Must be **real** ranking. If unavailable, return the same list the app labels "Bestsellers" — do not label it "Trending" |
 | `getBanners()` | `GET /catalog/v1/banners` or remote config | Each banner needs a real destination; the app only makes tappable what exists |
-| `requestOtp(phone)` | `POST /auth/v1/otp/request` `{phone}` | Rate-limited server-side |
-| `verifyOtp(phone, otp)` | `POST /auth/v1/otp/verify` `{phone, otp}` → tokens + profile | See §4 |
+| `requestOtp(phone)` | `POST /v1/auth/otp/request` `{phone}` (E.164 `+91…`) → `202 {challengeId, expiresInSeconds, resendAfterSeconds}` | **Implemented (PR-03A).** Rate-limited server-side (`429 OTP_RATE_LIMITED`, `retryAfterSeconds`) |
+| `verifyOtp(challengeId, otp)` | `POST /v1/auth/otp/verify` `{challengeId, otp}` (6-digit string) → `200 {grantId}`, then `POST /v1/auth/session {grantId}` → `{customerId, accessToken, accessTokenExpiresIn, refreshToken}` | **Implemented (PR-03A).** Wrong/expired OTP are `400 OTP_INVALID` / `OTP_EXPIRED`. See §4 |
+| refresh / logout | `POST /v1/auth/refresh {refreshToken}` (rotates), `POST /v1/auth/logout` (Bearer, 204) | **Implemented (PR-03A)** |
 | `getAddresses()` | `GET /addresses/v1/addresses` | Per authenticated user |
 | `addAddress(...)` | `POST /addresses/v1/addresses` | Server returns `isServiceable` — the client must not infer it |
 | `getSlots(addressId)` | `GET /serviceability/v1/slots?addressId=` | **Empty array = not serviceable.** That is the contract the UI already implements |
@@ -194,15 +195,31 @@ rendering. Adding them is a model + UI change, not a payload change.
 
 ## 4. Authentication requirements
 
-- OTP request → verify → server returns **access token + refresh token** and the
-  user profile. The client currently returns a `UserProfile` only.
+- **Implemented (PR-03A):** OTP request → verify (→ one-time `grantId`) → session
+  (→ **opaque** access token + rotating refresh token). No profile is fetched yet;
+  the signed-in profile is neutral.
+- Access tokens are opaque: expiry comes from `accessTokenExpiresIn`, never from
+  parsing. Refresh tokens rotate on every refresh with **no grace window and no
+  family revocation**: a reused/old token is `401`, so a refresh response the
+  client never received means the customer must sign in again. A single refresh
+  is in flight at a time; only a `401`/`400` from refresh ends the session —
+  offline/timeout/5xx keep it.
+- Logout revokes only the current session and needs a valid access token; the
+  client wipes local credentials regardless of the result.
 - **Guest mode must survive.** The app distinguishes guest from authenticated
-  (`UserProfile.isGuest`, `AppState.isOnboarded`) and browsing must never require
-  auth. Only checkout should demand identity.
+  (the secure session — `AppState.isAuthenticated` — is the authority;
+  `UserProfile.isGuest` follows it) and browsing must never require auth. Only checkout should demand identity.
 - Token refresh on `401`; the error model already has an `Unauthorized` kind that
   maps to "Please log in again".
 
-### 🔴 SECURITY BLOCKER — must be fixed before real tokens exist
+### ✅ Resolved in PR-03A — secure token storage (history below)
+Tokens live in `data/auth/SecureTokenStore`: **Android Keystore** (AES-256-GCM,
+non-exportable key, private prefs file excluded from backup) and **iOS Keychain**
+(generic password, `AfterFirstUnlockThisDeviceOnly`). Nothing is stored in
+multiplatform-settings except the non-secret `authInstallMarker`, which clears a
+stale Keychain item after a reinstall.
+
+### (historical) SECURITY BLOCKER — must be fixed before real tokens exist
 `data/local/PersistentStore.kt` persists via **plain** `NSUserDefaults` /
 `SharedPreferences`. Keys today: cart, session profile, addresses, recent
 searches, onboarding flags. **No credentials or tokens are stored — deliberately.**

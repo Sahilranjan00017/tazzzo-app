@@ -18,9 +18,9 @@ import kotlinx.serialization.json.Json
  *    catalogue prices.
  *  - The checkout session is deliberately NOT persisted. A half-finished
  *    transaction restored after process death is a liability, not a feature.
- *  - No credentials or payment data. When real auth lands, tokens belong in
- *    Keychain / EncryptedSharedPreferences, not here — documented in
- *    BLOCKERS.md (P0 backend).
+ *  - No credentials or payment data. Auth tokens live in the platform secure
+ *    store (Android Keystore / iOS Keychain, see `data/auth/SecureTokenStore`),
+ *    never here. Only the non-secret `authInstallMarker` is kept.
  *  - Bounded: recent searches capped at 8, addresses at 20.
  */
 class PersistentStore(provided: Settings? = null) {
@@ -132,6 +132,15 @@ class PersistentStore(provided: Settings? = null) {
         get() = settings.getBoolean(KEY_NOTIFICATIONS, true)
         set(v) = settings.putBoolean(KEY_NOTIFICATIONS, v)
 
+    /**
+     * Non-secret marker that THIS install has initialised its auth storage.
+     * The iOS Keychain outlives an uninstall; this flag does not, so its
+     * absence means "fresh install — clear any inherited credentials".
+     */
+    var authInstallMarker: Boolean
+        get() = settings.getBoolean(KEY_AUTH_INSTALL, false)
+        set(v) = settings.putBoolean(KEY_AUTH_INSTALL, v)
+
     // ---- helpers -----------------------------------------------------------
 
     private inline fun <reified T> decodeList(key: String): List<T> =
@@ -148,5 +157,6 @@ class PersistentStore(provided: Settings? = null) {
         const val KEY_TOUR_SEEN = "tazzzo.tourSeen.v1"
         const val KEY_ONBOARDED = "tazzzo.onboarded.v1"
         const val KEY_MEMBERSHIP = "tazzzo.membership.v1"
+        const val KEY_AUTH_INSTALL = "tazzzo.authInstall.v1"
     }
 }

@@ -48,10 +48,18 @@ object IdempotencyKey {
 }
 
 /**
- * Supplies the current access token. PR-01 defines only the seam; secure
- * storage, refresh and rotation arrive with auth. Returning null (or blank)
- * means "no session": no `Authorization` header is sent.
+ * Supplies the current access token. Returning null (or blank) means "no
+ * session": no `Authorization` header is sent.
  */
 fun interface AccessTokenProvider {
     suspend fun accessToken(): String?
+}
+
+/**
+ * Asked once when an authenticated request is rejected with 401.
+ * [rejectedToken] is the access token that was refused. Return true only if a
+ * newer token is now available, so the request may be re-sent once.
+ */
+fun interface AuthRecovery {
+    suspend fun recover(rejectedToken: String): Boolean
 }
