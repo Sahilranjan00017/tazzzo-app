@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.theme.TazzzoTheme
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.ui.home.MainScaffold
@@ -39,6 +40,7 @@ fun App() {
             onBack = { appState.handleSystemBack() }
         )
         PersistenceRunner()
+        AuthSessionRunner(appState)
         DemoTourRunner()
         TazzzoTheme {
             Surface(Modifier.fillMaxSize().background(TazColors.Cream), color = TazColors.Cream) {
@@ -97,5 +99,18 @@ fun App() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Restores the secure session at start-up and keeps [TazzzoAppState] in step
+ * with it: a definitive refresh rejection elsewhere flips the app to guest.
+ */
+@Composable
+private fun AuthSessionRunner(app: TazzzoAppState) {
+    LaunchedEffect(Unit) {
+        val session = ServiceLocator.authSession
+        session.restore()
+        session.active.collect { app.applyAuthState(it) }
     }
 }

@@ -96,17 +96,9 @@ class JourneyWalkthroughTest {
         // proposition; there is no separate login route to wait for.
         waitFor(hasText("Continue"), 30_000)
         snapshot("j02_onboarding")
-        typeIntoFirstField("9876543210")
-        snapshot("j03_login")
-        click(hasText("Continue"))
-
-        // ---- 04 OTP: four digits, and the CTA on THIS screen is
-        // "Verify & Start Shopping" — the separate Login route uses a
-        // different label, which is what broke the first two runs.
-        waitFor(hasText("Verify & Start Shopping"), 30_000)
-        snapshot("j04_otp")
-        typeIntoFirstField("1234")
-        click(hasText("Verify & Start Shopping"))
+        // Real phone + 6-digit OTP needs a live OTP provider (none exists in
+        // non-prod yet), so this journey takes the supported GUEST path.
+        click(hasText("Skip for now"))
 
         // ---- 05 First-run tour, then skip it so Home is clean ----
         waitFor(hasText("Skip tour"), 30_000)

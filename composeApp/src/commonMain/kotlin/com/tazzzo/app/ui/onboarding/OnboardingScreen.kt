@@ -104,7 +104,7 @@ private val tileSize = 120.dp
  * content measures ~800dp, so the primary CTA is always scrollable into view —
  * including when the keyboard is up, because the band scrolls away with it.
  *
- * Demo auth: any 4-digit OTP verifies.
+ * Auth: real phone + 6-digit OTP via the shared AuthFlow.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,28 +127,12 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
     val app = LocalAppState.current
     val scope = rememberCoroutineScope()
 
-    var step by remember { mutableStateOf(1) }
-    var phone by remember { mutableStateOf("") }
-    var otp by remember { mutableStateOf("") }
-    var sending by remember { mutableStateOf(false) }
-    var verifying by remember { mutableStateOf(false) }
-    // Was a bare Boolean meaning "the server said the OTP was wrong". It now
-    // carries the message, because an unreachable auth service and a rejected
-    // OTP are different things and the customer must not be told they typed it
-    // wrong when the network failed. Null = no error.
-    var errorText by remember { mutableStateOf<String?>(null) }
-    var resendIn by remember { mutableStateOf(30) }
-
-    // Resend countdown: ticks once a second while the OTP step is showing.
-    // Tapping "Resend OTP" just resets [resendIn]; this loop keeps ticking.
-    LaunchedEffect(step) {
-        if (step != 2) return@LaunchedEffect
-        resendIn = 30
-        while (true) {
-            delay(1_000)
-            if (resendIn > 0) resendIn--
-        }
-    }
+    // One shared phone → OTP flow (also used by the Login route): real backend
+    // auth, six-digit code. See AuthFlow.
+    val flow = rememberAuthFlow(onDone = {
+        app.requestGuidedTourIfFirstTime()
+        app.goHome()
+    })
 
     // Decorative brand wall. Deliberately drawn from the bundled art table, not
     // from CatalogRepository: this is the pre-auth screen and it must render
@@ -294,218 +278,12 @@ private fun OnboardingContent(wallHeight: Dp, tileSize: Dp, compact: Boolean) {
             Spacer(Modifier.height(TazSpace.md))
 
             // -------------------------------------------------- 4. Phone / OTP
-            Crossfade(
-                targetState = step,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = TazSpace.xl)
-            ) { currentStep ->
-                if (currentStep == 1) {
-                    Column(Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = phone,
-                            onValueChange = { input -> phone = input.filter { it.isDigit() }.take(10) },
-                            modifier = Modifier.fillMaxWidth().height(TazSize.inputHeight),
-                            singleLine = true,
-                            shape = TazRadius.card,
-                            leadingIcon = { DialPrefix() },
-                            placeholder = {
-                                Text(
-                                    "Enter mobile number",
-                                    fontSize = TazType.bodySize,
-                                    color = TazColors.TextTertiary
-                                )
-                            },
-                            textStyle = TextStyle(
-                                fontSize = TazType.titleSize,
-                                fontWeight = TazType.titleWeight,
-                                color = TazColors.TextPrimary
-                            ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            colors = tazFieldColors()
-                        )
-                        // Only rendered when the OTP request actually failed.
-                        // Before this, a failed request silently did nothing and
-                        // the button sat on "Sending OTP…" forever.
-                        errorText?.let { message ->
-                            Spacer(Modifier.height(TazSpace.sm))
-                            Text(
-                                message,
-                                fontSize = TazType.captionSize,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TazColors.Danger,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        Spacer(Modifier.height(TazSpace.md))
-                        PillButton(
-                            text = "Continue",
-                            loading = sending,
-                            loadingText = "Sending OTP…",
-                            onClick = {
-                                if (!sending) {
-                                    scope.launch {
-                                        sending = true
-                                        errorText = null
-                                        try {
-                                            ServiceLocator.auth.requestOtp(phone)
-                                            otp = ""
-                                            step = 2
-                                        } catch (cancellation: CancellationException) {
-                                            throw cancellation
-                                        } catch (t: Throwable) {
-                                            // Do not advance to the OTP step for
-                                            // a code that was never sent.
-                                            errorText = t.toLoadError().message
-                                        } finally {
-                                            sending = false
-                                        }
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = phone.length == 10,
-                            disabledHint = "Enter your 10-digit mobile number to continue"
-                        )
-                    }
-                } else {
-                    Column(Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "OTP sent to +91 $phone",
-                                fontSize = TazType.captionSize,
-                                color = TazColors.TextSecondary
-                            )
-                            Spacer(Modifier.width(TazSpace.sm))
-                            Text(
-                                "Change",
-                                fontSize = TazType.captionSize,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TazColors.Green,
-                                modifier = Modifier
-                                    .clip(TazRadius.chip)
-                                    .tazPressable(onClick = { step = 1
-                                        otp = ""
-                                        errorText = null }, pressScale = TazPress.compact)
-                                    .padding(horizontal = TazSpace.xs, vertical = TazSpace.xxs)
-                            )
-                        }
-                        Spacer(Modifier.height(TazSpace.md))
-                        OutlinedTextField(
-                            value = otp,
-                            onValueChange = { input -> otp = input.filter { it.isDigit() }.take(4) },
-                            modifier = Modifier.fillMaxWidth().height(TazSize.inputHeight),
-                            singleLine = true,
-                            shape = TazRadius.card,
-                            placeholder = {
-                                // Demo shortcut copy renders only in demo builds.
-                                Text(
-                                    if (AppConfig.demoMode) "4-digit OTP (demo: any)"
-                                    else "Enter 4-digit OTP",
-                                    fontSize = TazType.bodySize,
-                                    color = TazColors.TextTertiary
-                                )
-                            },
-                            textStyle = TextStyle(
-                                fontSize = TazType.titleSize,
-                                fontWeight = TazType.titleWeight,
-                                color = TazColors.TextPrimary
-                            ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            colors = tazFieldColors()
-                        )
-                        errorText?.let { message ->
-                            Spacer(Modifier.height(TazSpace.sm))
-                            Text(
-                                message,
-                                fontSize = TazType.captionSize,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TazColors.Danger,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        Spacer(Modifier.height(TazSpace.sm))
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            if (resendIn > 0) {
-                                Text(
-                                    "Resend OTP in 0:" + resendIn.toString().padStart(2, '0'),
-                                    fontSize = TazType.captionSize,
-                                    color = TazColors.TextTertiary
-                                )
-                            } else {
-                                Box(
-                                    Modifier
-                                        .defaultMinSize(minHeight = TazSize.touchTarget)
-                                        .clip(TazRadius.chip)
-                                        .tazPressable(
-                                            pressScale = TazPress.compact,
-                                            haptic = TazHaptic.Tap,
-                                            onClick = {
-                                            scope.launch {
-                                                errorText = null
-                                                try {
-                                                    ServiceLocator.auth.requestOtp(phone)
-                                                } catch (cancellation: CancellationException) {
-                                                    throw cancellation
-                                                } catch (t: Throwable) {
-                                                    errorText = t.toLoadError().message
-                                                }
-                                            }
-                                            resendIn = 30
-                                            }
-                                        )
-                                        .padding(horizontal = TazSpace.md),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "Resend OTP",
-                                        fontSize = TazType.captionSize,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TazColors.Green
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(TazSpace.md))
-                        PillButton(
-                            text = "Verify & Start Shopping",
-                            loading = verifying,
-                            loadingText = "Verifying…",
-                            onClick = {
-                                if (!verifying) {
-                                    scope.launch {
-                                        verifying = true
-                                        errorText = null
-                                        try {
-                                            val u = ServiceLocator.auth.verifyOtp(phone, otp)
-                                            if (u != null) {
-                                                app.user = u
-                                                app.requestGuidedTourIfFirstTime()
-                                                app.goHome()
-                                            } else {
-                                                errorText = "Invalid OTP, try again"
-                                            }
-                                        } catch (cancellation: CancellationException) {
-                                            throw cancellation
-                                        } catch (t: Throwable) {
-                                            errorText = t.toLoadError().message
-                                        } finally {
-                                            verifying = false
-                                        }
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = otp.length == 4,
-                            disabledHint = "Enter the 4-digit OTP to continue"
-                        )
-                    }
-                }
-            }
+            AuthEntry(
+                flow = flow,
+                phoneCta = "Continue",
+                otpCta = "Verify & Start Shopping",
+                modifier = Modifier.padding(horizontal = TazSpace.xl)
+            )
 
             // -------------------------------------------------- 5. Guest entry
             Spacer(Modifier.height(TazSpace.xs))

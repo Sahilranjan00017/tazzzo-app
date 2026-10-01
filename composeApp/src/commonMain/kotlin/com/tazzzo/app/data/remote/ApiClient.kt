@@ -39,7 +39,14 @@ data class ApiRequest(
     /** Full header value, e.g. from [IfMatch.of]. */
     val ifMatch: String? = null,
     /** Validated against the backend's format when the call is made. */
-    val idempotencyKey: String? = null
+    val idempotencyKey: String? = null,
+    /**
+     * Explicit bearer token (logout). Overrides the token provider and is NEVER
+     * eligible for 401 recovery, so logout cannot loop through refresh.
+     */
+    val bearerToken: String? = null,
+    /** Set false for a call that must not trigger 401 recovery. */
+    val recoverOn401: Boolean = true
 )
 
 /** A decoded success. [etag] is surfaced because cart/address/profile versions ride on it. */
@@ -51,18 +58,23 @@ data class ApiResponse<out T>(val body: T, val status: Int, val etag: String?, v
  * Contract:
  *  - Success returns [ApiResponse]; every failure throws [ApiException] carrying
  *    a typed [ApiError]. Cancellation is never swallowed.
- *  - No automatic retries. Replaying a mutating call is a decision for the
- *    caller (with an idempotency key), never for the transport.
+ *  - No automatic retries, with ONE exception: an authenticated request that
+ *    gets a 401 asks [AuthRecovery] whether the session could be recovered and,
+ *    if so, is re-sent EXACTLY once with the new token. A 401 is rejected before
+ *    any handler runs, so nothing was applied and the replay is safe. A second
+ *    401, a non-401, or any unauthenticated/explicit-bearer call is never
+ *    retried. Replaying anything else is a decision for the caller.
  *  - Nothing is logged. No logging plugin is installed, so tokens, OTPs, phone
  *    numbers and addresses cannot reach a log from here.
  *  - `Authorization` is added only when the request is authenticated *and* the
  *    provider returns a non-blank token.
  *
- * Authentication, refresh and token storage are intentionally not here.
+ * Token storage and the refresh itself live in the auth session manager.
  */
 class ApiClient(
     private val baseUrl: String = AppEnvironment.gatewayBaseUrl,
     private val tokenProvider: AccessTokenProvider? = null,
+    private val recovery: AuthRecovery? = null,
     engine: HttpClientEngine? = null,
     val json: Json = defaultJson,
     connectTimeoutMs: Long = CONNECT_TIMEOUT_MS,
@@ -112,30 +124,16 @@ class ApiClient(
     /** Performs the call and throws [ApiException] for transport failures and non-2xx statuses. */
     private suspend fun send(request: ApiRequest): HttpResponse {
         request.idempotencyKey?.let { IdempotencyKey.require(it) }
-        val token = if (request.authenticated) tokenProvider?.accessToken()?.takeIf { it.isNotBlank() } else null
+        val explicit = request.bearerToken?.takeIf { it.isNotBlank() }
+        val token = explicit ?: if (request.authenticated) tokenProvider?.accessToken()?.takeIf { it.isNotBlank() } else null
 
-        val response = try {
-            client.request {
-                method = request.method
-                url(baseUrl)
-                url {
-                    appendPathSegments(request.path.trim('/').split('/'))
-                    request.query.forEach { (k, v) -> if (v != null) parameters.append(k, v) }
-                }
-                header(HttpHeaders.Accept, ContentType.Application.Json.toString())
-                if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
-                request.ifMatch?.let { header(HttpHeaders.IfMatch, it) }
-                request.idempotencyKey?.let { header("Idempotency-Key", it) }
-                if (request.body != null) {
-                    contentType(ContentType.Application.Json)
-                    setBody(request.body)
-                }
-            }
-        } catch (e: Throwable) {
-            // Ktor may surface a timeout as a CancellationException wrapping the
-            // timeout; only a cancellation with no timeout cause is the caller's.
-            if (e is CancellationException && !isTimeout(e)) throw e
-            throw ApiException(transportError(e), e)
+        var response = call(request, token)
+        val eligible = response.status.value == 401 && explicit == null && request.authenticated &&
+            request.recoverOn401 && recovery != null && token != null
+        if (eligible && recovery!!.recover(token!!)) {
+            // Exactly one replay. Whatever it returns is final.
+            val fresh = tokenProvider?.accessToken()?.takeIf { it.isNotBlank() }
+            response = call(request, fresh)
         }
 
         if (!response.status.isSuccess()) {
@@ -145,6 +143,30 @@ class ApiClient(
             )
         }
         return response
+    }
+
+    private suspend fun call(request: ApiRequest, token: String?): HttpResponse = try {
+        client.request {
+            method = request.method
+            url(baseUrl)
+            url {
+                appendPathSegments(request.path.trim('/').split('/'))
+                request.query.forEach { (k, v) -> if (v != null) parameters.append(k, v) }
+            }
+            header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+            if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+            request.ifMatch?.let { header(HttpHeaders.IfMatch, it) }
+            request.idempotencyKey?.let { header("Idempotency-Key", it) }
+            if (request.body != null) {
+                contentType(ContentType.Application.Json)
+                setBody(request.body)
+            }
+        }
+    } catch (e: Throwable) {
+        // Ktor may surface a timeout as a CancellationException wrapping the
+        // timeout; only a cancellation with no timeout cause is the caller's.
+        if (e is CancellationException && !isTimeout(e)) throw e
+        throw ApiException(transportError(e), e)
     }
 
     /** Releases the underlying engine. Call when the owning scope ends. */

@@ -165,6 +165,37 @@ class TazzzoAppState(
         UserProfile(name = "Guest", phone = "", isGuest = true, coinBalance = 40,
             address = "HSR Layout, Bengaluru")
     )
+    /**
+     * Whether a secure auth session exists. THIS, not `UserProfile.isGuest`, is
+     * the session authority; `user.isGuest` is kept in step with it.
+     */
+    var isAuthenticated by mutableStateOf(false)
+        private set
+
+    /** Called with the secure session's state at start-up and whenever it changes. */
+    fun applyAuthState(authenticated: Boolean) {
+        isAuthenticated = authenticated
+        _user.value = _user.value.copy(isGuest = !authenticated)
+    }
+
+    /**
+     * A sign-in just completed. No profile is fetched in this slice, so the
+     * profile stays neutral: no invented name, and the phone is NOT stored.
+     */
+    fun onSignedIn() {
+        applyAuthState(true)
+        user = user.copy(name = "", phone = "", isGuest = false)
+    }
+
+    /** Server revoke (best effort) + unconditional local sign-out. */
+    suspend fun logout(auth: com.tazzzo.app.data.auth.AuthRepository = ServiceLocator.auth) {
+        try {
+            auth.logout()
+        } finally {
+            markLoggedOut()
+        }
+    }
+
     var user: UserProfile
         get() = _user.value
         set(value) {
@@ -243,6 +274,7 @@ class TazzzoAppState(
     fun enterDemoHome() { store?.onboarded = true; resetTo(Screen.Home) }
 
     fun markLoggedOut() {
+        isAuthenticated = false
         store?.onboarded = false
         user = UserProfile(name = "Guest", phone = "", isGuest = true,
             coinBalance = user.coinBalance, address = user.address)
@@ -261,7 +293,8 @@ class TazzzoAppState(
     suspend fun restoreFromDisk() {
         val st = store ?: return
         st.loadSession()?.let {
-            _user.value = UserProfile(it.name, it.phone, it.isGuest, it.coinBalance, it.address)
+            // The secure session decides guest vs signed in, not what was saved.
+            _user.value = UserProfile(it.name, it.phone, !isAuthenticated, it.coinBalance, it.address)
         }
         st.loadMembership()?.let { membership = it }
         val searches = st.loadRecentSearches()
