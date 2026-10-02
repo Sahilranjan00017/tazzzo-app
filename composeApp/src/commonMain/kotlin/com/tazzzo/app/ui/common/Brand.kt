@@ -22,7 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -180,13 +180,16 @@ fun TazzzoPrimaryButton(
     val bg = if (tone == ButtonTone.Editorial) TazColors.BrandEditorial else TazColors.CreamStrong
     val fg = if (tone == ButtonTone.Editorial) TazColors.EditorialOnDark else TazColors.BrandEditorial
     val interactive = enabled && !loading
+    // One structurally constant modifier chain whatever the state: the dimming is a graphicsLayer that is ALWAYS present
+    // (alpha 1 or 0.5) and the fill is drawn inside it. A chain whose modifiers appear/disappear with `enabled`
+    // produced an unfilled button on the Login screen when the field became valid under the keyboard.
     Box(
         modifier
             .height(EDITORIAL_BUTTON_HEIGHT)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
             .clip(TazRadius.pill)
             .background(bg)
-            .alpha(if (enabled) 1f else 0.5f)
-            .tazPressable(onClick = onClick, enabled = interactive, pressScale = TazPress.control, shape = TazRadius.pill)
+            .tazPressable(onClick = onClick, enabled = interactive, pressScale = TazPress.control)
             .semantics { contentDescription = text }
             .padding(horizontal = TazSpace.xxl),
         contentAlignment = Alignment.Center

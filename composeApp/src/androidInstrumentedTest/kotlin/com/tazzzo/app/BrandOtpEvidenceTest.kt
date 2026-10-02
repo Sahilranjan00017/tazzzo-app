@@ -1,6 +1,7 @@
 package com.tazzzo.app
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,11 +14,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tazzzo.app.theme.TazColors
@@ -75,9 +76,50 @@ class BrandOtpEvidenceTest {
                 }
             }
         }
+        save("ui01_otp_harness.png")
+    }
+
+    /** Isolation case: the editorial button enabled vs disabled, both tones, with no keyboard or scroll involved. */
+    @Test fun primary_button_states() {
+        rule.setContent {
+            TazzzoTheme {
+                Column(Modifier.fillMaxSize().statusBarsPadding().padding(TazSpace.xxl), horizontalAlignment = Alignment.CenterHorizontally) {
+                    TazzzoPrimaryButton(text = "Enabled editorial", onClick = {}, modifier = Modifier.fillMaxWidth(), enabled = true)
+                    VSpace(TazSpace.lg)
+                    TazzzoPrimaryButton(text = "Disabled editorial", onClick = {}, modifier = Modifier.fillMaxWidth(), enabled = false)
+                    VSpace(TazSpace.lg)
+                    TazzzoPrimaryButton(text = "Loading", onClick = {}, modifier = Modifier.fillMaxWidth(), loading = true)
+                    VSpace(TazSpace.lg)
+                    Box(Modifier.fillMaxWidth().padding(TazSpace.lg).background(TazColors.BrandEditorial).padding(TazSpace.lg)) {
+                        TazzzoPrimaryButton(text = "Enabled cream", onClick = {}, modifier = Modifier.fillMaxWidth(), tone = ButtonTone.Cream, italic = true)
+                    }
+                }
+            }
+        }
+        save("ui01_button_states.png")
+    }
+
+    /** The REAL Login screen with a valid number typed (keyboard up): the Continue button must stay filled. */
+    @Test fun login_screen_with_valid_number() {
+        TestState.resetKeepRemote()
+        com.tazzzo.app.data.auth.AndroidAppContext.init(ApplicationProvider.getApplicationContext<android.content.Context>())
+        rule.setContent {
+            val app = androidx.compose.runtime.remember { TazzzoAppState() }
+            androidx.compose.runtime.CompositionLocalProvider(LocalAppState provides app) { TazzzoTheme { com.tazzzo.app.ui.onboarding.LoginScreen() } }
+        }
+        rule.onNodeWithContentDescription("Mobile number").performTextInput("9876543210")
         rule.waitForIdle()
-        val bmp = rule.onRoot().captureToImage().asAndroidBitmap()
-        val dir = File(ApplicationProvider.getApplicationContext<android.content.Context>().getExternalFilesDir(null), "evidence").apply { mkdirs() }
-        File(dir, "ui01_otp_harness.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        save("ui01_login_valid.png")
+        rule.onNodeWithContentDescription("Continue").assertIsEnabled()
+    }
+
+    private fun save(name: String) {
+        rule.waitForIdle()
+        Thread.sleep(600)
+        // UiAutomation screenshot: works on a headless/software-GPU emulator where PixelCopy does not.
+        val bmp = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        // App-internal files: survive until the app is uninstalled and can be pulled with `run-as`.
+        val dir = File(ApplicationProvider.getApplicationContext<android.content.Context>().filesDir, "evidence").apply { mkdirs() }
+        File(dir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }
