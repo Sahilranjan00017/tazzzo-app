@@ -130,7 +130,7 @@ fun ServerCart.toSummary(): CartSummaryView {
     return CartSummaryView(
         itemsLabel = if (itemCount == 1) "1 item" else "$itemCount items",
         subtotalLabel = subtotal.format(),
-        subtotalCaption = "Item subtotal. Final charges are confirmed when your order is placed.",
+        subtotalCaption = "Item subtotal. It isn't the final amount.",
         blockedLines = blocked,
         hasBlockedLines = blocked > 0
     )

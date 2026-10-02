@@ -266,7 +266,12 @@ private fun CartContent(
             val canCheckout = ServiceLocator.catalogCapabilities.checkoutIntegration && !summary.hasBlockedLines && !syncing && pending.isEmpty()
             PillButton(
                 text = if (summary.hasBlockedLines) "Resolve items to continue" else "Review checkout",
-                onClick = { ServiceLocator.checkoutQuote.enter(); app.navigate(Screen.Checkout) },
+                onClick = {
+                    // An unresolved order attempt must be checked first: never open a new quote beside it.
+                    val os = ServiceLocator.orderStore.state.value
+                    if (os !is com.tazzzo.app.data.order.OrderState.Placing && os !is com.tazzzo.app.data.order.OrderState.Ambiguous) ServiceLocator.checkoutQuote.enter()
+                    app.navigate(Screen.Checkout)
+                },
                 enabled = canCheckout, disabledHint = null, modifier = Modifier.fillMaxWidth()
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {

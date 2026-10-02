@@ -162,7 +162,8 @@ fun HelpScreen() {
                 // Arriving from an order carries its id, so Help can open on the
                 // order itself rather than asking a customer to describe the
                 // thing they just tapped.
-                app.helpOrderId?.let { OrderContextCard(it) }
+                // REMOTE has no order history to show: the mock order card is MOCK-only.
+                if (ServiceLocator.catalogMode != com.tazzzo.app.data.catalog.CatalogMode.REMOTE) app.helpOrderId?.let { OrderContextCard(it) }
 
                 // ---- help with an order: real destinations ------------------
                 Spacer(Modifier.height(TazSpace.lg))

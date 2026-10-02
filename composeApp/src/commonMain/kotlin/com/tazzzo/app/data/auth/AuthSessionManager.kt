@@ -17,6 +17,20 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+/**
+ * How a cold-start [AuthSessionManager.restore] ended. Callers that keep state across a restart (the pending order
+ * recovery record) must be able to tell these apart: "nothing was saved" and "the backend refused the credential" are not
+ * the same as "a session is here".
+ */
+enum class RestoreOutcome {
+    /** A session is held: restored as saved, or kept because a refresh failed transiently (offline, timeout, 5xx). */
+    Restored,
+    /** The secure store held no (readable) session. Not a logout and not a rejection: nothing is known either way. */
+    NoSession,
+    /** The stored credential was refreshed and DEFINITIVELY refused (401/400): the session was cleared. */
+    Rejected
+}
+
 /** The result of one refresh round, shared by every caller that waited on it. */
 enum class RefreshOutcome {
     /** A newer token is available (this call rotated it, or someone else already had). */
@@ -71,10 +85,13 @@ class AuthSessionManager(
     private fun isStale(t: StoredTokens) = nowMs() >= t.accessExpiresAtMs - refreshMarginMs
 
     /** Cold start: load the secure session; refresh silently if it is (nearly) expired. */
-    suspend fun restore() {
+    suspend fun restore(): RestoreOutcome {
         val saved = runCatching { store.load() }.getOrNull()
         tokens.value = saved
-        if (saved != null && isStale(saved)) refreshShared(saved.accessToken)
+        if (saved == null) return RestoreOutcome.NoSession
+        if (isStale(saved)) refreshShared(saved.accessToken)
+        // A transient refresh failure keeps the tokens (Restored); only a definitive refusal clears them (Rejected).
+        return if (tokens.value != null) RestoreOutcome.Restored else RestoreOutcome.Rejected
     }
 
     /** Exchanges a verified one-time grant for a session and persists it. */

@@ -83,12 +83,13 @@ fun AccountTabContent() {
 
     // Secondary data: each drives one chip. If a load fails the chip is simply
     // absent — a count nobody can verify must never be guessed at.
-    val orders = rememberLoad { ServiceLocator.orders.getOrders() }
-    // REMOTE: the count comes from the real AddressBook (in memory); the mock list is never read.
+    // REMOTE: orders, coins and Club standing are NOT shown from mock data (there is no history/coins/Club contract yet);
+    // the address count comes from the real AddressBook (in memory). The mock lists are never read.
     val remote = ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE
+    val orders = if (remote) null else rememberLoad { ServiceLocator.orders.getOrders() }
     val mockAddresses = if (remote) null else rememberLoad { ServiceLocator.addresses.getAddresses() }
     val bookState = if (remote) ServiceLocator.addressBook.state.collectAsState().value else null
-    val orderList = (orders.state as? UiState.Success)?.data
+    val orderList = (orders?.state as? UiState.Success)?.data
     // Null means "say nothing": either still loading, or there are no orders at
     // all. "All delivered" to somebody who has never ordered is wrong copy, not
     // a reassuring one.
@@ -139,13 +140,15 @@ fun AccountTabContent() {
         }
         Spacer(Modifier.height(TazSpace.md))
 
-        CoinBalanceCard()
-        Spacer(Modifier.height(TazSpace.md))
+        if (!remote) {
+            CoinBalanceCard()
+            Spacer(Modifier.height(TazSpace.md))
+        }
 
         // Club standing, for members only: what they saved and how far the next
         // milestone is. The strongest thing this screen can say to someone who
         // paid ₹99 — and meaningless to anyone who has not.
-        if (app.isClubMember) {
+        if (!remote && app.isClubMember) {
             com.tazzzo.app.ui.club.ClubProgressCard(
                 app.membership,
                 Modifier.tazPressableCard(onClick = { app.navigate(Screen.Club) }, shape = TazRadius.card)
@@ -156,6 +159,7 @@ fun AccountTabContent() {
         // ---- preferences & perks -----------------------------------------
         SectionLabel("Preferences & perks")
         TazGroupedCard {
+            if (!remote) {
             TazListRow(
                 icon = TazIcons.Coin,
                 title = MembershipConfig.plan.name,
@@ -167,6 +171,7 @@ fun AccountTabContent() {
                 onClick = { app.navigate(Screen.Club) }
             )
             TazRowDivider()
+            }
             TazListRow(
                 icon = TazIcons.Bell,
                 title = "Notifications",

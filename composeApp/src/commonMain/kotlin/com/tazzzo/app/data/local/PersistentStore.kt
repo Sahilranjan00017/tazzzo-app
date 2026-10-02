@@ -212,6 +212,31 @@ class PersistentStore(provided: Settings? = null) {
         get() = settings.getStringOrNull(KEY_LAUNCH_PIN)
         set(v) { if (v == null) settings.remove(KEY_LAUNCH_PIN) else settings.putString(KEY_LAUNCH_PIN, v) }
 
+    // ---- pending order attempt (PR-08) --------------------------------------
+
+    @Serializable
+    private data class PendingOrder(val v: Int, val quoteId: String)
+
+    /**
+     * The ONE recovery handle for an order that may have been placed but never answered: the opaque quote id, nothing else
+     * (no items, quantities, address, phone, prices, payment data or tokens). It exists only while an attempt is unresolved
+     * and is deleted the moment the outcome is known or the customer logs out.
+     */
+    fun savePendingOrderQuote(quoteId: String) =
+        settings.putString(KEY_PENDING_ORDER, json.encodeToString(PendingOrder(PENDING_ORDER_VERSION, quoteId)))
+
+    fun loadPendingOrderQuote(): String? {
+        val raw = settings.getStringOrNull(KEY_PENDING_ORDER) ?: return null
+        val rec = runCatching { json.decodeFromString<PendingOrder>(raw) }.getOrNull()
+        if (rec == null || rec.v != PENDING_ORDER_VERSION || !PENDING_QUOTE.matches(rec.quoteId)) {
+            settings.remove(KEY_PENDING_ORDER)                    // unreadable or unknown version: never guessed at
+            return null
+        }
+        return rec.quoteId
+    }
+
+    fun clearPendingOrderQuote() = settings.remove(KEY_PENDING_ORDER)
+
     // ---- helpers -----------------------------------------------------------
 
     private inline fun <reified T> decodeList(key: String): List<T> =
@@ -234,5 +259,8 @@ class PersistentStore(provided: Settings? = null) {
         const val KEY_AUTH_INSTALL = "tazzzo.authInstall.v1"
         const val KEY_INSTALLATION_ID = "tazzzo.installationId.v1"
         const val KEY_LAUNCH_PIN = "tazzzo.launchPin.v1"
+        const val KEY_PENDING_ORDER = "tazzzo.pending-order.v1"
+        const val PENDING_ORDER_VERSION = 1
+        val PENDING_QUOTE = Regex("^CHKQ_[A-Za-z0-9_-]{6,64}$")
     }
 }

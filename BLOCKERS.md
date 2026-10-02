@@ -22,6 +22,11 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
       "BACKEND CONTRACT / ENVIRONMENT REQUEST" in the PR-03A description).
       Catalogue, stock, serviceability, orders, payments all mocked. Contracts: docs/BACKEND_CONTRACTS.md.
 - [ ] Real payments: COD only; UPI/card disabled placeholders.
+- [ ] ORDER PAYABLE CONTRACT — LAUNCH BLOCKER (PR-08, 2026-10-02): the real COD order path is implemented and tested, but
+      production placement stays OFF (`orderIntegration = false` for REMOTE; only a debug build can enable it through
+      `OrderLaunchGate`). The backend order exposes only an item subtotal — no delivery/handling/platform fee, tax, benefit
+      discount, COD charge or final payable — so a customer cannot be shown an authoritative amount due. Resolution: the backend
+      defines and returns the customer-visible amount due (or contracts that every component is zero), then flip the capability.
 - [ ] D4 delivery promise unapproved — app ships neutral "Fast delivery" copy.
 - [ ] D5 coin economics unapproved — current values are dev config only.
 

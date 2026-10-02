@@ -22,6 +22,10 @@ object AnalyticsEvents {
     const val ORDER_SUCCESS = "order_success"
     const val ORDER_FAILURE = "order_failure"
     const val REORDER = "reorder"
+    // REMOTE order lifecycle (PR-08): outcome only. NEVER carries an order id, quote id, items, address or any amount.
+    const val ORDER_PLACE_STARTED = "order_place_started"
+    const val ORDER_PLACE_SUCCEEDED = "order_place_succeeded"
+    const val ORDER_PLACE_FAILED = "order_place_failed"
     const val COIN_VIEW = "coin_view"
 
     // ---- Tazzzo Club membership ------------------------------------------

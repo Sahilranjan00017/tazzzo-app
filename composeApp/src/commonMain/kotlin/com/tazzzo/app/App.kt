@@ -53,7 +53,7 @@ fun App() {
         PersistenceRunner()
         AuthSessionRunner(appState)
         CatalogRunner()
-        if (ServiceLocator.catalogMode == CatalogMode.REMOTE) com.tazzzo.app.ui.cart.CartNoticeHost()
+        if (ServiceLocator.catalogMode == CatalogMode.REMOTE) { com.tazzzo.app.ui.cart.CartNoticeHost(); OrderStateRunner(appState) }
         DemoTourRunner()
         TazzzoTheme {
             Surface(Modifier.fillMaxSize().background(TazColors.Cream), color = TazColors.Cream) {
@@ -108,18 +108,18 @@ fun App() {
                             else if (ServiceLocator.catalogCapabilities.checkoutIntegration) com.tazzzo.app.ui.checkout.RemoteCheckoutScreen()
                             else com.tazzzo.app.ui.catalog.UnavailableSurface("Checkout")
                         is Screen.OrderSuccess ->
-                            // REMOTE has no order yet (PR-08): this screen reads a MOCK order and must never render there.
-                            if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Orders") else OrderSuccessScreen(screen.orderId)
-                        is Screen.Orders -> OrdersScreen()
-                        is Screen.Coins -> CoinsScreen()
+                            // REMOTE: the confirmation is built ONLY from the real backend order (the mock screen reads `lastOrder`).
+                            if (remoteCatalog) com.tazzzo.app.ui.order.RemoteOrderSuccessScreen(screen.orderId) else OrderSuccessScreen(screen.orderId)
+                        is Screen.Orders -> if (remoteCatalog) com.tazzzo.app.ui.order.RemoteOrdersScreen() else OrdersScreen()
+                        is Screen.Coins -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Coins") else CoinsScreen()
                         is Screen.Help -> HelpScreen()
                         is Screen.Addresses -> if (remoteCatalog) RemoteAddressesScreen() else AddressesScreen()
                         is Screen.AddressForm -> RemoteAddressFormScreen(screen.addressId)
                         is Screen.MasterList -> if (ServiceLocator.catalogCapabilities.search) MasterListScreen() else UnavailableSurface("Shopping list")
                         is Screen.About -> AboutScreen()
-                        is Screen.Club -> ClubScreen()
-                        is Screen.ClubCheckout -> ClubCheckoutScreen()
-                        is Screen.OrderDetail -> OrderDetailScreen(screen.orderId)
+                        is Screen.Club -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubScreen()
+                        is Screen.ClubCheckout -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubCheckoutScreen()
+                        is Screen.OrderDetail -> if (remoteCatalog) com.tazzzo.app.ui.order.RemoteOrderDetailScreen(screen.orderId) else OrderDetailScreen(screen.orderId)
                     }
                     }
                 }
@@ -136,13 +136,19 @@ fun App() {
 private fun AuthSessionRunner(app: TazzzoAppState) {
     LaunchedEffect(Unit) {
         val session = ServiceLocator.authSession
-        session.restore()
         if (ServiceLocator.catalogMode == CatalogMode.REMOTE) {
-            // Signed in -> load addresses; signed out / rejected -> wipe them and reset the location to 560047.
-            com.tazzzo.app.data.address.SessionLocationBinding(
-                ServiceLocator.authScope, session.active, ServiceLocator.addressBook, ServiceLocator.deliveryLocation
-            ).start(initiallyAuthenticated = session.isAuthenticated)
-            ServiceLocator.startCartBinding()
+            // Restore the secure session, then start the bindings knowing whether one exists, then recover a pending order:
+            // one automatic reconciliation if restored, deletion only if the credential was definitively refused. A session that
+            // is merely absent/not-yet-restored is never treated as a logout.
+            com.tazzzo.app.data.order.restoreSessionAndRecoverOrders(session, ServiceLocator.orderStore) { initiallyAuthenticated ->
+                // Signed in -> load addresses; signed out / rejected -> wipe them and reset the location to 560047.
+                com.tazzzo.app.data.address.SessionLocationBinding(
+                    ServiceLocator.authScope, session.active, ServiceLocator.addressBook, ServiceLocator.deliveryLocation
+                ).start(initiallyAuthenticated = initiallyAuthenticated)
+                ServiceLocator.startCartBinding(initiallyAuthenticated)
+            }
+        } else {
+            session.restore()
         }
         session.active.collect { app.applyAuthState(it) }
     }
@@ -164,5 +170,24 @@ internal fun applyDevCatalogMode() {
 private fun CatalogRunner() {
     LaunchedEffect(Unit) {
         if (ServiceLocator.catalogMode == CatalogMode.REMOTE) ServiceLocator.launchContext.refresh()
+    }
+}
+
+/**
+ * REMOTE: turns order state changes into navigation. A placed order opens the real confirmation (home first, so Back never
+ * lands on a spent checkout); an unresolved attempt (e.g. after a restart) brings the customer to "Check order".
+ */
+@Composable
+private fun OrderStateRunner(app: TazzzoAppState) {
+    val state by ServiceLocator.orderStore.state.collectAsState()
+    LaunchedEffect(state) {
+        when (val s = state) {
+            is com.tazzzo.app.data.order.OrderState.Placed -> {
+                val target = Screen.OrderSuccess(s.order.orderId)
+                if (app.current != target) { app.goHome(); app.navigate(target) }
+            }
+            is com.tazzzo.app.data.order.OrderState.Ambiguous -> if (app.current !is Screen.Checkout) app.navigate(Screen.Checkout)
+            else -> Unit
+        }
     }
 }
