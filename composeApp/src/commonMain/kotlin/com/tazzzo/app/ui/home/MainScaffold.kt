@@ -37,6 +37,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -127,9 +128,14 @@ private fun BoxScope.TransientMessageToast() {
     // bar when there is one. Derived from the same tokens those use, so the
     // three never drift apart.
     val app2 = LocalAppState.current
+    // The SERVER cart's count in REMOTE (observed, so the toast moves with the bar), the local demo cart in MOCK.
+    val cartBarUp = if (com.tazzzo.app.data.repository.ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE) {
+        val st by com.tazzzo.app.data.repository.ServiceLocator.cart.state.collectAsState()
+        ((st as? com.tazzzo.app.data.cart.CartState.Loaded)?.cart?.itemCount ?: 0) > 0
+    } else app2.cartItemCount > 0
     val cartBarBand = 64.dp + TazSpace.md * 2          // bar height + its vertical padding
     val bottomInset = TazSize.navBarHeight + TazSpace.lg +
-        (if (app2.cartItemCount > 0) cartBarBand else 0.dp)
+        (if (cartBarUp) cartBarBand else 0.dp)
     AnimatedVisibility(
         visible = message != null,
         modifier = Modifier.align(Alignment.BottomCenter),
@@ -259,3 +265,4 @@ private fun BottomNavBar() {
         }
     }
 }
+

@@ -524,3 +524,45 @@ automated PR-05 work; blocking for launch sign-off. No address seed data or feat
 content-matching cannot prove whether the first request succeeded. Please support an `Idempotency-Key` on create so a client
 can retry safely. Not a PR-05 blocker; desirable before launch hardening. Until then the app never retries a create
 automatically: after an ambiguous failure it refetches the list and lets the customer decide.
+
+---
+
+## 8. Server cart (PR-06)
+
+Backend contract used (`/v1/customer/cart`, bearer; source: backend `origin/main`, read-only):
+
+| Operation | Route | If-Match | Success |
+|---|---|---|---|
+| read | `GET /v1/customer/cart[?addressId=]` | – | 200 + `ETag: "cart-<n>"`, body `version` |
+| set quantity | `PUT …/items/{skuId}` body `{"quantity": N}` (N ≥ 1, **absolute**) | **required** `"cart-<version>"` | 200 full cart |
+| remove line | `DELETE …/items/{skuId}` | **required** | 200 full cart |
+| clear | `DELETE …/cart` | **required** | 200 full cart |
+
+Errors: `400` quantity not accepted · `404` unknown SKU / address · `409 CART_ITEM_LIMIT_REACHED` · `412` stale version ·
+`428` missing If-Match (client bug) · `503` unavailable. Line issues (each makes the line not buyable): `PRODUCT_UNAVAILABLE`,
+`PRICE_UNAVAILABLE`, `LOCATION_REQUIRED`, `UNSERVICEABLE`, `OUT_OF_STOCK`, `STOCK_UNKNOWN`, `INSUFFICIENT_STOCK`,
+`ENRICHMENT_UNAVAILABLE`; an unknown code is kept and also blocks. Identity is `skuId` — **the cart exposes no `productId`**.
+`subtotalPaise` is the sum of current line prices: not a payable total (no delivery, tax, offers). The cart reserves no stock,
+freezes no price, guarantees no serviceability. `addressId` is the only location input.
+
+App behaviour: the cart is **in memory only** (`CartStore`); the backend owns it and every response replaces the held cart.
+One mutation is on the wire at a time; rapid taps move a pending absolute target per SKU (the + / − show it immediately),
+a remove replaces a queued quantity, and different SKUs queue along one version chain. The version always comes from the
+latest response (never `current + 1`; every GET replaces it too). `412` → pending intent is discarded, the cart re-read,
+"Your cart changed. Review it and try again.", nothing replayed. A timeout / lost connection / 5xx is **never re-sent**: the cart
+is re-read and the change counts as done only if it already shows the intended absolute state. Logout / rejected session
+forgets the local copy and never clears the server cart. Login does not replay an Add. The app never sends a PIN, coordinates
+or fulfillment id to the cart. The hidden server per-line cap (20) is not hard-coded: "maximum" is only said when the cart
+itself shows the server's inventory maximum reached. REMOTE checkout stays off (`checkoutIntegration = false`): a server cart
+never reaches the mock checkout, which now refuses in REMOTE mode; the legacy local cart is purged, not migrated.
+
+**BACKEND CONTRACT / ENVIRONMENT REQUEST (cart):** real-environment sign-off needs the same auth path, token keys and service
+areas as §7, plus a SKU that is in stock and priced at a serviceable test address (and one out-of-stock SKU) to see the
+issue codes end to end. Not blocking for automated PR-06 work; blocking for launch sign-off.
+
+**BACKEND CONTRACT IMPROVEMENT REQUEST — CART PRODUCT NAVIGATION IDENTITY:** cart items carry `skuId` but no `productId`,
+and the PDP route is keyed by `productId`; the app deliberately does not assume `skuId == productId`, so a cart row does not
+open its product page. Please add `productId` to cart items (or support a PDP lookup by `skuId`) so the row can navigate.
+
+**BACKEND CONTRACT IMPROVEMENT REQUEST — CART MUTATION IDEMPOTENCY:** cart writes have no `Idempotency-Key`. Absolute
+PUT / DELETE make reconciliation safe today, but a key would let a client retry an ambiguous write directly.

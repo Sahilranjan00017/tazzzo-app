@@ -53,6 +53,7 @@ fun App() {
         PersistenceRunner()
         AuthSessionRunner(appState)
         CatalogRunner()
+        if (ServiceLocator.catalogMode == CatalogMode.REMOTE) com.tazzzo.app.ui.cart.CartNoticeHost()
         DemoTourRunner()
         TazzzoTheme {
             Surface(Modifier.fillMaxSize().background(TazColors.Cream), color = TazColors.Cream) {
@@ -99,7 +100,8 @@ fun App() {
                             if (remoteCatalog) RemoteProductDetailScreen(screen.productId)
                             else ProductDetailScreen(screen.productId)
                         is Screen.Search -> if (ServiceLocator.catalogCapabilities.search) SearchScreen() else UnavailableSurface("Search")
-                        is Screen.Cart -> CartScreen()
+                        is Screen.Cart ->
+                            if (ServiceLocator.catalogMode == CatalogMode.REMOTE) com.tazzzo.app.ui.cart.RemoteCartScreen() else CartScreen()
                         is Screen.Checkout -> CheckoutScreen()
                         is Screen.OrderSuccess -> OrderSuccessScreen(screen.orderId)
                         is Screen.Orders -> OrdersScreen()
@@ -134,6 +136,7 @@ private fun AuthSessionRunner(app: TazzzoAppState) {
             com.tazzzo.app.data.address.SessionLocationBinding(
                 ServiceLocator.authScope, session.active, ServiceLocator.addressBook, ServiceLocator.deliveryLocation
             ).start(initiallyAuthenticated = session.isAuthenticated)
+            ServiceLocator.startCartBinding()
         }
         session.active.collect { app.applyAuthState(it) }
     }

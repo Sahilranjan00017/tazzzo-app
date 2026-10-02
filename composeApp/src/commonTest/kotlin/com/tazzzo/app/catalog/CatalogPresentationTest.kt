@@ -121,23 +121,23 @@ class CatalogPresentationTest {
         assertEquals(PurchaseAction.Reason.PriceUnavailable, assertIs<PurchaseAction.Disabled>(a).reason)
     }
 
-    @Test fun inRemoteModeNoRealProductEverGetsAnEnabledPurchaseAction() {
-        val stocks = StockState.entries
-        for (stock in stocks) for (buyable in listOf(true, false)) for (price in listOf<Money?>(null, Money.ofPaise(4_950), Money.ZERO))
+    @Test fun inRemoteModeEligibilityIsPriceAndTheServersBuyableOnly() {
+        for (stock in StockState.entries) for (buyable in listOf(true, false)) for (price in listOf<Money?>(null, Money.ofPaise(4_950), Money.ZERO))
             for (serviceable in listOf<Boolean?>(null, true, false)) {
                 val a = purchaseAction(cp(price = price, stock = stock, buyable = buyable, serviceable = serviceable), remote)
-                assertIs<PurchaseAction.Disabled>(a, "stock=$stock buyable=$buyable price=$price")
+                if (price != null && buyable) assertIs<PurchaseAction.Enabled>(a, "stock=$stock serviceable=$serviceable")
+                else assertIs<PurchaseAction.Disabled>(a, "stock=$stock buyable=$buyable price=$price")
             }
     }
 
-    @Test fun aBuyableRemoteProductIsDisabledOnlyBecauseThereIsNoServerCart() {
-        val a = assertIs<PurchaseAction.Disabled>(purchaseAction(cp(buyable = true), remote))
+    @Test fun aBuyableProductIsDisabledWhenTheCatalogueHasNoCartIntegration() {
+        val a = assertIs<PurchaseAction.Disabled>(purchaseAction(cp(buyable = true), remote.copy(cartIntegration = false)))
         assertEquals(PurchaseAction.Reason.CartNotAvailable, a.reason)
-        assertEquals("Ordering isn't available yet", a.label)
     }
 
-    @Test fun theCartFlagIsOffForRemoteAndTheRemoteCatalogueEnablesNothingElse() {
-        assertFalse(remote.cartIntegration)
+    @Test fun theRemoteCatalogueHasACartButNoCheckoutAndNothingElse() {
+        assertTrue(remote.cartIntegration)
+        assertFalse(remote.checkoutIntegration)
         assertFalse(remote.search || remote.deals || remote.bestsellers || remote.banners || remote.counts || remote.sorting)
     }
 

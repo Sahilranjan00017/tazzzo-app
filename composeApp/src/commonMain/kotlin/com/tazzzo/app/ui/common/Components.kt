@@ -1,6 +1,7 @@
 package com.tazzzo.app.ui.common
 
 import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.ui.cart.RemoteCartBar
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
@@ -786,7 +787,7 @@ fun QuantityStepper(product: Product, modifier: Modifier = Modifier) {
  * The extra 4dp is taken outside the drawn pill, so nothing moves on screen.
  */
 @Composable
-private fun StepperTouchTarget(
+internal fun StepperTouchTarget(
     contentDescription: String,
     onClick: () -> Unit,
     content: @Composable () -> Unit
@@ -1041,6 +1042,11 @@ fun ProductRail(title: String, products: List<Product>, actionLabel: String? = n
  */
 @Composable
 fun BoxScope.CartBar(aboveNav: Boolean = false) {
+    // REMOTE: the bar shows the SERVER cart. The local cart (below) is MOCK-only demo state.
+    if (com.tazzzo.app.data.repository.ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE) {
+        RemoteCartBar(aboveNav)
+        return
+    }
     val app = LocalAppState.current
     val count = app.cartItemCount
     AnimatedVisibility(

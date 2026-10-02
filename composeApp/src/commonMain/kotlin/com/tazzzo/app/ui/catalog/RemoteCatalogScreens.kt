@@ -356,7 +356,7 @@ fun RemoteProductCard(product: CatalogProduct, onClick: () -> Unit) {
             Text(product.name, fontSize = TazType.productNameSize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             PriceLine(product, compact = true)
             StockText(product)
-            if (action is PurchaseAction.Disabled) DisabledPurchase(action.label, compact = true)
+            com.tazzzo.app.ui.cart.RemoteAddControl(product)
         }
     }
 }
@@ -394,7 +394,7 @@ fun RemoteProductDetailScreen(productId: String) {
                         Text(p.name, fontSize = TazType.h2Size, fontWeight = TazType.h2Weight, color = TazColors.TextPrimary)
                         PriceLine(p, compact = false)
                         StockText(p)
-                        if (action is PurchaseAction.Disabled) DisabledPurchase(action.label, compact = false)
+                        com.tazzzo.app.ui.cart.RemoteAddControl(p)
                         val attrs = s.detail.attributes.mapNotNull { a -> a.displayValue()?.let { a.label to it } }
                         if (attrs.isNotEmpty()) {
                             Column(Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface).padding(TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
@@ -447,19 +447,6 @@ private fun StockText(p: CatalogProduct) {
         StockTone.Unknown -> TazColors.TextTertiary
     }
     Text(l.text, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = ink)
-}
-
-/** Neutral, non-interactive: a real product never reaches the local/mock cart. */
-@Composable
-private fun DisabledPurchase(label: String, compact: Boolean) {
-    Box(
-        Modifier.fillMaxWidth().clip(TazRadius.chip).background(TazColors.SurfaceSunken)
-            .padding(vertical = if (compact) TazSpace.xs else TazSpace.md, horizontal = TazSpace.sm)
-            .semantics { disabled(); contentDescription = label },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(label, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.TextTertiary, textAlign = TextAlign.Center)
-    }
 }
 
 /** A surface that has no backend source in REMOTE mode (search, master list). Never fed from mock data. */

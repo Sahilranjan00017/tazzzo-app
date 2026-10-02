@@ -113,7 +113,7 @@ fun CatalogProduct.discountPercentLabel(): String? = discountPercent?.takeIf { i
 fun CatalogProduct.savingLabel(): String? = discountAmount?.takeIf { it.isPositive }?.let { "You save ${it.format()}" }
 
 sealed interface PurchaseAction {
-    /** Reserved for the real server-cart PR; unreachable while `cartIntegration` is false. */
+    /** The product may be added to the cart of the active catalogue (server cart in REMOTE). */
     data object Enabled : PurchaseAction
 
     /** A neutral, non-interactive action. [label] is the customer copy. */
@@ -126,14 +126,13 @@ sealed interface PurchaseAction {
  * The only place purchase eligibility is decided.
  *  1. no price -> nothing to buy;
  *  2. `buyable == false` (the server's word) -> unavailable;
- *  3. no server cart yet -> a real product must NOT enter the local/mock cart, so it is disabled
- *     even when the server says buyable.
+ *  3. the catalogue has no cart integration -> disabled even when the server says buyable.
  * Stock state is deliberately not consulted.
  */
 fun purchaseAction(product: CatalogProduct, caps: CatalogCapabilities): PurchaseAction = when {
     product.sellingPrice == null -> PurchaseAction.Disabled(PurchaseAction.Reason.PriceUnavailable, "Price unavailable")
     !product.buyable -> PurchaseAction.Disabled(PurchaseAction.Reason.NotBuyable, "Currently unavailable")
-    !caps.cartIntegration -> PurchaseAction.Disabled(PurchaseAction.Reason.CartNotAvailable, "Ordering isn't available yet")
+    !caps.cartIntegration -> PurchaseAction.Disabled(PurchaseAction.Reason.CartNotAvailable, "Cart isn't available")
     else -> PurchaseAction.Enabled
 }
 
