@@ -107,14 +107,24 @@ fun RemoteOrderDetailScreen(orderId: String) {
  * any, clearly labelled, and otherwise says history isn't available yet.
  */
 @Composable
-fun RemoteOrdersScreen() {
+fun RemoteOrdersScreen() = RemoteOrdersContent(inTab = false)
+
+/**
+ * The Orders surface, as the ORDERS tab ([inTab]) or as a pushed route. Truthful: there is no history endpoint, so the
+ * empty state says so; the only order it can show is the one placed in this session.
+ */
+@Composable
+fun RemoteOrdersContent(inTab: Boolean) {
     val app = LocalAppState.current
     val recent by ServiceLocator.orderStore.recent.collectAsState()
     Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
-        TazTopBar(title = "Orders", onBack = { app.back() })
+        if (inTab) TazTopBar(title = "Orders") else TazTopBar(title = "Orders", onBack = { app.back() })
         val order = recent
         if (order == null) {
-            EmptyState("📦", "Order history isn't available yet", "We're working on it.", "Go back", onAction = { app.back() })
+            EmptyState(
+                "📦", com.tazzzo.app.ui.home.HomeCopy.ORDERS_UNAVAILABLE_TITLE, com.tazzzo.app.ui.home.HomeCopy.ORDERS_UNAVAILABLE_BODY,
+                com.tazzzo.app.ui.home.HomeCopy.CONTINUE_SHOPPING, onAction = { if (inTab) app.homeTab = com.tazzzo.app.HomeTab.HOME else app.goHome() }
+            )
         } else {
             val v = order.view()
             Column(Modifier.fillMaxSize().padding(TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {

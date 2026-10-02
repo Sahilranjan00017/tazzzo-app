@@ -131,10 +131,10 @@ fun DemoTourRunner() {
         delay(2_500)                                    // t≈36.5s search screen
 
         app.resetTo(Screen.Home)
-        app.homeTab = HomeTab.CATEGORIES
+        app.homeTab = HomeTab.SHOP
         delay(2_500)                                    // t≈39s all categories
 
-        app.homeTab = HomeTab.ACCOUNT
+        app.homeTab = HomeTab.PROFILE
         delay(2_500)                                    // t≈41.5s account menu
 
         app.homeTab = HomeTab.HOME                      // t≈44s rest on home

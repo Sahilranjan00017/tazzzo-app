@@ -195,7 +195,9 @@ object TazSize {
     val buttonHeightSm: Dp = 40.dp
     val inputHeight: Dp = 54.dp
     val chipHeight: Dp = 36.dp
-    val navBarHeight: Dp = 62.dp
+    val navBarHeight: Dp = 64.dp
+    /** Room a scrolling tab leaves at the bottom for the floating navigation capsule (height + margins). */
+    val floatingNavClearance: Dp = 100.dp
 
     /**
      * Width of the quantity stepper when it sits BESIDE content rather than

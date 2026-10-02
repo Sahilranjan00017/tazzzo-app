@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 class GoHomeTest {
     @Test fun goHome_resets_the_selected_tab_not_only_the_back_stack() {
         val app = TazzzoAppState(store = null)
-        app.homeTab = HomeTab.ACCOUNT
+        app.homeTab = HomeTab.PROFILE
         app.navigate(Screen.Club); app.navigate(Screen.ClubCheckout)
         app.goHome()
         assertEquals(HomeTab.HOME, app.homeTab)
@@ -16,8 +16,8 @@ class GoHomeTest {
 
     @Test fun resetTo_alone_leaves_the_tab_untouched_which_is_why_goHome_exists() {
         val app = TazzzoAppState(store = null)
-        app.homeTab = HomeTab.ACCOUNT
+        app.homeTab = HomeTab.PROFILE
         app.resetTo(Screen.Home)
-        assertEquals(HomeTab.ACCOUNT, app.homeTab)
+        assertEquals(HomeTab.PROFILE, app.homeTab)
     }
 }

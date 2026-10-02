@@ -396,7 +396,7 @@ private fun HomeHeader() {
                     .size(TazSize.avatar)
                     .clip(CircleShape)
                     .background(TazColors.GreenSoft)
-                    .tazPressable(onClick = { app.homeTab = HomeTab.ACCOUNT }, pressScale = TazPress.compact),
+                    .tazPressable(onClick = { app.homeTab = HomeTab.PROFILE }, pressScale = TazPress.compact),
                 contentAlignment = Alignment.Center
             ) {
                 TazIcon(
@@ -491,7 +491,7 @@ private fun BannerCarousel(banners: List<PromoBanner>) {
         ) { page ->
             val onClick: () -> Unit = when (page) {
                 2 -> { { app.navigate(Screen.Coins) } }
-                else -> { { app.homeTab = HomeTab.CATEGORIES } }
+                else -> { { app.homeTab = HomeTab.SHOP } }
             }
             Box(
                 // Banners are large surfaces, so the scale is gentle and a
