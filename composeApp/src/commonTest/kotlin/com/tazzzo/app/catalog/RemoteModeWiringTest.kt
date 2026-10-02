@@ -87,7 +87,7 @@ class RemoteModeWiringTest {
         val c = CatalogCapabilities.forMode(CatalogMode.REMOTE)
         assertFalse(c.search); assertFalse(c.deals); assertFalse(c.bestsellers); assertFalse(c.banners)
         assertFalse(c.counts); assertFalse(c.sorting)
-        assertTrue(c.cartIntegration); assertFalse(c.checkoutIntegration)
+        assertTrue(c.cartIntegration); assertTrue(c.checkoutIntegration); assertFalse(c.orderIntegration)
     }
 
     // ---- the cart guard ------------------------------------------------------------------------------------------------------

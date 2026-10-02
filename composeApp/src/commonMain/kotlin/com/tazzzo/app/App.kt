@@ -102,8 +102,14 @@ fun App() {
                         is Screen.Search -> if (ServiceLocator.catalogCapabilities.search) SearchScreen() else UnavailableSurface("Search")
                         is Screen.Cart ->
                             if (ServiceLocator.catalogMode == CatalogMode.REMOTE) com.tazzzo.app.ui.cart.RemoteCartScreen() else CartScreen()
-                        is Screen.Checkout -> CheckoutScreen()
-                        is Screen.OrderSuccess -> OrderSuccessScreen(screen.orderId)
+                        is Screen.Checkout ->
+                            // REMOTE: the real quote review only; the 4-step mock checkout is MOCK-mode only.
+                            if (!remoteCatalog) CheckoutScreen()
+                            else if (ServiceLocator.catalogCapabilities.checkoutIntegration) com.tazzzo.app.ui.checkout.RemoteCheckoutScreen()
+                            else com.tazzzo.app.ui.catalog.UnavailableSurface("Checkout")
+                        is Screen.OrderSuccess ->
+                            // REMOTE has no order yet (PR-08): this screen reads a MOCK order and must never render there.
+                            if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Orders") else OrderSuccessScreen(screen.orderId)
                         is Screen.Orders -> OrdersScreen()
                         is Screen.Coins -> CoinsScreen()
                         is Screen.Help -> HelpScreen()

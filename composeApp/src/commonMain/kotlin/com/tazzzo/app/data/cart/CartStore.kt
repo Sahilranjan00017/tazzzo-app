@@ -3,6 +3,7 @@ package com.tazzzo.app.data.cart
 import com.tazzzo.app.data.catalog.Pincode
 import com.tazzzo.app.data.catalog.StockState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -43,6 +44,14 @@ enum class CartNotice {
     Unavailable
 }
 
+/** What checkout needs from the cart: the current truth, whether writes are still settling, and an awaitable fresh read. */
+interface CartAccess {
+    val state: StateFlow<CartState>
+    val pending: StateFlow<Map<String, PendingTarget>>
+    /** Re-reads the server cart (GET with the selected addressId) and returns once THAT read has completed. Replays nothing. */
+    suspend fun refreshAndAwait(): CartState
+}
+
 /**
  * The customer's cart — held in memory, owned by the BACKEND. This is not a second cart:
  *  - nothing is persisted and nothing is mutated locally; the state is always the last server answer;
@@ -67,12 +76,12 @@ class CartStore(
     private val addressId: () -> String?,
     /** A 404 can mean the selected address is gone: let the address book re-check. */
     private val onAddressSuspect: () -> Unit = {}
-) {
+) : CartAccess {
     private val _state = MutableStateFlow<CartState>(CartState.Idle)
-    val state: StateFlow<CartState> = _state
+    override val state: StateFlow<CartState> = _state
 
     private val _pending = MutableStateFlow<Map<String, PendingTarget>>(emptyMap())
-    val pending: StateFlow<Map<String, PendingTarget>> = _pending
+    override val pending: StateFlow<Map<String, PendingTarget>> = _pending
 
     private val _syncing = MutableStateFlow(false)
     val syncing: StateFlow<Boolean> = _syncing
@@ -150,11 +159,26 @@ class CartStore(
 
     fun dismissNotice() { _notice.value = null }
 
+    private val waiters = ArrayList<CompletableDeferred<Unit>>()
+
+    override suspend fun refreshAndAwait(): CartState {
+        val done = CompletableDeferred<Unit>()
+        command {
+            if (!isAuthenticated()) { _state.value = CartState.SignedOut; done.complete(Unit); return@command }
+            waiters += done; refreshRequested = true; kick()
+        }
+        done.await()
+        return _state.value
+    }
+
+    private fun releaseWaiters(list: List<CompletableDeferred<Unit>>) = list.forEach { it.complete(Unit) }
+
     /** Session ended (logout or definitive rejection): forget everything locally. The server cart is untouched. */
     fun signOut() = command {
         generation++
         desired.clear(); inFlight = null; clearRequested = false; refreshRequested = false
         worker?.cancel(); worker = null; running = false
+        releaseWaiters(waiters.toList()); waiters.clear()
         _state.value = CartState.SignedOut
         _pending.value = emptyMap(); _syncing.value = false; _notice.value = null
     }
@@ -226,7 +250,8 @@ class CartStore(
             val gen = generation
             if (refreshRequested || (loaded() == null && hasWork())) {
                 refreshRequested = false
-                reload(gen)
+                val ws = waiters.toList(); waiters.clear()
+                try { reload(gen) } finally { releaseWaiters(ws) }
                 if (gen != generation) return
                 continue
             }
@@ -248,6 +273,7 @@ class CartStore(
     private fun wipe() {
         generation++
         desired.clear(); inFlight = null; clearRequested = false; refreshRequested = false
+        releaseWaiters(waiters.toList()); waiters.clear()
         _state.value = CartState.SignedOut; _pending.value = emptyMap(); _syncing.value = false
     }
 

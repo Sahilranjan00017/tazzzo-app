@@ -96,9 +96,11 @@ class CartBindingAndGuardsTest {
         inMode(CatalogMode.MOCK) { assertTrue(ServiceLocator.checkout.getPaymentMethods().isNotEmpty()) }
     }
 
-    @Test fun checkoutIntegrationIsOffInRemoteAndOnInMock() {
-        assertEquals(false, com.tazzzo.app.data.catalog.CatalogCapabilities.REMOTE.checkoutIntegration)
-        assertEquals(true, com.tazzzo.app.data.catalog.CatalogCapabilities.MOCK.checkoutIntegration)
+    @Test fun remoteHasCheckoutReviewButNoOrderPlacementAndMockHasBoth() {
+        val r = com.tazzzo.app.data.catalog.CatalogCapabilities.REMOTE
+        val m = com.tazzzo.app.data.catalog.CatalogCapabilities.MOCK
+        assertEquals(true, r.checkoutIntegration); assertEquals(false, r.orderIntegration)
+        assertEquals(true, m.checkoutIntegration); assertEquals(true, m.orderIntegration)
     }
 
     @Test fun aLegacyLocalCartIsPurgedNotRestoredInRemoteMode() = runTest {
@@ -111,7 +113,7 @@ class CartBindingAndGuardsTest {
         }
     }
 
-    @Test fun theOrderAgainTabNeedsCheckoutNotJustACart() {
+    @Test fun theOrderAgainTabNeedsOrdersNotJustACheckoutReview() {
         val tabs = com.tazzzo.app.ui.home.visibleHomeTabs(com.tazzzo.app.data.catalog.CatalogCapabilities.REMOTE)
         assertTrue(com.tazzzo.app.HomeTab.ORDER_AGAIN !in tabs)
     }

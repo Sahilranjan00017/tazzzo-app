@@ -11,7 +11,7 @@ import com.tazzzo.app.data.catalog.CatalogCapabilities
 internal fun visibleHomeTabs(caps: CatalogCapabilities): List<HomeTab> = HomeTab.entries.filter { tab ->
     when (tab) {
         HomeTab.DEALS -> caps.deals
-        HomeTab.ORDER_AGAIN -> caps.checkoutIntegration
+        HomeTab.ORDER_AGAIN -> caps.orderIntegration
         else -> true
     }
 }
