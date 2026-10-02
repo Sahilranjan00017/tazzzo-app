@@ -10,9 +10,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import org.jetbrains.compose.resources.Font
 import tazzzo.resources.Res
+import tazzzo.resources.newsreader_italic
+import tazzzo.resources.newsreader_regular
 import tazzzo.resources.poppins_bold
 import tazzzo.resources.poppins_medium
 import tazzzo.resources.poppins_regular
@@ -81,7 +84,33 @@ object TazColors {
 
     val White = Color(0xFFFFFFFF)
     val Scrim = Color(0xB3000000)
+
+    // --- editorial / brand surfaces (UI Page references, 2026-10) ------------
+    // Sampled from the approved reference screens. Scoped to the brand and
+    // editorial surfaces (Splash, Showcase, Login/OTP, Home hero and banners,
+    // the wordmark) until visual QA decides whether it replaces [Green]
+    // globally. Commerce controls, cart, checkout and orders keep [Green].
+    val BrandEditorial = Color(0xFF143528)      // deep forest: wordmark, Continue, Showcase walls
+    val BrandEditorialDeep = Color(0xFF0E2F1E)  // darkest band (bulk-savings section, scrims)
+    /** Warm cream for a filled control ON a dark editorial surface (Showcase "Next") and for OTP cells. */
+    val CreamStrong = Color(0xFFF1EDE1)
+    /** Headline/body ink on a dark editorial surface — cream, never pure white. */
+    val EditorialOnDark = Color(0xFFF4F1E8)
 }
+
+/**
+ * Newsreader — the DISPLAY ACCENT only (large editorial headlines on Splash,
+ * Showcase, Login/OTP and selected Home section headings). Poppins stays the
+ * primary face for every control, price, label and body. Two static cuts
+ * (Regular + Italic, 16pt optical size) from the official upstream, SIL OFL 1.1
+ * (docs/licenses/Newsreader-OFL.txt); the italic is the emphasis voice
+ * ("Wholesale Prices, *Delivered.*").
+ */
+@Composable
+fun tazEditorialFamily(): FontFamily = FontFamily(
+    Font(Res.font.newsreader_regular, FontWeight.Normal),
+    Font(Res.font.newsreader_italic, FontWeight.Normal, FontStyle.Italic)
+)
 
 /**
  * Poppins — the final typeface decision.

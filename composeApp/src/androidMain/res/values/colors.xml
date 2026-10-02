@@ -2,4 +2,6 @@
 <resources>
     <color name="taz_cream">#FAF9F6</color>
     <color name="taz_green">#00411C</color>
+    <!-- Editorial brand green (UI Page references): launcher background and the system-splash mark. -->
+    <color name="taz_brand_editorial">#143528</color>
 </resources>

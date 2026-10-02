@@ -22,6 +22,12 @@ import androidx.test.core.app.ApplicationProvider
  * the activity when the rule is applied, which is before `@Before` runs.
  */
 object TestState {
+    /** Clears persisted state but leaves the catalogue mode as the build decides (REMOTE), for brand-screen evidence. */
+    fun resetKeepRemote() {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().commit()
+    }
+
     fun reset() {
         // These suites assert on the mock catalogue's content; REMOTE is the default, so ask for MOCK explicitly.
         com.tazzzo.app.data.catalog.CatalogSource.debugOverride = com.tazzzo.app.data.catalog.CatalogMode.MOCK

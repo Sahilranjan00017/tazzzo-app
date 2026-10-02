@@ -96,7 +96,6 @@ import com.tazzzo.app.theme.TazType
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import tazzzo.resources.Res
-import tazzzo.resources.tazzzo_logo
 import tazzzo.resources.hero_basket
 import tazzzo.resources.banner_coins
 import tazzzo.resources.cat_fruits
@@ -202,13 +201,14 @@ private val CardRowThreshold: Dp = 136.dp
 // Brand
 // ---------------------------------------------------------------------------
 
+/**
+ * The wordmark on SECONDARY surfaces (REMOTE Home header, About), sized by the slot [height] it used to occupy. The
+ * letters take ~62% of that height, which keeps the footprint the old raster logo had (≈2.8:1) instead of a 4.5:1 banner.
+ * Brand moments (Splash) size the mark by width with [TazzzoWordmark] directly.
+ */
 @Composable
 fun LogoImage(height: Dp, modifier: Modifier = Modifier) {
-    Image(
-        painter = painterResource(Res.drawable.tazzzo_logo),
-        contentDescription = "Tazzzo",
-        modifier = modifier.height(height)
-    )
+    TazzzoWordmark(width = height * 0.62f * WORDMARK_ASPECT, modifier = modifier)
 }
 
 
@@ -225,15 +225,6 @@ internal fun pillLabelColor(fill: Color): Color =
     if (fill.luminance() > 0.5f) TazColors.TextPrimary else TazColors.White
 
 /** TAZZZO wordmark rendered as text (for places where the PNG is too heavy). */
-@Composable
-fun TazWordmark(fontSize: androidx.compose.ui.unit.TextUnit) {
-    Row {
-        Text("TA", color = TazColors.Green, fontSize = fontSize, fontWeight = FontWeight.ExtraBold)
-        Text("ZZZ", color = TazColors.Orange, fontSize = fontSize, fontWeight = FontWeight.ExtraBold)
-        Text("O", color = TazColors.Green, fontSize = fontSize, fontWeight = FontWeight.ExtraBold)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Layout helpers
 // ---------------------------------------------------------------------------

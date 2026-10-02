@@ -35,7 +35,7 @@ import com.tazzzo.app.ui.home.AboutScreen
 import com.tazzzo.app.ui.club.ClubScreen
 import com.tazzzo.app.ui.club.ClubCheckoutScreen
 import com.tazzzo.app.ui.onboarding.LoginScreen
-import com.tazzzo.app.ui.onboarding.OnboardingScreen
+import com.tazzzo.app.ui.onboarding.ShowcaseScreen
 import com.tazzzo.app.ui.splash.SplashScreen
 import com.tazzzo.app.ui.home.MasterListScreen
 
@@ -90,7 +90,7 @@ fun App() {
                     stateHolder.SaveableStateProvider(screen.stateKey) {
                     when (screen) {
                         is Screen.Splash -> SplashScreen()
-                        is Screen.Onboarding -> OnboardingScreen()
+                        is Screen.Onboarding -> ShowcaseScreen()   // the 3-page brand carousel; Login follows
                         is Screen.Login -> LoginScreen()
                         is Screen.Home -> MainScaffold()
                         is Screen.CategoryDetail ->

@@ -70,6 +70,15 @@ object TazType {
     val buttonWeight = FontWeight.SemiBold
     val navLabelSize: TextUnit = 11.sp
 
+    // --- editorial scale (Newsreader; measured against the UI Page references at 390dp) ---
+    val editorialDisplaySize: TextUnit = 48.sp;  val editorialDisplayLine: TextUnit = 50.sp   // Showcase titles
+    val editorialHeadlineSize: TextUnit = 40.sp; val editorialHeadlineLine: TextUnit = 44.sp  // Login / OTP
+    val editorialTitleSize: TextUnit = 28.sp;    val editorialTitleLine: TextUnit = 31.sp     // Home hero / banners
+    val editorialSectionSize: TextUnit = 20.sp;  val editorialSectionLine: TextUnit = 24.sp   // Home section headings
+    val editorialBodySize: TextUnit = 17.sp;     val editorialBodyLine: TextUnit = 23.sp      // Showcase support line
+    val editorialSubSize: TextUnit = 15.sp;      val editorialSubLine: TextUnit = 21.sp       // Login / OTP support line
+    val taglineSize: TextUnit = 16.sp;           val taglineTracking: TextUnit = 2.sp         // "Best Value. Smart Shopping."
+
     /** The number inside a quantity stepper. Heavier than body at the same size
      *  so the count reads at a glance while the − and + stay quiet. */
     val stepperCountSize: TextUnit = 14.sp

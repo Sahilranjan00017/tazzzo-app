@@ -123,7 +123,8 @@ data class ChargeRules(
 
 object BrandCopy {
     /** Lockup line directly under the logo. */
-    const val tagline = "Better Value. Easier Shopping."
+    /** Canonical brand tagline (Product decision Z4, 2026-10-02). Brand surfaces only. */
+    const val tagline = "Best Value. Smart Shopping."
 
     /**
      * Founder-supplied savings claim from the Tazzzo flyer. DECISION D6:
