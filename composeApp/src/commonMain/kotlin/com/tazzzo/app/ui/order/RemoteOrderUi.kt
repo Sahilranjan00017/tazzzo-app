@@ -44,7 +44,8 @@ import com.tazzzo.app.ui.interaction.tazPressable
 
 /*
  * REMOTE order surfaces. Built ONLY from the backend order: never `lastOrder`, the local cart, `BillCalculator`, local coin or
- * Club state. COD_DUE reads "Payment due on delivery" — never "paid". Only the item subtotal is shown, labelled as such.
+ * Club state. Money is the order's AUTHORITATIVE money: "₹X due on delivery" / "Nothing due on delivery" — never "paid". A
+ * legacy order without money shows its item subtotal alone, never as an amount due.
  */
 
 /** Loading outcome for one order id. */
@@ -127,7 +128,7 @@ fun RemoteOrdersScreen() {
                     Text(v.title, fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary)
                     Text(v.orderId, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
                     Text(listOfNotNull(v.paymentLine, v.dueLine).joinToString(" · "), fontSize = TazType.captionSize, color = TazColors.TextSecondary)
-                    Text("${v.itemsLabel} · ${v.subtotalLabel} ${v.subtotalValue}", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+                    Text("${v.itemsLabel} · ${v.headlineMoney.label} ${v.headlineMoney.value}", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
                 }
                 Text("Full order history isn't available yet.", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
             }
@@ -159,11 +160,15 @@ private fun OrderBody(v: OrderView, modifier: Modifier = Modifier) {
                 Text(l.lineTotalLabel, fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary)
             }
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("${v.subtotalLabel} · ${v.itemsLabel}", fontSize = TazType.bodySize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
-            Text(v.subtotalValue, fontSize = TazType.titleSize, fontWeight = FontWeight.Bold, color = TazColors.TextPrimary)
+        v.moneyLines.forEachIndexed { i, line ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (i == 0) "${line.label} · ${v.itemsLabel}" else line.label, fontSize = TazType.bodySize,
+                    fontWeight = if (line.emphasised) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (line.emphasised) TazColors.TextPrimary else TazColors.TextSecondary, modifier = Modifier.weight(1f))
+                Text(line.value, fontSize = if (line.emphasised) TazType.titleSize else TazType.bodySize,
+                    fontWeight = if (line.emphasised) FontWeight.Bold else FontWeight.Medium, color = TazColors.TextPrimary)
+            }
         }
-        Text(v.note, fontSize = TazType.captionSize, color = TazColors.TextTertiary)
         Spacer(Modifier.height(TazSpace.md))
     }
 }

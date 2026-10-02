@@ -1,6 +1,7 @@
 package com.tazzzo.app.data.checkout
 
 import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.PayableMoney
 import com.tazzzo.app.data.remote.ApiError
 import com.tazzzo.app.data.remote.ApiException
 import kotlin.time.Duration
@@ -8,9 +9,10 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /*
  * The REAL checkout quote (`/v1/customer/checkout/quote`). A quote is an immutable server snapshot taken at
- * `createdAt`: it is NOT a stock reservation, NOT a price lock and NOT a payable total. It has no delivery fee,
- * tax, platform fee, tip, discount-adjusted amount, address snapshot, product name/image/MRP, slot or payment
- * information, so none of those exist here. It is never persisted.
+ * `createdAt`: it is NOT a stock reservation. Its [CheckoutQuote.money] (`moneyPreview`) is the BINDING customer money:
+ * placing an order from this quote either commits exactly that money or is refused with PAYABLE_CHANGED. There is no
+ * delivery/platform fee, tax, tip, COD charge, coupon, Coins or wallet, address snapshot, product name/image/MRP, slot or
+ * payment information, so none of those exist here. It is never persisted.
  */
 
 /** One quoted line. The quote has no title/image: any display metadata comes from the cart, never from here. */
@@ -24,8 +26,9 @@ data class CheckoutQuoteItem(
 }
 
 /**
- * The backend's ADVISORY Benefits result stored with the quote. The order re-evaluates it authoritatively, and
- * PR-07 never shows it, never subtracts it from anything and never derives a payable amount from it.
+ * The Benefits decision stored with the quote, kept for wire compatibility only. The customer-facing discount comes from
+ * [CheckoutQuote.money] (`moneyPreview.benefitDiscountPaise`); this is never shown, never subtracted from anything and
+ * never used to derive an amount.
  */
 sealed interface BenefitPreviewState {
     /** The field was absent: a legacy quote. NOT the same as [NotApplied]. */
@@ -48,12 +51,17 @@ data class CheckoutQuote(
     val items: List<CheckoutQuoteItem>,
     val itemCount: Int,
     val distinctItemCount: Int,
-    /** The sum of current line prices at `createdAt`. NOT a total. */
+    /** The sum of current line prices at `createdAt` (the item subtotal). Equals [money]'s merchandise subtotal. */
     val subtotal: Money,
     val currency: String,
     val createdAtMillis: Long,
     val expiresAtMillis: Long,
     val benefit: BenefitPreviewState,
+    /**
+     * The BINDING money (`moneyPreview`). Null = a LEGACY quote created before the money model: that is NOT a zero amount,
+     * and such a quote can never be ordered (the backend refuses it) — the customer must refresh checkout.
+     */
+    val money: PayableMoney?,
     val requestId: String?
 ) {
     /** How long the SERVER says this quote lives, from its own two timestamps (never the device clock). */
@@ -110,6 +118,12 @@ sealed interface CheckoutFailure {
     data object Network : CheckoutFailure
     data object Timeout : CheckoutFailure
     data object Unknown : CheckoutFailure
+    /**
+     * A 2xx quote that violates the contract (inconsistent money, a subtotal that disagrees with it, a quote for a cart or
+     * address that was not asked for, an unreadable body). NOT ambiguous: replaying the same key returns the same stored
+     * quote, so only a NEW attempt (new key) is offered.
+     */
+    data object ContractViolation : CheckoutFailure
 
     /**
      * The request may or may not have reached the backend. Backend replay semantics (same customer + same key + same
@@ -123,7 +137,7 @@ fun Throwable.toCheckoutFailure(): CheckoutFailure {
     return when (api) {
         ApiError.Network -> CheckoutFailure.Network
         ApiError.Timeout -> CheckoutFailure.Timeout
-        is ApiError.Decoding -> CheckoutFailure.Unknown
+        is ApiError.Decoding -> CheckoutFailure.ContractViolation
         is ApiError.Http -> when (api.status) {
             401 -> CheckoutFailure.Unauthenticated
             404 -> CheckoutFailure.NotFound

@@ -1,6 +1,7 @@
 package com.tazzzo.app.data.checkout
 
 import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.PayableMoney
 import com.tazzzo.app.data.remote.ApiError
 import com.tazzzo.app.data.remote.ApiException
 import kotlinx.serialization.Serializable
@@ -10,6 +11,19 @@ import kotlinx.serialization.Serializable
 @Serializable internal data class QuoteItemDto(val skuId: String, val quantity: Int, val unitPricePaise: Long, val lineTotalPaise: Long)
 
 @Serializable internal data class BenefitPreviewDto(val applied: Boolean, val discountPaise: Long? = null, val discountBps: Int? = null)
+
+/** `moneyPreview` (quote) and `money` (order): the same three int64 paise values. */
+@Serializable internal data class PayableMoneyDto(val merchandiseSubtotalPaise: Long, val benefitDiscountPaise: Long, val payablePaise: Long)
+
+/**
+ * The validated money, or a contract failure: an inconsistent block, or a merchandise subtotal that disagrees with the
+ * resource's own `subtotalPaise`. Neither value is ever chosen over the other. Absent (null) stays null: legacy, never zero.
+ */
+internal fun PayableMoneyDto?.toDomain(subtotalPaise: Long): PayableMoney? {
+    if (this == null) return null
+    if (merchandiseSubtotalPaise != subtotalPaise) throw ApiException(ApiError.Decoding())
+    return PayableMoney.fromPaise(merchandiseSubtotalPaise, benefitDiscountPaise, payablePaise) ?: throw ApiException(ApiError.Decoding())
+}
 
 @Serializable internal data class QuoteDto(
     val quoteId: String,
@@ -23,6 +37,7 @@ import kotlinx.serialization.Serializable
     val createdAt: String,
     val expiresAt: String,
     val benefitPreview: BenefitPreviewDto? = null,
+    val moneyPreview: PayableMoneyDto? = null,
     val requestId: String? = null
 )
 
@@ -51,7 +66,7 @@ internal fun QuoteDto.toDomain(): CheckoutQuote {
         },
         itemCount = itemCount.coerceAtLeast(0), distinctItemCount = distinctItemCount.coerceAtLeast(0),
         subtotal = paise(subtotalPaise), currency = currency, createdAtMillis = created, expiresAtMillis = expires,
-        benefit = benefitPreview.toDomain(), requestId = requestId
+        benefit = benefitPreview.toDomain(), money = moneyPreview.toDomain(subtotalPaise), requestId = requestId
     )
 }
 

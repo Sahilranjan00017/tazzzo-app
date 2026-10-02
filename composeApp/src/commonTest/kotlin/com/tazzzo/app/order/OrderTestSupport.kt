@@ -1,5 +1,6 @@
 package com.tazzzo.app.order
 
+import com.tazzzo.app.checkout.bindingOf
 import com.tazzzo.app.checkout.hx
 import com.tazzzo.app.checkout.stampOf
 import com.tazzzo.app.data.checkout.BenefitPreviewState
@@ -8,6 +9,8 @@ import com.tazzzo.app.data.checkout.CheckoutQuoteAccess
 import com.tazzzo.app.data.checkout.CheckoutQuoteItem
 import com.tazzzo.app.data.checkout.CheckoutSource
 import com.tazzzo.app.data.checkout.CheckoutState
+import com.tazzzo.app.data.checkout.StaleReason
+import com.tazzzo.app.data.model.PayableMoney
 import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.order.CustomerOrder
 import com.tazzzo.app.data.order.CustomerOrderItem
@@ -21,16 +24,22 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-fun readyQuote(quoteId: String = "CHKQ_abc123") = CheckoutQuote(
+/** A Ready quote with BINDING money by default; `money = null` is a legacy quote. */
+fun readyQuote(quoteId: String = "CHKQ_abc123", money: PayableMoney? = bindingOf(Money.ofPaise(9_900))) = CheckoutQuote(
     quoteId, 5, "ADDR_abcdef1", listOf(CheckoutQuoteItem("TZP-1", 2, Money.ofPaise(4_950), Money.ofPaise(9_900))), 2, 1,
-    Money.ofPaise(9_900), "INR", 0, 300_000, BenefitPreviewState.NotApplied, "req"
+    Money.ofPaise(9_900), "INR", 0, 300_000, BenefitPreviewState.NotApplied, money, "req"
 )
 
-fun readyState(quoteId: String = "CHKQ_abc123") = CheckoutState.Ready(readyQuote(quoteId), CheckoutSource(5, stampOf()))
+fun readyState(quoteId: String = "CHKQ_abc123", money: PayableMoney? = bindingOf(Money.ofPaise(9_900))) =
+    CheckoutState.Ready(readyQuote(quoteId, money), CheckoutSource(5, stampOf()))
 
-fun orderOf(id: String = "ORD_abc123", subtotal: Long = 9_900, condition: OrderPaymentCondition = OrderPaymentCondition.COD_DUE) = CustomerOrder(
+/** An order with AUTHORITATIVE money (no discount) by default; `money = null` is a legacy order. */
+fun orderOf(
+    id: String = "ORD_abc123", subtotal: Long = 9_900, condition: OrderPaymentCondition = OrderPaymentCondition.COD_DUE,
+    money: PayableMoney? = bindingOf(Money.ofPaise(subtotal))
+) = CustomerOrder(
     id, CustomerOrderStatus.CONFIRMED, CustomerPaymentMethod.COD, condition,
-    listOf(CustomerOrderItem("TZP-1", "Atta 1kg", null, 2, Money.ofPaise(4_950), Money.ofPaise(9_900))), 2, Money.ofPaise(subtotal), "INR",
+    listOf(CustomerOrderItem("TZP-1", "Atta 1kg", null, 2, Money.ofPaise(4_950), Money.ofPaise(9_900))), 2, Money.ofPaise(subtotal), "INR", money,
     OrderDeliveryAddress("HOME", "Asha Rao", "+919876543210", "22, 14th Main", null, null, "Bengaluru", "Karnataka", "560102"), 1L, 2L
 )
 
@@ -39,8 +48,15 @@ class FakeQuoteAccess(initial: CheckoutState = readyState()) : CheckoutQuoteAcce
     val flow = MutableStateFlow(initial)
     var resets = 0
     var onReset: () -> Unit = {}
+    /** Every invalidation asked for, in order (quote id to reason). */
+    val invalidations = mutableListOf<Pair<String, StaleReason>>()
     override val state: StateFlow<CheckoutState> = flow
     override fun resetNow() { resets++; onReset(); flow.value = CheckoutState.Idle }
+    override fun invalidateNow(quoteId: String, reason: StaleReason) {
+        invalidations += quoteId to reason
+        val cur = flow.value
+        if (cur is CheckoutState.Ready && cur.quote.quoteId == quoteId) flow.value = CheckoutState.Stale(reason)
+    }
 }
 
 class FakePending : PendingOrderStore {

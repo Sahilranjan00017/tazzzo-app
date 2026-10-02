@@ -55,10 +55,11 @@ data class CatalogCapabilities(
      */
     val checkoutIntegration: Boolean,
     /**
-     * Whether PRODUCTION order placement is launch-enabled. False for REMOTE until the backend exposes an authoritative
-     * amount due (ORDER PAYABLE CONTRACT — LAUNCH BLOCKER). The real order path (PR-08) exists and is tested regardless;
-     * only development builds can exercise it, through [com.tazzzo.app.data.order.OrderLaunchGate]. A real quote has no
-     * path into the mock OrderPlacement, local orders, coin credits or Club progress.
+     * Whether PRODUCTION order placement is launch-enabled. False for REMOTE until the binding-payable backend is deployed
+     * and the real quote / order / PAYABLE_CHANGED / COD end-to-end checks are signed off. The real order path (PR-08, with
+     * the binding money of PR-09) exists and is tested regardless; only an explicitly opted-in debug build can exercise it,
+     * through [com.tazzzo.app.data.order.OrderLaunchGate]. A real quote has no path into the mock OrderPlacement, local
+     * orders, coin credits or Club progress.
      */
     val orderIntegration: Boolean,
     /**

@@ -1,25 +1,41 @@
 package com.tazzzo.app.data.checkout
 
 import com.tazzzo.app.data.cart.ServerCart
+import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.PayableMoney
 import kotlin.time.Duration
 
-/** Customer wording is fixed here: the quote is an ITEM subtotal, never a total, and final charges are not promised. */
+/**
+ * Customer wording is fixed here. The amount due is the backend's BINDING money (quote) or AUTHORITATIVE money (order), shown
+ * as-is: never estimated, never recomputed, never "paid". Only [SUBTOTAL_LABEL] appears when no binding money exists.
+ */
 object CheckoutCopy {
     const val SUBTOTAL_LABEL = "Item subtotal"
-    /** The subtotal is items only: never imply it equals what is due. */
-    const val CHARGES_NOTE = "The item subtotal isn't the final amount."
+    const val DISCOUNT_LABEL = "Benefit discount"
+    const val AMOUNT_DUE_LABEL = "Amount due"
+    /** Cash on delivery with nothing to collect (a full discount). Never "Payment due" for ₹0. */
+    const val NOTHING_DUE = "Nothing due on delivery"
     const val ORDER_CTA = "Place order"
-    /** Shown while production order placement is gated (no authoritative amount due on the backend yet). */
-    const val LAUNCH_GATED = "Ordering will be available once the final amount is confirmed."
+    /** Shown while production order placement is not launch-enabled (deployment / end-to-end sign-off), never about money. */
+    const val LAUNCH_GATED = "Ordering isn't available yet."
+    /** An order was refused because its binding money is no longer the current money (PAYABLE_CHANGED). */
+    const val PAYABLE_CHANGED = "Your order amount changed. Review checkout again."
+    /** A quote that violates the contract. */
+    const val CONTRACT_FAILURE = "Checkout couldn't be loaded correctly."
     const val NEUTRAL_ITEM = "Item"
+
+    /** `₹90 due on delivery`, or [NOTHING_DUE] for ₹0. */
+    fun dueOnDelivery(money: PayableMoney): String = if (money.isNothingDue) NOTHING_DUE else "${money.payable.format()} due on delivery"
 }
 
 /** What the customer can do next. The composable only dispatches these. */
 sealed interface CheckoutAction {
     /** Resend the SAME request with the SAME key (only offered after an ambiguous failure with unchanged inputs). */
     data object TryAgain : CheckoutAction
-    /** A NEW attempt (new key): "Review checkout" / "Refresh checkout". */
+    /** A NEW attempt (new key): "Review checkout". */
     data object ReviewCheckout : CheckoutAction
+    /** Also a NEW attempt (new key), worded "Refresh checkout": after a contract failure or for a quote with no binding money. */
+    data object RefreshCheckout : CheckoutAction
     data object ChooseAddress : CheckoutAction
     data object ChangeAddress : CheckoutAction
     data object GoToCart : CheckoutAction
@@ -63,6 +79,8 @@ fun CheckoutFailure.view(canRetrySameKey: Boolean): FailureView {
         CheckoutFailure.Network, CheckoutFailure.Timeout, CheckoutFailure.Server, CheckoutFailure.Unknown ->
             FailureView("Couldn't reach Tazzzo", "Check your connection and try again.", listOf(retry))
         CheckoutFailure.Unauthenticated -> FailureView("Log in to continue", "Your session ended.", listOf(CheckoutAction.SignIn))
+        // Never "Try again" with the same key: the same key replays the same stored quote.
+        CheckoutFailure.ContractViolation -> FailureView(CheckoutCopy.CONTRACT_FAILURE, "Refresh checkout to continue.", listOf(CheckoutAction.RefreshCheckout))
     }
 }
 
@@ -70,7 +88,14 @@ fun StaleReason.view(): FailureView = when (this) {
     StaleReason.CartChanged -> FailureView("Your cart changed. Review it before continuing.", "This quote is no longer current.", listOf(CheckoutAction.ReviewCheckout, CheckoutAction.GoToCart))
     StaleReason.AddressChanged -> FailureView("Your delivery address changed", "Review checkout again to continue.", listOf(CheckoutAction.ReviewCheckout, CheckoutAction.ChangeAddress))
     StaleReason.AddressRemoved -> FailureView("Your delivery address is no longer available", "Choose an address to continue.", listOf(CheckoutAction.ChooseAddress))
+    StaleReason.PayableChanged -> PAYABLE_CHANGED_VIEW
 }
+
+/** PAYABLE_CHANGED, for both the refused order and the invalidated quote. Only a NEW quote is offered. */
+val PAYABLE_CHANGED_VIEW = FailureView(CheckoutCopy.PAYABLE_CHANGED, "", listOf(CheckoutAction.ReviewCheckout))
+
+/** A Ready quote without binding money (legacy): it can never be ordered, only refreshed into a new quote. */
+val NO_BINDING_MONEY_VIEW = FailureView("Checkout needs to be refreshed", "Refresh checkout to see the amount due.", listOf(CheckoutAction.RefreshCheckout))
 
 val EXPIRED_VIEW = FailureView("This checkout expired", "Refresh checkout to continue.", listOf(CheckoutAction.ReviewCheckout))
 
@@ -94,15 +119,32 @@ fun CheckoutQuote.lineViews(cart: ServerCart?): List<CheckoutLineView> {
     }
 }
 
+/** One money row. [emphasised] marks the amount due. */
+data class MoneyLine(val label: String, val value: String, val emphasised: Boolean = false)
+
 /**
- * The review summary. Deliberately NO payable amount, fee, tax, discount or benefit line: [BenefitPreviewState] is
- * modelled and tested but never shown in PR-07, and it never touches the subtotal.
+ * The money rows for a binding/authoritative [money], or — when there is none (legacy) — the item subtotal ALONE: no amount
+ * due is ever derived. No fee, tax, COD, coupon, Coins or wallet row exists, not even as zero. Values use the canonical
+ * [Money.format] (`₹100`, `₹49.50`, `₹0`).
  */
-data class CheckoutSummaryView(val itemsLabel: String, val subtotalLabel: String, val subtotalValue: String, val note: String)
+fun moneyLines(money: PayableMoney?, subtotal: Money): List<MoneyLine> =
+    if (money == null) listOf(MoneyLine(CheckoutCopy.SUBTOTAL_LABEL, subtotal.format()))
+    else listOfNotNull(
+        MoneyLine(CheckoutCopy.SUBTOTAL_LABEL, money.merchandiseSubtotal.format()),
+        if (money.hasDiscount) MoneyLine(CheckoutCopy.DISCOUNT_LABEL, (-money.benefitDiscount).format()) else null,
+        MoneyLine(CheckoutCopy.AMOUNT_DUE_LABEL, money.payable.format(), emphasised = true)
+    )
+
+/**
+ * The review summary, from the quote's BINDING money only. [benefit] is never shown (the discount row comes from the money).
+ * [dueNote] is null when there is no binding money (such a quote is never orderable).
+ */
+data class CheckoutSummaryView(val itemsLabel: String, val lines: List<MoneyLine>, val dueNote: String?)
 
 fun CheckoutQuote.summary(): CheckoutSummaryView = CheckoutSummaryView(
     itemsLabel = if (itemCount == 1) "1 item" else "$itemCount items",
-    subtotalLabel = CheckoutCopy.SUBTOTAL_LABEL, subtotalValue = subtotal.format(), note = CheckoutCopy.CHARGES_NOTE
+    lines = moneyLines(money, subtotal),
+    dueNote = money?.let { CheckoutCopy.dueOnDelivery(it) }
 )
 
 fun DeliveryContent.displayLines(): List<String> = listOfNotNull(
