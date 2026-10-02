@@ -1,7 +1,9 @@
 package com.tazzzo.app.cart
 
 import com.tazzzo.app.address.http
+import com.tazzzo.app.data.cart.CartAction
 import com.tazzzo.app.data.cart.CartNotice
+import com.tazzzo.app.data.cart.toView
 import com.tazzzo.app.data.cart.CartState
 import com.tazzzo.app.data.cart.CartStore
 import com.tazzzo.app.data.cart.PendingTarget
@@ -309,5 +311,43 @@ class CartStoreTest {
         r.store.signOut(); runCurrent()
         r.store.load(); runCurrent()
         assertEquals(2, r.loaded().quantityOf("TZP-1"))
+    }
+
+    // ---- recovery actions through the store -----------------------------------------------------------------------
+
+    @Test fun reduceQuantityIsAnExplicitAbsolutePutWithTheLatestVersionAndNeverAutomatic() = runTest {
+        val src = FakeCartSource().apply {
+            lines["TZP-1"] = line("TZP-1", 5, max = 3, issues = listOf("INSUFFICIENT_STOCK")); version = 6
+        }
+        val r = opened(src)
+        // loading a cart with the issue sends nothing by itself
+        assertEquals(0, src.mutations)
+        val action = r.loaded().item("TZP-1")!!.toView().actions.first()
+        assertEquals(CartAction.ReduceQuantity(3), action)
+        r.store.setQuantity("TZP-1", (action as CartAction.ReduceQuantity).target); runCurrent()
+        assertEquals(listOf("PUT TZP-1=3"), src.calls.filter { it != "GET" })
+        assertEquals(listOf(6L), src.versionsSeen)
+        assertEquals(3, r.loaded().quantityOf("TZP-1")); assertEquals(7, r.loaded().version)
+    }
+
+    @Test fun retryIsAGetWithTheSelectedAddressAndNeverReplaysAMutation() = runTest {
+        val src = FakeCartSource().apply { lines["TZP-1"] = line("TZP-1", 2, issues = listOf("STOCK_UNKNOWN")); version = 2 }
+        val r = opened(src)
+        r.address = "ADDR_abcdef1"
+        src.failNext(ApiException(ApiError.Timeout), applied = false)
+        r.store.increment("TZP-1"); runCurrent()                          // an earlier, failed mutation
+        val mutationsBefore = src.mutations
+        r.store.refresh(); runCurrent()
+        assertEquals(mutationsBefore, src.mutations)
+        assertEquals("GET", src.calls.last()); assertEquals("ADDR_abcdef1", src.addressIds.last())
+    }
+
+    @Test fun anAddressChangeReplacesTheOldIssueStateWithTheServersAnswer() = runTest {
+        val src = FakeCartSource().apply { lines["TZP-1"] = line("TZP-1", 1, issues = listOf("LOCATION_REQUIRED"), serviceable = null, buyable = false); version = 1 }
+        val r = opened(src)
+        assertTrue(r.loaded().item("TZP-1")!!.isBlocked)
+        src.lines["TZP-1"] = line("TZP-1", 1)                              // the server now evaluates it for the chosen address
+        r.address = "ADDR_abcdef1"; r.store.refresh(); runCurrent()
+        assertTrue(!r.loaded().item("TZP-1")!!.isBlocked)
     }
 }

@@ -1,23 +1,63 @@
 package com.tazzzo.app.data.cart
 
+import com.tazzzo.app.Screen
 import com.tazzzo.app.data.catalog.CatalogCapabilities
 import com.tazzzo.app.data.catalog.CatalogProduct
 import com.tazzzo.app.data.catalog.PurchaseAction
 import com.tazzzo.app.data.catalog.StockState
 import com.tazzzo.app.data.catalog.purchaseAction
 
-/** Customer copy for a line issue. Unknown codes are blocking and get a neutral message — never raw server text. */
-fun LineIssue.message(): String = when (this) {
+/** What the customer can do about a blocked line. The composable only dispatches these; it never talks to the network. */
+sealed interface CartAction {
+    data object Remove : CartAction
+    /** Re-read the cart with the currently selected addressId. NEVER replays a previous mutation. */
+    data object RetryCart : CartAction
+    /** No address was supplied to the cart: open the real address screen. */
+    data object ChooseAddress : CartAction
+    /** The selected address is outside serviceability: open the real address screen. */
+    data object ChangeAddress : CartAction
+    /** An explicit, customer-triggered absolute quantity (never applied automatically). */
+    data class ReduceQuantity(val target: Int) : CartAction
+}
+
+/** Where an address action goes: the real (PR-05) address experience, never the legacy mock address form or checkout. */
+fun CartAction.addressScreen(): Screen? = when (this) {
+    CartAction.ChooseAddress, CartAction.ChangeAddress -> Screen.Addresses
+    else -> null
+}
+
+/**
+ * Customer copy for one issue. [available] is the line's server `maxOrderQuantity` (only used for INSUFFICIENT_STOCK).
+ * An unrecognized code is blocking and gets neutral copy — never raw server text.
+ */
+fun LineIssue.message(available: Int = 0): String = when (this) {
     is LineIssue.Unrecognized -> "Unavailable right now"
     is LineIssue.Known -> when (code) {
-        KnownIssue.PRODUCT_UNAVAILABLE -> "No longer available"
-        KnownIssue.PRICE_UNAVAILABLE -> "Price unavailable"
-        KnownIssue.LOCATION_REQUIRED -> "Choose a delivery address to check availability"
-        KnownIssue.UNSERVICEABLE -> "Not available at your address"
-        KnownIssue.OUT_OF_STOCK -> "Out of stock"
-        KnownIssue.STOCK_UNKNOWN -> "Availability couldn't be confirmed"
-        KnownIssue.INSUFFICIENT_STOCK -> "Not enough stock for this quantity"
-        KnownIssue.ENRICHMENT_UNAVAILABLE -> "Details unavailable right now"
+        KnownIssue.PRODUCT_UNAVAILABLE -> "Product is no longer available."
+        KnownIssue.PRICE_UNAVAILABLE -> "Price is temporarily unavailable."
+        KnownIssue.LOCATION_REQUIRED -> "Choose a delivery address to check availability."
+        KnownIssue.UNSERVICEABLE -> "This item can't be delivered to the selected address."
+        KnownIssue.OUT_OF_STOCK -> "Out of stock."
+        KnownIssue.STOCK_UNKNOWN -> "Availability couldn't be confirmed."
+        KnownIssue.INSUFFICIENT_STOCK -> if (available > 0) "Only $available available." else "Not enough stock for this quantity."
+        KnownIssue.ENRICHMENT_UNAVAILABLE -> "Product information is temporarily unavailable."
+    }
+}
+
+/** Recovery actions for one issue, primary first. Remove is never the only way out of a recoverable issue. */
+fun LineIssue.actions(quantity: Int, available: Int): List<CartAction> = when (this) {
+    is LineIssue.Unrecognized -> listOf(CartAction.RetryCart, CartAction.Remove)
+    is LineIssue.Known -> when (code) {
+        KnownIssue.PRODUCT_UNAVAILABLE -> listOf(CartAction.Remove)
+        KnownIssue.PRICE_UNAVAILABLE -> listOf(CartAction.RetryCart, CartAction.Remove)
+        KnownIssue.LOCATION_REQUIRED -> listOf(CartAction.ChooseAddress, CartAction.Remove)
+        KnownIssue.UNSERVICEABLE -> listOf(CartAction.ChangeAddress, CartAction.Remove)
+        KnownIssue.OUT_OF_STOCK -> listOf(CartAction.Remove, CartAction.RetryCart)
+        KnownIssue.STOCK_UNKNOWN -> listOf(CartAction.RetryCart, CartAction.Remove)
+        KnownIssue.INSUFFICIENT_STOCK ->
+            if (available in 1 until quantity) listOf(CartAction.ReduceQuantity(available), CartAction.Remove)
+            else listOf(CartAction.RetryCart, CartAction.Remove)
+        KnownIssue.ENRICHMENT_UNAVAILABLE -> listOf(CartAction.RetryCart, CartAction.Remove)
     }
 }
 
@@ -43,11 +83,20 @@ data class CartLineView(
     val mrpLabel: String?,
     val lineTotalLabel: String?,
     val issues: List<String>,
+    /** Deduplicated recovery actions across all of the line's issues, primary first. */
+    val actions: List<CartAction>,
     val blocked: Boolean,
     /** The stepper's + may be shown only when the line is buyable and its availability is known. */
     val canIncrease: Boolean,
     val maxQuantity: Int?
 )
+
+/** A line blocked with no issue code still gets a way out. Unknown codes stay blocking. */
+private fun CartItem.recoveryActions(): List<CartAction> {
+    if (!isBlocked) return emptyList()
+    val all = issues.flatMap { it.actions(quantity, maxOrderQuantity) }.distinct()
+    return all.ifEmpty { listOf(CartAction.RetryCart, CartAction.Remove) }
+}
 
 fun CartItem.toView(): CartLineView {
     val availabilityKnown = serviceable == true && (stockState == StockState.IN_STOCK || stockState == StockState.LOW_STOCK)
@@ -59,7 +108,8 @@ fun CartItem.toView(): CartLineView {
         unitPriceLabel = unitPrice?.format(),
         mrpLabel = if (unitPrice != null && mrp != null && mrp > unitPrice) mrp.format() else null,
         lineTotalLabel = lineTotal?.format(),
-        issues = issues.map { it.message() }.distinct(),
+        issues = issues.map { it.message(maxOrderQuantity) }.distinct(),
+        actions = recoveryActions(),
         blocked = isBlocked,
         canIncrease = canIncrease,
         maxQuantity = if (availabilityKnown && maxOrderQuantity > 0) maxOrderQuantity else null

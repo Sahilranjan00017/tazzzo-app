@@ -46,7 +46,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
+import com.tazzzo.app.data.cart.CartAction
 import com.tazzzo.app.data.cart.CartFailure
+import com.tazzzo.app.data.cart.addressScreen
 import com.tazzzo.app.data.cart.CartLineView
 import com.tazzzo.app.data.cart.CartState
 import com.tazzzo.app.data.cart.PendingTarget
@@ -223,6 +225,7 @@ private fun CartContent(
     cart: ServerCart, pending: Map<String, PendingTarget>, syncing: Boolean, confirmClear: Boolean,
     onClear: () -> Unit, onCancelClear: () -> Unit
 ) {
+    val app = LocalAppState.current
     val store = ServiceLocator.cart
     val summary = cart.toSummary()
     Column(Modifier.fillMaxSize()) {
@@ -233,14 +236,21 @@ private fun CartContent(
         ) {
             if (summary.hasBlockedLines) item {
                 Text(
-                    "Some items can't be bought right now. Remove them to continue.",
+                    "Some items need your attention before you can check out.",
                     fontSize = TazType.captionSize, color = TazColors.Danger,
                     modifier = Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface).padding(TazSpace.md)
                 )
             }
             // Keyed by skuId. The row is NOT clickable: the cart carries no productId, so it never opens a PDP.
             items(cart.items, key = { it.skuId }) { line ->
-                CartLineRow(line.toView(), pending[line.skuId], onMinus = { store.decrement(line.skuId) }, onPlus = { store.increment(line.skuId) }, onRemove = { store.remove(line.skuId) })
+                CartLineRow(line.toView(), pending[line.skuId], onMinus = { store.decrement(line.skuId) }, onPlus = { store.increment(line.skuId) }, onAction = { act ->
+                    when (act) {
+                        CartAction.Remove -> store.remove(line.skuId)
+                        CartAction.RetryCart -> store.refresh()
+                        is CartAction.ReduceQuantity -> store.setQuantity(line.skuId, act.target)
+                        else -> act.addressScreen()?.let { app.navigate(it) }
+                    }
+                })
             }
         }
         Column(
@@ -274,7 +284,7 @@ private fun CartContent(
 }
 
 @Composable
-private fun CartLineRow(v: CartLineView, pending: PendingTarget?, onMinus: () -> Unit, onPlus: () -> Unit, onRemove: () -> Unit) {
+private fun CartLineRow(v: CartLineView, pending: PendingTarget?, onMinus: () -> Unit, onPlus: () -> Unit, onAction: (CartAction) -> Unit) {
     val shown = when (pending) { is PendingTarget.Quantity -> pending.quantity; PendingTarget.Removing -> 0; null -> v.quantity }
     Column(
         Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface).padding(TazSpace.md),
@@ -290,17 +300,33 @@ private fun CartLineRow(v: CartLineView, pending: PendingTarget?, onMinus: () ->
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             if (v.blocked) {
-                // A blocked line can only be removed: no + (never quietly "fix" a line the server rejected).
-                Text(
-                    "Remove", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Danger,
-                    modifier = Modifier.semantics { contentDescription = "Remove ${v.title}" }
-                        .tazPressable(onClick = onRemove, pressScale = TazPress.compact, role = Role.Button).padding(TazSpace.sm)
-                )
+                // Recovery depends on the issue: never "Remove" as the only way out of a recoverable one.
+                Row(horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
+                    v.actions.forEach { act ->
+                        val label = act.label()
+                        Text(
+                            label, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
+                            color = if (act == CartAction.Remove) TazColors.Danger else TazColors.Success,
+                            modifier = Modifier.semantics { contentDescription = "$label ${v.title}" }
+                                .tazPressable(onClick = { onAction(act) }, pressScale = TazPress.compact, role = Role.Button)
+                                .padding(TazSpace.sm)
+                        )
+                    }
+                }
             } else {
                 QuantityPill(v.title, shown, pending != null, v.canIncrease, onMinus, onPlus)
             }
         }
     }
+}
+
+@Composable
+private fun CartAction.label(): String = when (this) {
+    CartAction.Remove -> "Remove"
+    CartAction.RetryCart -> "Retry"
+    CartAction.ChooseAddress -> "Choose address"
+    CartAction.ChangeAddress -> "Change address"
+    is CartAction.ReduceQuantity -> "Update to $target"
 }
 
 @Composable

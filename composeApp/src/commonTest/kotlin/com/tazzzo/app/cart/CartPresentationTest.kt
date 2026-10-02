@@ -1,7 +1,10 @@
 package com.tazzzo.app.cart
 
 import com.tazzzo.app.catalog.cp
+import com.tazzzo.app.Screen
+import com.tazzzo.app.data.cart.CartAction
 import com.tazzzo.app.data.cart.CartNotice
+import com.tazzzo.app.data.cart.addressScreen
 import com.tazzzo.app.data.cart.KnownIssue
 import com.tazzzo.app.data.cart.LineIssue
 import com.tazzzo.app.data.cart.PendingTarget
@@ -150,5 +153,81 @@ class CartPresentationTest {
 
     @Test fun moneyZeroPriceIsStillAPriceTheServerDecidesBuyable() {
         assertEquals(PurchaseControl.Add, purchaseControl(cp(price = Money.ZERO), remote, 0, null))
+    }
+
+    // ---- per-issue recovery ---------------------------------------------------------------------------------------
+
+    private fun actionsFor(code: String, qty: Int = 5, max: Int = 3) = line("TZP-1", qty, max = max, issues = listOf(code)).toView().actions
+    private fun copyFor(code: String, qty: Int = 5, max: Int = 3) = line("TZP-1", qty, max = max, issues = listOf(code)).toView().issues.single()
+
+    @Test fun productUnavailableIsRemoveOnly() {
+        assertEquals(listOf(CartAction.Remove), actionsFor("PRODUCT_UNAVAILABLE"))
+        assertEquals("Product is no longer available.", copyFor("PRODUCT_UNAVAILABLE"))
+    }
+
+    @Test fun priceUnavailableIsRetryThenRemove() {
+        assertEquals(listOf(CartAction.RetryCart, CartAction.Remove), actionsFor("PRICE_UNAVAILABLE"))
+        assertEquals("Price is temporarily unavailable.", copyFor("PRICE_UNAVAILABLE"))
+    }
+
+    @Test fun locationRequiredLeadsWithChooseAddressAndDoesNotForceRemove() {
+        assertEquals(CartAction.ChooseAddress, actionsFor("LOCATION_REQUIRED").first())
+        assertEquals("Choose a delivery address to check availability.", copyFor("LOCATION_REQUIRED"))
+    }
+
+    @Test fun unserviceableLeadsWithChangeAddressAndRemoveIsNotTheOnlyAction() {
+        assertEquals(listOf(CartAction.ChangeAddress, CartAction.Remove), actionsFor("UNSERVICEABLE"))
+        assertEquals("This item can't be delivered to the selected address.", copyFor("UNSERVICEABLE"))
+    }
+
+    @Test fun outOfStockIsRemoveOrRetryAndNeverAutoDeleted() {
+        assertEquals(setOf(CartAction.Remove, CartAction.RetryCart), actionsFor("OUT_OF_STOCK").toSet())
+        assertEquals("Out of stock.", copyFor("OUT_OF_STOCK"))
+    }
+
+    @Test fun stockUnknownLeadsWithRetry() {
+        assertEquals(listOf(CartAction.RetryCart, CartAction.Remove), actionsFor("STOCK_UNKNOWN"))
+        assertEquals("Availability couldn't be confirmed.", copyFor("STOCK_UNKNOWN"))
+    }
+
+    @Test fun insufficientStockOffersAnExplicitReduceToTheServersMax() {
+        assertEquals(listOf(CartAction.ReduceQuantity(3), CartAction.Remove), actionsFor("INSUFFICIENT_STOCK", qty = 5, max = 3))
+        assertEquals("Only 3 available.", copyFor("INSUFFICIENT_STOCK", qty = 5, max = 3))
+    }
+
+    @Test fun insufficientStockWithoutAUsableMaxFallsBackToSafeCopyRetryAndRemove() {
+        for (max in listOf(0, 5, 9)) {                                   // none, equal to, or above the quantity
+            assertEquals(listOf(CartAction.RetryCart, CartAction.Remove), actionsFor("INSUFFICIENT_STOCK", qty = 5, max = max), "max=$max")
+        }
+        assertEquals("Not enough stock for this quantity.", copyFor("INSUFFICIENT_STOCK", qty = 5, max = 0))
+    }
+
+    @Test fun enrichmentUnavailableLeadsWithRetry() {
+        assertEquals(listOf(CartAction.RetryCart, CartAction.Remove), actionsFor("ENRICHMENT_UNAVAILABLE"))
+        assertEquals("Product information is temporarily unavailable.", copyFor("ENRICHMENT_UNAVAILABLE"))
+    }
+
+    @Test fun anUnknownIssueStaysBlockingWithGenericCopyRetryAndRemove() {
+        val v = line("TZP-1", issues = listOf("FUTURE_CODE")).toView()
+        assertTrue(v.blocked); assertFalse(v.canIncrease)
+        assertEquals(listOf(CartAction.RetryCart, CartAction.Remove), v.actions)
+        assertFalse("FUTURE_CODE" in v.issues.single())
+    }
+
+    @Test fun aBlockedLineWithNoIssueCodeStillGetsARecovery() {
+        assertEquals(listOf(CartAction.RetryCart, CartAction.Remove), line("TZP-1", buyable = false).toView().actions)
+    }
+
+    @Test fun aHealthyLineHasNoRecoveryActions() = assertTrue(line("TZP-1").toView().actions.isEmpty())
+
+    @Test fun severalIssuesMergeTheirActionsWithoutDuplicates() {
+        val a = line("TZP-1", issues = listOf("UNSERVICEABLE", "OUT_OF_STOCK")).toView().actions
+        assertEquals(listOf(CartAction.ChangeAddress, CartAction.Remove, CartAction.RetryCart), a)
+    }
+
+    @Test fun addressActionsGoToTheRealAddressScreenNeverTheMockOnesOrCheckout() {
+        assertEquals(Screen.Addresses, CartAction.ChooseAddress.addressScreen())
+        assertEquals(Screen.Addresses, CartAction.ChangeAddress.addressScreen())
+        for (a in listOf(CartAction.Remove, CartAction.RetryCart, CartAction.ReduceQuantity(2))) assertNull(a.addressScreen())
     }
 }
