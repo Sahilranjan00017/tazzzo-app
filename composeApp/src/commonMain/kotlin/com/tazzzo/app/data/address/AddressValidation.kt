@@ -7,7 +7,9 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /** Backend limits, mirrored client-side because the server answers every field error with one generic code. */
-object AddressRules {
+// `internal`: this object is app-module only. Exported to Objective-C its LINE_MAX / NAME_MAX constants collide with the
+// <limits.h> macros of the same names and the generated framework header fails to compile (iOS app build break).
+internal object AddressRules {
     const val NAME_MAX = 80
     const val LINE_MAX = 160
     const val LANDMARK_MAX = 120

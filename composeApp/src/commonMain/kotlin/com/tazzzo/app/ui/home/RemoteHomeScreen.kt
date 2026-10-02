@@ -331,7 +331,7 @@ private fun HomeProductCard(product: CatalogProduct, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.height(TazSpace.sm))
-        Text(product.name, fontSize = TazType.productNameSize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(product.name, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         // No pack-size line: the backend does not send one.
         Spacer(Modifier.height(TazSpace.xs))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -402,4 +402,4 @@ private fun CompactPill(text: String, onClick: () -> Unit, dark: Boolean = true)
 }
 
 private val CAT_SIZE = 72.dp
-private val CARD_W = 128.dp
+private val CARD_W = 140.dp
