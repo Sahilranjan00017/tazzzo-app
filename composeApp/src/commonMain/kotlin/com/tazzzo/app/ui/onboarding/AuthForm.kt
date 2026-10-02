@@ -1,6 +1,16 @@
 package com.tazzzo.app.ui.onboarding
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -96,8 +106,17 @@ internal fun DialPrefix() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun PhoneStep(flow: AuthFlow, cta: String) {
+    // When the field takes focus (keyboard up) the CTA is scrolled into view, so Continue is never hidden behind the IME
+    // on a short screen (320x569dp class).
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val imeVisible = WindowInsets.isImeVisible
+    val ctaIntoView = remember { BringIntoViewRequester() }
+    // Keyed on the IME actually being shown (not just focus), so the scroll range already includes the keyboard inset.
+    LaunchedEffect(focused, imeVisible) { if (focused && imeVisible) { delay(120); runCatching { ctaIntoView.bringIntoView() } } }
     Column(Modifier.fillMaxWidth()) {
         // The pill input: cream fill, hairline border, static dial prefix, numeric keyboard.
         Row(
@@ -112,6 +131,7 @@ private fun PhoneStep(flow: AuthFlow, cta: String) {
                 value = flow.phoneInput,
                 onValueChange = flow::onPhoneChanged,
                 singleLine = true,
+                interactionSource = interaction,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 cursorBrush = SolidColor(TazColors.BrandEditorial),
                 textStyle = TextStyle(fontFamily = tazFontFamily(), fontSize = TazType.titleSize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary),
@@ -127,7 +147,7 @@ private fun PhoneStep(flow: AuthFlow, cta: String) {
         FailureText(flow.failure)
         Spacer(Modifier.height(TazSpace.md))
         TazzzoPrimaryButton(
-            text = cta, onClick = flow::submitPhone, modifier = Modifier.fillMaxWidth(),
+            text = cta, onClick = flow::submitPhone, modifier = Modifier.fillMaxWidth().bringIntoViewRequester(ctaIntoView),
             enabled = flow.canContinue, loading = flow.requesting
         )
     }

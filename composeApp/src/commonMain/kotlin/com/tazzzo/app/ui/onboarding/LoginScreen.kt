@@ -1,6 +1,7 @@
 package com.tazzzo.app.ui.onboarding
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,7 +66,12 @@ fun LoginScreen() {
     })
     val guest = { app.requestGuidedTourIfFirstTime(); app.goHome() }
 
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // Short screens (≈570dp tall) get a tighter headline block so the form starts above the fold.
+        val compact = maxHeight < 700.dp
+        val headlineTop = if (compact) HEADLINE_TOP_COMPACT else HEADLINE_TOP
+        val headlineSize = if (compact) TazType.editorialTitleSize else TazType.editorialHeadlineSize
+        val headlineLine = if (compact) TazType.editorialTitleLine else TazType.editorialHeadlineLine
         PhotoBackdrop(photo = null, placeholder = PhotoPlaceholders.creamWall, anchor = PhotoAnchor.Bottom, modifier = Modifier.fillMaxSize())   // TZ-ASSET-LOGIN-001 / OTP-001 outstanding
 
         Column(
@@ -84,16 +90,16 @@ fun LoginScreen() {
                     ) { Icon(TazIcons.Back, contentDescription = null, tint = TazColors.BrandEditorial) }
                 }
             }
-            VSpace(HEADLINE_TOP)
+            VSpace(headlineTop)
 
             when (flow.step) {
                 AuthStep.Phone -> {
-                    EditorialText(listOf(plain("What’s\nyour "), italic("number?")), size = TazType.editorialHeadlineSize, lineHeight = TazType.editorialHeadlineLine, color = TazColors.BrandEditorial)
+                    EditorialText(listOf(plain("What’s\nyour "), italic("number?")), size = headlineSize, lineHeight = headlineLine, color = TazColors.BrandEditorial)
                     VSpace(TazSpace.lg)
                     EditorialText(listOf(plain(LoginCopy.PHONE_SUPPORT)), size = TazType.editorialSubSize, lineHeight = TazType.editorialSubLine, color = TazColors.TextSecondary)
                 }
                 AuthStep.Otp -> {
-                    EditorialText(listOf(plain("Enter the\n"), italic("6-digit code")), size = TazType.editorialHeadlineSize, lineHeight = TazType.editorialHeadlineLine, color = TazColors.BrandEditorial)
+                    EditorialText(listOf(plain("Enter the\n"), italic("6-digit code")), size = headlineSize, lineHeight = headlineLine, color = TazColors.BrandEditorial)
                     VSpace(TazSpace.lg)
                     EditorialText(listOf(plain(LoginCopy.OTP_SUPPORT)), size = TazType.editorialSubSize, lineHeight = TazType.editorialSubLine, color = TazColors.TextSecondary)
                     EditorialText(listOf(plain(flow.phoneDisplay)), size = TazType.editorialSubSize, lineHeight = TazType.editorialSubLine, color = TazColors.BrandEditorial)
@@ -120,4 +126,5 @@ fun LoginScreen() {
 
 /** The headline starts ~26% down the frame in the references (≈ 165/640 after the top bar). */
 private val HEADLINE_TOP = 92.dp
+private val HEADLINE_TOP_COMPACT = 24.dp
 private val FORM_MAX_WIDTH = 420.dp
