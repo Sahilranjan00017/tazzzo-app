@@ -17,7 +17,9 @@ targets:
       properties:
         CFBundleDisplayName: Tazzzo
         CADisableMinimumFrameDurationOnPhone: true
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchMark
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
     settings:
       base:
