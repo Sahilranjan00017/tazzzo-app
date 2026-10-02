@@ -172,6 +172,7 @@ private fun PinEditor(onDone: () -> Unit) {
             placeholder = { Text("6-digit PIN code", fontSize = TazType.bodySize) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
-        PillButton("Update", onClick = { if (ctx.setPin(text)) onDone() }, enabled = valid)
+        // A typed PIN is a MANUAL location: it clears any selected saved address, so only one source is ever active.
+        PillButton("Update", onClick = { if (ServiceLocator.deliveryLocation.setManualPin(text)) onDone() }, enabled = valid)
     }
 }

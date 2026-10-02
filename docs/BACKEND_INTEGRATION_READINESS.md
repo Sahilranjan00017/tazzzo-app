@@ -483,3 +483,44 @@ rating, description, highlights, variants, legal, ETA (unless sent), brand name,
 placeholder (URLs are kept in state; the loader is a later PR). **No real product can enter the local/mock cart**
 (`cartIntegration = false`): the purchase action is a disabled, neutral label. `ServiceLocator.catalog` (the mock) throws
 in REMOTE mode instead of answering, so nothing can silently mix mock and real data.
+
+
+---
+
+## 7. Customer addresses (PR-05)
+
+Backend contract used (`/v1/customer/addresses`, bearer; source: backend `origin/main`):
+
+| Operation | Route | If-Match | Success |
+|---|---|---|---|
+| list | `GET /v1/customer/addresses` | – | 200 `{items[]}` (no ETag) |
+| get | `GET …/{addressId}` | – | 200, `ETag: "address-<n>"` |
+| create | `POST …` | – | 201 |
+| update | `PATCH …/{addressId}` | **required** `"address-<version>"` | 200 |
+| delete | `DELETE …/{addressId}` | **required** | 204 |
+| set default | `PUT …/{addressId}/default` | not used (version unchanged) | 200 |
+
+Fields: `addressId` (`ADDR_…`), `label` (`HOME`/`WORK`/`OTHER` only), `recipientName` (≤80), `recipientPhone`
+(canonical `+91XXXXXXXXXX`, delivery contact only), `addressLine1` (≤160), `addressLine2?` (≤160), `landmark?` (≤120),
+`city` (≤80), `state` (≤80), `postalCode` (`^[1-9][0-9]{5}$`), `latitude?`/`longitude?` (the app never sends them),
+`isDefault`, `version`, `serviceability.serviceable` (**tri-state `true`/`false`/`null`**). Not in the API: `createdAt`,
+`updatedAt`. Limit 10 per customer (`409 ADDRESS_LIMIT_REACHED`). The first address is the default; deleting the
+default makes the backend promote another. List order is the server's (default first).
+
+App behaviour: addresses live **in memory only** (`AddressBook`); the backend is the authority and the whole list is
+refetched after every create / update / delete / set-default. `412` → refetch + "This address changed…" + explicit retry;
+`404` → refetch; `428` is treated as a client bug and never retried. Plain settings hold only the delivery PIN and the opaque
+`selectedAddressId` (cleared on logout); the old `tazzzo.addresses.v1` list and `SavedSession.address` are purged.
+Login never changes the delivery location: the default address is only *offered* ("Deliver to Home · 560102?"). One
+`DeliveryLocation` coordinator is the only writer of the one active PIN (`LaunchContext`); logout resets it to 560047.
+
+**BACKEND CONTRACT / ENVIRONMENT REQUEST (addresses):** real-environment sign-off needs a working customer auth path
+(the non-prod test-OTP mechanism requested in PR-03A), the customer token HMAC keys, a replica-set Mongo, and service-area
+coverage for at least two test PINs — 560047 (serviceable) and one intentionally non-serviceable PIN. Not blocking for
+automated PR-05 work; blocking for launch sign-off. No address seed data or feature flag is needed.
+
+**BACKEND CONTRACT IMPROVEMENT REQUEST — ADDRESS CREATE IDEMPOTENCY:** `POST /v1/customer/addresses` has no
+`Idempotency-Key`, so a lost response (timeout / connection loss) can leave a duplicate if the customer retries, and
+content-matching cannot prove whether the first request succeeded. Please support an `Idempotency-Key` on create so a client
+can retry safely. Not a PR-05 blocker; desirable before launch hardening. Until then the app never retries a create
+automatically: after an ambiguous failure it refetches the list and lets the customer decide.

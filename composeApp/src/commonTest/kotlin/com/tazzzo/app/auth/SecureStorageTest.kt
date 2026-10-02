@@ -33,7 +33,7 @@ class SecureStorageTest {
     @Test fun theBlobHoldsTokensButNeverGoesNearPlainSettings() {
         val settings = MapSettings(); val store = PersistentStore(settings)
         BlobSecureTokenStore(FakeBlobStore()).save(tokens("SECRET-ACCESS", "SES_x.SECRET-REFRESH"))
-        store.saveSession(PersistentStore.SavedSession("", "", false, 0, ""))
+        store.saveSession(PersistentStore.SavedSession("", "", false, 0))
         assertTrue(settings.keys.none { k -> settings.getStringOrNull(k)?.contains("SECRET") == true })
     }
 

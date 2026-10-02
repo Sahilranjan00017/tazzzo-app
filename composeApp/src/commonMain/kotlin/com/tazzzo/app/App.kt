@@ -13,6 +13,8 @@ import com.tazzzo.app.config.AppEnvironment
 import com.tazzzo.app.data.catalog.CatalogMode
 import com.tazzzo.app.data.catalog.CatalogSource
 import com.tazzzo.app.ui.catalog.RemoteCategoryScreen
+import com.tazzzo.app.ui.address.RemoteAddressFormScreen
+import com.tazzzo.app.ui.address.RemoteAddressesScreen
 import com.tazzzo.app.ui.catalog.RemoteProductDetailScreen
 import com.tazzzo.app.ui.catalog.UnavailableSurface
 import com.tazzzo.app.theme.TazzzoTheme
@@ -103,7 +105,8 @@ fun App() {
                         is Screen.Orders -> OrdersScreen()
                         is Screen.Coins -> CoinsScreen()
                         is Screen.Help -> HelpScreen()
-                        is Screen.Addresses -> AddressesScreen()
+                        is Screen.Addresses -> if (remoteCatalog) RemoteAddressesScreen() else AddressesScreen()
+                        is Screen.AddressForm -> RemoteAddressFormScreen(screen.addressId)
                         is Screen.MasterList -> if (ServiceLocator.catalogCapabilities.search) MasterListScreen() else UnavailableSurface("Shopping list")
                         is Screen.About -> AboutScreen()
                         is Screen.Club -> ClubScreen()
@@ -126,6 +129,12 @@ private fun AuthSessionRunner(app: TazzzoAppState) {
     LaunchedEffect(Unit) {
         val session = ServiceLocator.authSession
         session.restore()
+        if (ServiceLocator.catalogMode == CatalogMode.REMOTE) {
+            // Signed in -> load addresses; signed out / rejected -> wipe them and reset the location to 560047.
+            com.tazzzo.app.data.address.SessionLocationBinding(
+                ServiceLocator.authScope, session.active, ServiceLocator.addressBook, ServiceLocator.deliveryLocation
+            ).start(initiallyAuthenticated = session.isAuthenticated)
+        }
         session.active.collect { app.applyAuthState(it) }
     }
 }

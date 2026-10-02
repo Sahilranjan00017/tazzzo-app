@@ -33,7 +33,7 @@ class AuthAppStateTest {
 
     @Test fun aSavedNonGuestProfileDoesNotMakeAnyoneSignedInWithoutSecureTokens() = kotlinx.coroutines.test.runTest {
         val store = PersistentStore(MapSettings())
-        store.saveSession(PersistentStore.SavedSession("Old Mock", "9876543210", isGuest = false, coinBalance = 5, address = "x"))
+        store.saveSession(PersistentStore.SavedSession("Old Mock", "9876543210", isGuest = false, coinBalance = 5))
         val app = TazzzoAppState(store = store)
         app.restoreFromDisk()
         assertTrue(app.user.isGuest, "isGuest from disk must not be trusted")

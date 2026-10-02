@@ -72,26 +72,42 @@ class PersistentStore(provided: Settings? = null) {
         val name: String,
         val phone: String,
         val isGuest: Boolean,
-        val coinBalance: Int,
-        val address: String
+        val coinBalance: Int
     )
 
     fun saveSession(s: SavedSession) = settings.putString(KEY_SESSION, json.encodeToString(s))
     fun loadSession(): SavedSession? =
         settings.getStringOrNull(KEY_SESSION)?.let { runCatching { json.decodeFromString<SavedSession>(it) }.getOrNull() }
 
-    // ---- addresses (user-added; seed addresses come from the repository) ---
+    // ---- addresses ----------------------------------------------------------
+    //
+    // Customer addresses are NEVER written here. The backend is the authority and the app holds them
+    // in memory only (AddressBook), so a plain-settings file never contains a recipient name, phone,
+    // address line, landmark, city/state or coordinate. The only address-related values kept are the
+    // non-sensitive PIN (see `launchPin`) and the opaque id of the address chosen as the delivery
+    // location, below. It is cleared on logout.
 
-    @Serializable
-    data class SavedAddress(
-        val id: String, val label: String, val line1: String,
-        val line2: String, val pincode: String, val isServiceable: Boolean
-    )
+    /** Opaque `ADDR_…` id of the saved address chosen as the delivery location. No address content. */
+    var selectedAddressId: String?
+        get() = settings.getStringOrNull(KEY_SELECTED_ADDRESS)
+        set(v) { if (v == null) settings.remove(KEY_SELECTED_ADDRESS) else settings.putString(KEY_SELECTED_ADDRESS, v) }
 
-    fun saveAddresses(list: List<SavedAddress>) =
-        settings.putString(KEY_ADDRESSES, json.encodeToString(list.take(20)))
-
-    fun loadAddresses(): List<SavedAddress> = decodeList(KEY_ADDRESSES)
+    /**
+     * Retires what earlier builds wrote: the plain-settings address list (`tazzzo.addresses.v1`) and the
+     * free-text address inside the saved session. Idempotent.
+     *
+     * @return true if anything was removed.
+     */
+    fun purgeLegacyAddressData(): Boolean {
+        var removed = false
+        if (settings.getStringOrNull(KEY_ADDRESSES_LEGACY) != null) { settings.remove(KEY_ADDRESSES_LEGACY); removed = true }
+        val rawSession = settings.getStringOrNull(KEY_SESSION)
+        if (rawSession != null && rawSession.contains("\"address\"")) {
+            loadSession()?.let { saveSession(it) } ?: settings.remove(KEY_SESSION)    // re-saved without the address
+            removed = true
+        }
+        return removed
+    }
 
     // ---- recent searches ---------------------------------------------------
 
@@ -208,7 +224,8 @@ class PersistentStore(provided: Settings? = null) {
         const val KEY_CART_V1 = "tazzzo.cart.v1"        // whole rupees, mock ids: discarded, never read
         const val KEY_NOTIFICATIONS = "tazzzo.prefs.notifications.v1"
         const val KEY_SESSION = "tazzzo.session.v1"
-        const val KEY_ADDRESSES = "tazzzo.addresses.v1"
+        const val KEY_ADDRESSES_LEGACY = "tazzzo.addresses.v1"     // retired: never read, only purged
+        const val KEY_SELECTED_ADDRESS = "tazzzo.selectedAddress.v1"
         const val KEY_SEARCHES = "tazzzo.searches.v1"
         const val KEY_TOUR_SEEN = "tazzzo.tourSeen.v1"
         const val KEY_ONBOARDED = "tazzzo.onboarded.v1"
