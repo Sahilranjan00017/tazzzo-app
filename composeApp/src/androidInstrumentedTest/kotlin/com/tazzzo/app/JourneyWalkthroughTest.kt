@@ -91,11 +91,15 @@ class JourneyWalkthroughTest {
         waitFor(hasText(BrandCopy.tagline), 30_000)
         snapshot("j01_splash")
 
-        // ---- 02 Onboarding IS the sign-in form: brand wall, then +91 ----
-        // The first run puts the phone field on the same screen as the value
-        // proposition; there is no separate login route to wait for.
+        // ---- 02 Showcase carousel (3 pages), then Login ----
+        waitFor(hasText("Next"), 30_000)
+        snapshot("j02_showcase_1")
+        click(hasText("Next")); snapshot("j03_showcase_2")
+        click(hasText("Next")); snapshot("j04_showcase_3")
+        click(hasText("Get started"))
+        // ---- Login: static +91, Continue, quiet guest entry ----
         waitFor(hasText("Continue"), 30_000)
-        snapshot("j02_onboarding")
+        snapshot("j02_login")
         // Real phone + 6-digit OTP needs a live OTP provider (none exists in
         // non-prod yet), so this journey takes the supported GUEST path.
         click(hasText("Skip for now"))

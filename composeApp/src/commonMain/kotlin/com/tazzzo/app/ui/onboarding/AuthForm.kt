@@ -9,20 +9,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -39,19 +42,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.padding
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.data.auth.AuthFailure
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazRadius
-import com.tazzzo.app.theme.TazSize
 import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
-import com.tazzzo.app.ui.common.PillButton
-import com.tazzzo.app.ui.interaction.TazHaptic
-import com.tazzzo.app.ui.interaction.TazPress
-import com.tazzzo.app.ui.interaction.tazPressable
+import com.tazzzo.app.theme.tazFontFamily
+import com.tazzzo.app.ui.common.EDITORIAL_BUTTON_HEIGHT
+import com.tazzzo.app.ui.common.TazzzoPrimaryButton
+import com.tazzzo.app.ui.common.TextAction
+import androidx.compose.runtime.rememberCoroutineScope
 
 /**
  * Creates the shared [AuthFlow] bound to the real [ServiceLocator.auth]. On
@@ -70,8 +72,8 @@ fun rememberAuthFlow(onDone: () -> Unit): AuthFlow {
 }
 
 /**
- * The phone and OTP steps, functional structure only. Final visual treatment
- * (TZ-LOGIN-001 / TZ-OTP-001) is PR-03B and changes presentation, not this logic.
+ * The phone and OTP steps — PRESENTATION only (UI Page references). Every behaviour is the unchanged [AuthFlow]:
+ * sanitising, submit, verify, resend timer, failures.
  */
 @Composable
 fun AuthEntry(flow: AuthFlow, phoneCta: String, otpCta: String, modifier: Modifier = Modifier) {
@@ -83,35 +85,50 @@ fun AuthEntry(flow: AuthFlow, phoneCta: String, otpCta: String, modifier: Modifi
     }
 }
 
+/** A static "+91" (no picker exists, so no chevron) separated from the digits by a hairline. */
+@Composable
+internal fun DialPrefix() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(LoginCopy.DIAL_PREFIX, fontSize = TazType.titleSize, fontWeight = FontWeight.Medium, color = TazColors.BrandEditorial)
+        Spacer(Modifier.width(TazSpace.md))
+        Box(Modifier.width(1.dp).height(24.dp).background(TazColors.BorderStrong))
+        Spacer(Modifier.width(TazSpace.md))
+    }
+}
+
 @Composable
 private fun PhoneStep(flow: AuthFlow, cta: String) {
     Column(Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = flow.phoneInput,
-            onValueChange = flow::onPhoneChanged,
-            modifier = Modifier.fillMaxWidth().height(TazSize.inputHeight),
-            singleLine = true,
-            shape = TazRadius.card,
-            leadingIcon = { DialPrefix() },
-            placeholder = {
-                Text("Enter mobile number", fontSize = TazType.bodySize, color = TazColors.TextTertiary)
-            },
-            textStyle = TextStyle(
-                fontSize = TazType.titleSize, fontWeight = TazType.titleWeight, color = TazColors.TextPrimary
-            ),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            colors = tazFieldColors()
-        )
+        // The pill input: cream fill, hairline border, static dial prefix, numeric keyboard.
+        Row(
+            Modifier.fillMaxWidth().height(EDITORIAL_BUTTON_HEIGHT).clip(TazRadius.pill)
+                .background(TazColors.Surface.copy(alpha = 0.72f))
+                .border(BorderStroke(1.dp, TazColors.BorderStrong), TazRadius.pill)
+                .padding(horizontal = TazSpace.xl),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DialPrefix()
+            BasicTextField(
+                value = flow.phoneInput,
+                onValueChange = flow::onPhoneChanged,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                cursorBrush = SolidColor(TazColors.BrandEditorial),
+                textStyle = TextStyle(fontFamily = tazFontFamily(), fontSize = TazType.titleSize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary),
+                modifier = Modifier.weight(1f).semantics { contentDescription = "Mobile number" },
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (flow.phoneInput.isEmpty()) Text("98765 43210", fontSize = TazType.titleSize, color = TazColors.TextDisabled)
+                        inner()
+                    }
+                }
+            )
+        }
         FailureText(flow.failure)
         Spacer(Modifier.height(TazSpace.md))
-        PillButton(
-            text = cta,
-            loading = flow.requesting,
-            loadingText = "Sending code…",
-            onClick = flow::submitPhone,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = flow.canContinue,
-            disabledHint = "Enter your 10-digit mobile number to continue"
+        TazzzoPrimaryButton(
+            text = cta, onClick = flow::submitPhone, modifier = Modifier.fillMaxWidth(),
+            enabled = flow.canContinue, loading = flow.requesting
         )
     }
 }
@@ -119,69 +136,35 @@ private fun PhoneStep(flow: AuthFlow, cta: String) {
 @Composable
 private fun OtpStep(flow: AuthFlow, cta: String) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-            Text(
-                "Enter the 6-digit code sent to ${flow.phoneDisplay}",
-                fontSize = TazType.captionSize,
-                color = TazColors.TextSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-        }
-        Box(
-            Modifier
-                .defaultMinSize(minHeight = TazSize.touchTarget)
-                .clip(TazRadius.chip)
-                .tazPressable(onClick = flow::changeNumber, pressScale = TazPress.compact),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Change number", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Green)
-        }
-        Spacer(Modifier.height(TazSpace.sm))
         OtpCells(value = flow.otpInput, onValueChange = flow::onOtpChanged, enabled = !flow.verifying)
         FailureText(flow.failure)
-        Spacer(Modifier.height(TazSpace.sm))
+        Spacer(Modifier.height(TazSpace.lg))
         ResendRow(flow)
-        Spacer(Modifier.height(TazSpace.md))
-        PillButton(
-            text = cta,
-            loading = flow.verifying,
-            loadingText = "Verifying…",
-            onClick = flow::submitOtp,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = flow.canVerify || flow.verifying,
-            disabledHint = "Enter the 6-digit code to continue"
+        Spacer(Modifier.height(TazSpace.lg))
+        TazzzoPrimaryButton(
+            text = cta, onClick = flow::submitOtp, modifier = Modifier.fillMaxWidth(),
+            enabled = flow.canVerify || flow.verifying, loading = flow.verifying
         )
     }
 }
 
 @Composable
 private fun ResendRow(flow: AuthFlow) {
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Didn’t receive the code?", fontSize = TazType.captionSize, color = TazColors.TextSecondary)
         if (flow.resendRemaining > 0) {
             val s = flow.resendRemaining
             Text(
-                "Resend code in ${s / 60}:${(s % 60).toString().padStart(2, '0')}",
-                fontSize = TazType.captionSize,
-                color = TazColors.TextTertiary
+                "Resend in ${(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}",
+                fontSize = TazType.captionSize, fontWeight = FontWeight.Medium, color = TazColors.BrandEditorial,
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                modifier = Modifier.padding(top = TazSpace.xs)
             )
         } else {
-            Box(
-                Modifier
-                    .defaultMinSize(minHeight = TazSize.touchTarget)
-                    .clip(TazRadius.chip)
-                    .tazPressable(pressScale = TazPress.compact, haptic = TazHaptic.Tap, onClick = flow::resend)
-                    .then(if (flow.canResend) Modifier else Modifier.alpha(0.5f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    if (flow.requesting) "Sending…" else "Resend code",
-                    fontSize = TazType.captionSize,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TazColors.Green,
-                    modifier = Modifier.padding(horizontal = TazSpace.md)
-                )
-            }
+            TextAction(
+                if (flow.requesting) "Sending…" else "Resend code", onClick = flow::resend,
+                color = TazColors.BrandEditorial, underline = true, enabled = flow.canResend
+            )
         }
     }
 }
@@ -191,20 +174,15 @@ private fun FailureText(failure: AuthFailure?) {
     if (failure == null) return
     Spacer(Modifier.height(TazSpace.sm))
     Text(
-        failure.message,
-        fontSize = TazType.captionSize,
-        fontWeight = FontWeight.SemiBold,
-        color = TazColors.Danger,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth()
+        failure.message, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Danger,
+        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
     )
 }
 
 /**
- * Six cells over one hidden text field. A single real field gives correct
- * numeric keyboard, focus, backspace, paste and IME behaviour for free; the
- * cells only draw its content. Paste of more than 6 characters is reduced to
- * the first six digits by the flow.
+ * Six cells over one hidden text field. A single real field gives correct numeric keyboard, focus, backspace,
+ * paste and IME behaviour for free; the cells only draw its content. Paste of more than 6 characters is reduced
+ * to the first six digits by the flow. Cells share the available width (weights), so the row fits a 320dp screen.
  */
 @Composable
 fun OtpCells(value: String, onValueChange: (String) -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
@@ -224,32 +202,38 @@ fun OtpCells(value: String, onValueChange: (String) -> Unit, enabled: Boolean, m
         decorationBox = { inner ->
             Box {
                 Box(Modifier.size(1.dp).alpha(0f)) { inner() }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                Row(Modifier.fillMaxWidth().widthIn(max = 360.dp), horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
                     repeat(AuthFlow.OTP_LENGTH) { i ->
-                        val active = i == value.length.coerceAtMost(AuthFlow.OTP_LENGTH - 1)
+                        val active = enabled && i == value.length.coerceAtMost(AuthFlow.OTP_LENGTH - 1)
+                        val shape = RoundedCornerShape(12.dp)
                         Box(
-                            Modifier
-                                .width(44.dp)
-                                .height(52.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White)
-                                .border(
-                                    BorderStroke(if (active) 2.dp else 1.dp, if (active) TazColors.Green else TazColors.CardBorder),
-                                    RoundedCornerShape(12.dp)
-                                ),
+                            Modifier.weight(1f).aspectRatio(0.86f).clip(shape).background(TazColors.CreamStrong)
+                                .border(BorderStroke(if (active) 1.5.dp else 1.dp, if (active) TazColors.BrandEditorial else TazColors.BorderStrong), shape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                value.getOrNull(i)?.toString().orEmpty(),
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TazColors.TextPrimary
-                            )
+                            val digit = value.getOrNull(i)?.toString()
+                            if (digit != null) {
+                                Text(digit, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary)
+                            } else if (active) {
+                                Box(Modifier.width(1.5.dp).height(22.dp).background(TazColors.BrandEditorial))   // caret
+                            }
                         }
-                        if (i < AuthFlow.OTP_LENGTH - 1) Spacer(Modifier.width(8.dp))
                     }
                 }
             }
         }
     )
 }
+
+/** Outlined-field colours shared by the address, cart and master-list forms (unchanged; lived in the old onboarding file). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun tazFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = TazColors.Green,
+    unfocusedBorderColor = TazColors.BorderStrong,
+    cursorColor = TazColors.Green,
+    focusedContainerColor = TazColors.Surface,
+    unfocusedContainerColor = TazColors.Surface,
+    focusedTextColor = TazColors.TextPrimary,
+    unfocusedTextColor = TazColors.TextPrimary
+)
