@@ -471,3 +471,15 @@ inventory, at least one service area including PIN 560047, thumbnail/gallery med
 configuration, cursor signing key, `tazzzo.freshness.enabled`, a configured
 consumer rate-limit mode, and a provisioned gateway host. Not blocking for
 PR-04A's automated work; blocking for real-environment sign-off before launch.
+
+
+### 6a. What is wired to the real catalogue (PR-04C)
+
+REMOTE is the production mode (a debug build is REMOTE too unless `taz_mock_catalog` / the demo flags ask for MOCK
+explicitly). In REMOTE: Categories (TZS sections → TZC categories, children loaded lazily) → PLP (cursor paging, TZG
+subcategory chips) → PDP, plus the delivery-PIN banner (launch PIN 560047, editable). **Hidden, because the backend has
+no source:** Search, Deals, Order Again, Bestsellers, banners/home rails, category counts, server sort. **Not rendered:**
+rating, description, highlights, variants, legal, ETA (unless sent), brand name, pack size. Images use a neutral
+placeholder (URLs are kept in state; the loader is a later PR). **No real product can enter the local/mock cart**
+(`cartIntegration = false`): the purchase action is a disabled, neutral label. `ServiceLocator.catalog` (the mock) throws
+in REMOTE mode instead of answering, so nothing can silently mix mock and real data.

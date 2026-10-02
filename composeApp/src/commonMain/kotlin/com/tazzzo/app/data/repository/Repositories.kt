@@ -153,9 +153,35 @@ class MockCoinRepository : CoinRepository {
     }
 }
 
+/**
+ * Stands in for the mock catalogue in REMOTE mode. Every call fails loudly (never returns mock data),
+ * so a stray legacy call site surfaces as an error state and a failing test instead of fake commerce.
+ */
+internal object RemoteModeCatalogGuard : CatalogRepository {
+    private fun refuse(): Nothing =
+        throw UnsupportedOperationException("The mock catalogue is not available in REMOTE catalogue mode")
+    override suspend fun getCategories(): List<Category> = refuse()
+    override suspend fun getProduct(id: String): Product? = refuse()
+    override suspend fun getBanners(): List<PromoBanner> = refuse()
+    override suspend fun getBestsellers(): List<Product> = refuse()
+    override suspend fun getDeals(): List<Product> = refuse()
+    override suspend fun getCounts(): Map<String, Int> = refuse()
+    override suspend fun getProducts(categoryId: String, subcategoryId: String?): List<Product> = refuse()
+    override suspend fun search(query: String): List<Product> = refuse()
+}
+
 /** Poor-man's DI — swap Mock* for Remote* here when the JS microservices land. */
 object ServiceLocator {
-    val catalog: CatalogRepository = MockCatalogRepository()
+    private val mockCatalog: CatalogRepository = MockCatalogRepository()
+
+    /**
+     * The LEGACY mock-era catalogue. Only available in explicit [com.tazzzo.app.data.catalog.CatalogMode.MOCK]
+     * (debug / demo / tests). In REMOTE mode — the only mode a release build can be in — this is a
+     * guard that FAILS rather than answering with mock products: a screen that still reaches for it
+     * shows its error state, never a silent mock/real mixture. Real screens use [remoteCatalog].
+     */
+    val catalog: CatalogRepository
+        get() = if (catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) mockCatalog else RemoteModeCatalogGuard
 
     // --- authentication (PR-03A) --------------------------------------------
     // Lazy: building the secure store needs the platform (an Android Context),
@@ -216,7 +242,7 @@ object ServiceLocator {
     val orders: OrderRepository = MockOrderRepository()
     val coins: CoinRepository = MockCoinRepository()
     val addresses: AddressRepository = MockAddressRepository()
-    val checkout: CheckoutRepository = MockCheckoutRepository(catalog, orders)
+    val checkout: CheckoutRepository = MockCheckoutRepository(mockCatalog, orders)
     val support: SupportRepository = MockSupportRepository()
 
     /**

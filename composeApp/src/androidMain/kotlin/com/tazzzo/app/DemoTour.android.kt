@@ -12,6 +12,7 @@ package com.tazzzo.app
 object DemoFlags {
     var failLoad: Boolean = false
     var startAtHome: Boolean = false
+    var mockCatalog: Boolean = false
 }
 
 actual fun isDemoTourEnabled(): Boolean = false
@@ -19,3 +20,5 @@ actual fun isDemoTourEnabled(): Boolean = false
 actual fun isDemoHomeEnabled(): Boolean = DemoFlags.startAtHome
 
 actual fun isDemoFailLoadEnabled(): Boolean = DemoFlags.failLoad
+
+actual fun isMockCatalogRequested(): Boolean = DemoFlags.mockCatalog

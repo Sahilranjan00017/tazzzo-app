@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tazzzo.app.HomeTab
 import com.tazzzo.app.LocalAppState
+import com.tazzzo.app.data.repository.ServiceLocator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -74,9 +75,13 @@ fun MainScaffold() {
     Box(Modifier.fillMaxSize().background(TazColors.Cream)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (app.homeTab) {
-                    HomeTab.HOME -> HomeTabContent()
-                    HomeTab.CATEGORIES -> CategoriesTabContent()
+                val remote = ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE
+                // A tab the active catalogue cannot support (e.g. a remembered DEALS in REMOTE mode)
+                // falls back to Home rather than rendering mock content.
+                val tab = if (app.homeTab in visibleHomeTabs(ServiceLocator.catalogCapabilities)) app.homeTab else HomeTab.HOME
+                when (tab) {
+                    HomeTab.HOME -> if (remote) com.tazzzo.app.ui.catalog.RemoteHomeContent() else HomeTabContent()
+                    HomeTab.CATEGORIES -> if (remote) com.tazzzo.app.ui.catalog.RemoteCategoriesContent() else CategoriesTabContent()
                     HomeTab.DEALS -> DealsTabContent()
                     HomeTab.ORDER_AGAIN -> OrderAgainTabContent()
                     HomeTab.ACCOUNT -> AccountTabContent()
@@ -189,7 +194,7 @@ private fun BottomNavBar() {
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                HomeTab.entries.forEach { tab ->
+                visibleHomeTabs(ServiceLocator.catalogCapabilities).forEach { tab ->
                     val selected = app.homeTab == tab
                     // Animated so the tab change is felt, not just observed.
                     val tint by animateColorAsState(

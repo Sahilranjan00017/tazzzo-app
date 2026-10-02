@@ -9,6 +9,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.config.AppEnvironment
+import com.tazzzo.app.data.catalog.CatalogMode
+import com.tazzzo.app.data.catalog.CatalogSource
+import com.tazzzo.app.ui.catalog.RemoteCategoryScreen
+import com.tazzzo.app.ui.catalog.RemoteProductDetailScreen
+import com.tazzzo.app.ui.catalog.UnavailableSurface
 import com.tazzzo.app.theme.TazzzoTheme
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.ui.home.MainScaffold
@@ -33,6 +39,9 @@ import com.tazzzo.app.ui.home.MasterListScreen
 
 @Composable
 fun App() {
+    // Catalogue mode is decided ONCE, before any screen reads it. Release is always REMOTE; a debug
+    // build is REMOTE unless a developer/demo/test EXPLICITLY asks for the mock catalogue.
+    remember { applyDevCatalogMode() }
     val appState = remember { TazzzoAppState() }
     CompositionLocalProvider(LocalAppState provides appState) {
         PlatformBackHandler(
@@ -41,6 +50,7 @@ fun App() {
         )
         PersistenceRunner()
         AuthSessionRunner(appState)
+        CatalogRunner()
         DemoTourRunner()
         TazzzoTheme {
             Surface(Modifier.fillMaxSize().background(TazColors.Cream), color = TazColors.Cream) {
@@ -58,6 +68,7 @@ fun App() {
                 // customer left off.
                 val stateHolder = rememberSaveableStateHolder()
                 val liveKeys = appState.backStack.map { it.stateKey }
+                val remoteCatalog = ServiceLocator.catalogMode == CatalogMode.REMOTE
 
                 // Drop retained state for destinations that are no longer
                 // reachable, so a long session cannot accumulate them.
@@ -79,9 +90,13 @@ fun App() {
                         is Screen.Onboarding -> OnboardingScreen()
                         is Screen.Login -> LoginScreen()
                         is Screen.Home -> MainScaffold()
-                        is Screen.CategoryDetail -> CategoryDetailScreen(screen.categoryId, screen.subcategoryId)
-                        is Screen.ProductDetail -> ProductDetailScreen(screen.productId)
-                        is Screen.Search -> SearchScreen()
+                        is Screen.CategoryDetail ->
+                            if (remoteCatalog) RemoteCategoryScreen(screen.categoryId, screen.subcategoryId)
+                            else CategoryDetailScreen(screen.categoryId, screen.subcategoryId)
+                        is Screen.ProductDetail ->
+                            if (remoteCatalog) RemoteProductDetailScreen(screen.productId)
+                            else ProductDetailScreen(screen.productId)
+                        is Screen.Search -> if (ServiceLocator.catalogCapabilities.search) SearchScreen() else UnavailableSurface("Search")
                         is Screen.Cart -> CartScreen()
                         is Screen.Checkout -> CheckoutScreen()
                         is Screen.OrderSuccess -> OrderSuccessScreen(screen.orderId)
@@ -89,7 +104,7 @@ fun App() {
                         is Screen.Coins -> CoinsScreen()
                         is Screen.Help -> HelpScreen()
                         is Screen.Addresses -> AddressesScreen()
-                        is Screen.MasterList -> MasterListScreen()
+                        is Screen.MasterList -> if (ServiceLocator.catalogCapabilities.search) MasterListScreen() else UnavailableSurface("Shopping list")
                         is Screen.About -> AboutScreen()
                         is Screen.Club -> ClubScreen()
                         is Screen.ClubCheckout -> ClubCheckoutScreen()
@@ -112,5 +127,24 @@ private fun AuthSessionRunner(app: TazzzoAppState) {
         val session = ServiceLocator.authSession
         session.restore()
         session.active.collect { app.applyAuthState(it) }
+    }
+}
+
+/**
+ * Debug-only explicit selection of the MOCK catalogue: the launch flag, or the demo/autopilot flags
+ * (which are built around mock data). In a release build [AppEnvironment.allowsDevTooling] is false,
+ * so nothing here can run and the catalogue is REMOTE.
+ */
+internal fun applyDevCatalogMode() {
+    if (AppEnvironment.allowsDevTooling && (isMockCatalogRequested() || isDemoTourEnabled() || isDemoHomeEnabled())) {
+        CatalogSource.debugOverride = CatalogMode.MOCK
+    }
+}
+
+/** REMOTE mode: check delivery for the launch PIN once at start-up. */
+@Composable
+private fun CatalogRunner() {
+    LaunchedEffect(Unit) {
+        if (ServiceLocator.catalogMode == CatalogMode.REMOTE) ServiceLocator.launchContext.refresh()
     }
 }

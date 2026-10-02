@@ -23,6 +23,8 @@ import androidx.test.core.app.ApplicationProvider
  */
 object TestState {
     fun reset() {
+        // These suites assert on the mock catalogue's content; REMOTE is the default, so ask for MOCK explicitly.
+        com.tazzzo.app.data.catalog.CatalogSource.debugOverride = com.tazzzo.app.data.catalog.CatalogMode.MOCK
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().commit()
     }

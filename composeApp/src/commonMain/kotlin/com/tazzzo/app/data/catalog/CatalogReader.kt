@@ -29,6 +29,10 @@ class TaxonomyCache(
 
     private val lock = Mutex()
     private val entries = HashMap<String, Entry>()
+    private val names = HashMap<String, String>()
+
+    /** The name of any node this process has loaded, so a screen can title itself without another request. */
+    fun nameOf(nodeId: String): String? = names[nodeId]
 
     suspend fun categories(): TaxonomyPage = load(ROOT) { etag -> source.categories(etag) }
 
@@ -48,10 +52,12 @@ class TaxonomyCache(
                     // 304 only makes sense with a cached copy to keep.
                     val kept = cached ?: throw ApiException(ApiError.Decoding())
                     entries[key] = Entry(kept.page, r.etag ?: kept.etag, nowMs())
+                    kept.page.items.forEach { names[it.id] = it.name }
                     kept.page
                 }
                 is Conditional.Modified -> {
                     entries[key] = Entry(r.response.body, r.response.etag, nowMs())
+                    r.response.body.items.forEach { names[it.id] = it.name }
                     r.response.body
                 }
             }

@@ -10,6 +10,7 @@ class MainActivity : ComponentActivity() {
         // Debug-only QA switches, read before any composition runs.
         DemoFlags.failLoad = intent?.getBooleanExtra("taz_fail_load", false) == true
         DemoFlags.startAtHome = intent?.getBooleanExtra("taz_start_home", false) == true
+        DemoFlags.mockCatalog = intent?.getBooleanExtra("taz_mock_catalog", false) == true
 
         com.tazzzo.app.data.auth.AndroidAppContext.init(this)
         enableEdgeToEdge()
