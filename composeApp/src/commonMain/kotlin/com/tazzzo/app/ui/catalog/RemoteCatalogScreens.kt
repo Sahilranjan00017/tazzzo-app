@@ -197,6 +197,7 @@ fun RemoteHomeContent() {
             LogoImage(32.dp)
         }
         ServiceabilityBannerView()
+        com.tazzzo.app.ui.address.DeliverySuggestionBanner()
         RemoteTaxonomyList(
             browser,
             header = {

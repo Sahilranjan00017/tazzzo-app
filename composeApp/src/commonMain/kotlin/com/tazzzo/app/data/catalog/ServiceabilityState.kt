@@ -8,6 +8,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
+/** The ONE active delivery PIN the catalogue and serviceability read. */
+interface LocationPin {
+    val pin: StateFlow<Pincode>
+    fun setPin(raw: String): Boolean
+}
+
 sealed interface ServiceabilityState {
     /** Nothing checked yet. */
     data object Unknown : ServiceabilityState
@@ -40,9 +46,9 @@ class LaunchContext(
     private val pins: PinStore,
     private val source: ServiceabilityChecker,
     private val scope: CoroutineScope
-) {
+) : LocationPin {
     private val _pin = MutableStateFlow(Pincode.parse(pins.load()) ?: Pincode.LAUNCH)
-    val pin: StateFlow<Pincode> = _pin
+    override val pin: StateFlow<Pincode> = _pin
 
     private val _state = MutableStateFlow<ServiceabilityState>(ServiceabilityState.Unknown)
     val state: StateFlow<ServiceabilityState> = _state
@@ -70,7 +76,7 @@ class LaunchContext(
     }
 
     /** @return false (and changes nothing) if [raw] is not a valid PIN. */
-    fun setPin(raw: String): Boolean {
+    override fun setPin(raw: String): Boolean {
         val parsed = Pincode.parse(raw) ?: return false
         if (parsed == _pin.value) return true
         pins.save(parsed.value)

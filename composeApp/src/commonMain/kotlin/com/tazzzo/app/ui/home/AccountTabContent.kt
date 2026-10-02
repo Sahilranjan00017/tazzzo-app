@@ -84,7 +84,10 @@ fun AccountTabContent() {
     // Secondary data: each drives one chip. If a load fails the chip is simply
     // absent — a count nobody can verify must never be guessed at.
     val orders = rememberLoad { ServiceLocator.orders.getOrders() }
-    val addresses = rememberLoad { ServiceLocator.addresses.getAddresses() }
+    // REMOTE: the count comes from the real AddressBook (in memory); the mock list is never read.
+    val remote = ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE
+    val mockAddresses = if (remote) null else rememberLoad { ServiceLocator.addresses.getAddresses() }
+    val bookState = if (remote) ServiceLocator.addressBook.state.collectAsState().value else null
     val orderList = (orders.state as? UiState.Success)?.data
     // Null means "say nothing": either still loading, or there are no orders at
     // all. "All delivered" to somebody who has never ordered is wrong copy, not
@@ -93,7 +96,8 @@ fun AccountTabContent() {
         val active = list.count { it.status != OrderStatus.DELIVERED }
         if (active > 0) "$active active" else "All delivered"
     }
-    val addressCount = (addresses.state as? UiState.Success)?.data?.size
+    val addressCount = if (remote) (bookState as? com.tazzzo.app.data.address.BookState.Loaded)?.addresses?.size
+    else (mockAddresses?.state as? UiState.Success)?.data?.size
 
     Column(
         Modifier.fillMaxSize().background(TazColors.Cream)

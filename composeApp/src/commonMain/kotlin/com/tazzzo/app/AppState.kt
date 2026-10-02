@@ -22,6 +22,8 @@ sealed interface Screen {
     data object Coins : Screen
     data object Help : Screen
     data object Addresses : Screen
+    /** Add ([addressId] null) or edit one saved address. REMOTE mode only. */
+    data class AddressForm(val addressId: String? = null) : Screen
     /** Your regulars, built from real order history, with one tap to add them all. */
     data object MasterList : Screen
     data object About : Screen
@@ -59,6 +61,7 @@ val Screen.stateKey: String
         is Screen.Coins -> "coins"
         is Screen.Help -> "help"
         is Screen.Addresses -> "addresses"
+        is Screen.AddressForm -> "addressForm:${addressId ?: "new"}"
         is Screen.MasterList -> "masterList"
         is Screen.About -> "about"
         is Screen.Club -> "club"
@@ -79,6 +82,13 @@ enum class HomeTab(val label: String, val emoji: String) {
     ORDER_AGAIN("Order Again", "🔄"),
     ACCOUNT("Account", "👤")
 }
+
+/**
+ * The mock demo address line shown by the MOCK Home header. A real (REMOTE) session has no such default:
+ * customer addresses come from the backend, never from a hard-coded string.
+ */
+internal fun defaultAddressText(): String =
+    if (ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) "HSR Layout, Bengaluru" else ""
 
 class TazzzoAppState(
     private val store: com.tazzzo.app.data.local.PersistentStore? =
@@ -162,8 +172,7 @@ class TazzzoAppState(
 
     // --- session ---
     private val _user = mutableStateOf(
-        UserProfile(name = "Guest", phone = "", isGuest = true, coinBalance = 40,
-            address = "HSR Layout, Bengaluru")
+        UserProfile(name = "Guest", phone = "", isGuest = true, coinBalance = 40, address = defaultAddressText())
     )
     /**
      * Whether a secure auth session exists. THIS, not `UserProfile.isGuest`, is
@@ -202,7 +211,7 @@ class TazzzoAppState(
             _user.value = value
             store?.saveSession(
                 com.tazzzo.app.data.local.PersistentStore.SavedSession(
-                    value.name, value.phone, value.isGuest, value.coinBalance, value.address
+                    value.name, value.phone, value.isGuest, value.coinBalance
                 )
             )
         }
@@ -293,9 +302,10 @@ class TazzzoAppState(
      */
     suspend fun restoreFromDisk() {
         val st = store ?: return
+        st.purgeLegacyAddressData()      // earlier builds persisted addresses in plain settings
         st.loadSession()?.let {
             // The secure session decides guest vs signed in, not what was saved.
-            _user.value = UserProfile(it.name, it.phone, !isAuthenticated, it.coinBalance, it.address)
+            _user.value = UserProfile(it.name, it.phone, !isAuthenticated, it.coinBalance, defaultAddressText())
         }
         st.loadMembership()?.let { membership = it }
         val searches = st.loadRecentSearches()

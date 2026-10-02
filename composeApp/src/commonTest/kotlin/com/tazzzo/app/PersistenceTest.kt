@@ -80,7 +80,7 @@ class PersistentStoreTest {
 
     @Test fun session_round_trip() {
         val st = store()
-        st.saveSession(PersistentStore.SavedSession("Asha", "+91 9", false, 46, "HSR"))
+        st.saveSession(PersistentStore.SavedSession("Asha", "+91 9", false, 46))
         assertEquals("Asha", st.loadSession()!!.name)
         assertEquals(46, st.loadSession()!!.coinBalance)
     }
@@ -97,11 +97,4 @@ class PersistentStoreTest {
         assertTrue(PersistentStore(settings).loadCart().isEmpty())
     }
 
-    @Test fun addresses_bounded_to_twenty() {
-        val st = store()
-        st.saveAddresses((1..30).map {
-            PersistentStore.SavedAddress("a$it", "L", "Line one long enough", "", "560102", true)
-        })
-        assertEquals(20, st.loadAddresses().size)
-    }
 }

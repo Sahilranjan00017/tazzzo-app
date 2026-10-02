@@ -157,6 +157,13 @@ class MockCoinRepository : CoinRepository {
  * Stands in for the mock catalogue in REMOTE mode. Every call fails loudly (never returns mock data),
  * so a stray legacy call site surfaces as an error state and a failing test instead of fake commerce.
  */
+internal object RemoteModeAddressGuard : AddressRepository {
+    override suspend fun getAddresses(): List<Address> =
+        throw UnsupportedOperationException("The mock address list is not available in REMOTE mode")
+    override suspend fun addAddress(label: String, line1: String, line2: String, pincode: String): Address =
+        throw UnsupportedOperationException("The mock address list is not available in REMOTE mode")
+}
+
 internal object RemoteModeCatalogGuard : CatalogRepository {
     private fun refuse(): Nothing =
         throw UnsupportedOperationException("The mock catalogue is not available in REMOTE catalogue mode")
@@ -186,7 +193,7 @@ object ServiceLocator {
     // --- authentication (PR-03A) --------------------------------------------
     // Lazy: building the secure store needs the platform (an Android Context),
     // and loading ServiceLocator in a plain-JVM unit test must stay possible.
-    private val authScope = kotlinx.coroutines.CoroutineScope(
+    internal val authScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default
     )
 
@@ -236,12 +243,34 @@ object ServiceLocator {
         )
     }
 
+    // --- real customer addresses (PR-05): in memory only, backend is the authority ---
+    val addressBook: com.tazzzo.app.data.address.AddressBook by lazy {
+        com.tazzzo.app.data.address.AddressBook(
+            authScope, com.tazzzo.app.data.address.RemoteAddressDataSource(apiClient)
+        ) { authSession.isAuthenticated }
+    }
+
+    /** The single owner of the selected delivery address; writes the ONE active PIN held by [launchContext]. */
+    val deliveryLocation: com.tazzzo.app.data.address.DeliveryLocation by lazy {
+        com.tazzzo.app.data.address.DeliveryLocation(
+            authScope, launchContext,
+            com.tazzzo.app.data.address.PersistentSelectionStore(persistentStoreForCatalog), addressBook
+        )
+    }
+
     val auth: com.tazzzo.app.data.auth.AuthRepository by lazy {
         com.tazzzo.app.data.auth.RemoteAuthRepository(authRemote, authSession)
     }
     val orders: OrderRepository = MockOrderRepository()
     val coins: CoinRepository = MockCoinRepository()
-    val addresses: AddressRepository = MockAddressRepository()
+    private val mockAddresses: AddressRepository = MockAddressRepository()
+
+    /**
+     * The LEGACY mock-era address list. Available only in explicit MOCK mode. In REMOTE mode it REFUSES
+     * (never answers with the three mock addresses): real addresses come from [addressBook].
+     */
+    val addresses: AddressRepository
+        get() = if (catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) mockAddresses else RemoteModeAddressGuard
     val checkout: CheckoutRepository = MockCheckoutRepository(mockCatalog, orders)
     val support: SupportRepository = MockSupportRepository()
 

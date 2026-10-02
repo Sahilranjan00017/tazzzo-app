@@ -46,10 +46,8 @@ interface CheckoutRepository {
 // Mock implementations — in-memory, explicitly labelled development stand-ins.
 // ---------------------------------------------------------------------------
 
-class MockAddressRepository(
-    private val store: com.tazzzo.app.data.local.PersistentStore? =
-        com.tazzzo.app.data.local.PersistentStore()
-) : AddressRepository {
+/** MOCK-mode only (demo / tests). In-memory: it never persists, and REMOTE mode cannot reach it. */
+class MockAddressRepository : AddressRepository {
     private val addresses = mutableListOf(
         Address("addr-1", "Home", "22, 14th Main, HSR Layout", "Sector 6", "560102", isServiceable = true),
         Address("addr-2", "Work", "Tower B, Ecospace", "Bellandur", "560103", isServiceable = true),
@@ -57,18 +55,8 @@ class MockAddressRepository(
         Address("addr-3", "Parents", "42, MG Road", "Mysuru", "570001", isServiceable = false)
     )
 
-    private var restored = false
-
     override suspend fun getAddresses(): List<Address> {
         delay(300)
-        if (!restored) {
-            restored = true
-            store?.loadAddresses()?.forEach { saved ->
-                if (addresses.none { it.id == saved.id }) {
-                    addresses.add(Address(saved.id, saved.label, saved.line1, saved.line2, saved.pincode, saved.isServiceable))
-                }
-            }
-        }
         return addresses.toList()
     }
 
@@ -78,13 +66,6 @@ class MockAddressRepository(
         val serviceable = pincode.startsWith("560")
         val addr = Address("addr-${addresses.size + 1}", label.trim(), line1.trim(), line2.trim(), pincode, serviceable)
         addresses.add(addr)
-        store?.saveAddresses(
-            addresses.filter { it.id !in setOf("addr-1", "addr-2", "addr-3") }.map {
-                com.tazzzo.app.data.local.PersistentStore.SavedAddress(
-                    it.id, it.label, it.line1, it.line2, it.pincode, it.isServiceable
-                )
-            }
-        )
         return addr
     }
 }
