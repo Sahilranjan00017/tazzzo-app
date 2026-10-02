@@ -1,6 +1,8 @@
 package com.tazzzo.app.data.order
 
 import com.tazzzo.app.data.checkout.Iso8601
+import com.tazzzo.app.data.checkout.PayableMoneyDto
+import com.tazzzo.app.data.checkout.toDomain
 import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.remote.ApiError
 import com.tazzzo.app.data.remote.ApiException
@@ -31,6 +33,7 @@ import kotlinx.serialization.Serializable
     val deliveryAddress: OrderAddressDto? = null,
     val createdAt: String? = null,
     val confirmedAt: String? = null,
+    val money: PayableMoneyDto? = null,
     val requestId: String? = null
 )
 
@@ -54,6 +57,7 @@ internal fun OrderDto.toDomain(): CustomerOrder {
         itemCount = itemCount.coerceAtLeast(0),
         subtotal = paise(subtotalPaise),
         currency = currency,
+        money = money.toDomain(subtotalPaise),                    // inconsistent money or a disagreeing subtotal = contract failure
         deliveryAddress = deliveryAddress?.let {
             OrderDeliveryAddress(it.label, it.recipientName, it.recipientPhone, it.addressLine1, it.addressLine2, it.landmark, it.city, it.state, it.postalCode)
         },

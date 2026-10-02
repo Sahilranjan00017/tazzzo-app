@@ -69,11 +69,17 @@ class DeliveryAddressSource(
             .stateIn(scope, SharingStarted.Eagerly, AddressSelection.None)
 }
 
-/** What the order flow needs from the quote store: the current quote, and a synchronous reset after a placed order. */
+/** What the order flow needs from the quote store: the current quote, a synchronous reset after a placed order, and invalidation. */
 interface CheckoutQuoteAccess {
     val state: StateFlow<CheckoutState>
     /** Forget the quote NOW. Must be called on the store's own scope (the order store shares it). */
     fun resetNow()
+    /**
+     * The backend refused an order from quote [quoteId] for [reason] (no order exists). If that quote is the current Ready
+     * one it becomes [CheckoutState.Stale] NOW and its key is dropped, so it can never be placed or re-sent again. Nothing is
+     * re-quoted automatically. Must be called on the store's own scope.
+     */
+    fun invalidateNow(quoteId: String, reason: StaleReason)
 }
 
 /** The inputs a quote was built from. Backend idempotency fingerprint = (cartVersion, addressId); the address version/content is client-side only. */
@@ -83,7 +89,11 @@ data class CheckoutSource(val cartVersion: Long, val address: AddressStamp) {
 
 // ---- state ----------------------------------------------------------------------------------------------------------
 
-enum class StaleReason { CartChanged, AddressChanged, AddressRemoved }
+enum class StaleReason {
+    CartChanged, AddressChanged, AddressRemoved,
+    /** An order from this quote was refused with PAYABLE_CHANGED: its binding money is no longer the current money. */
+    PayableChanged
+}
 
 sealed interface CheckoutState {
     data object SignedOut : CheckoutState
@@ -169,6 +179,11 @@ class CheckoutQuoteStore(
     /** An order was placed from this quote: it is spent. Back to Idle, key dropped, nothing re-requested. */
     override fun resetNow() = wipe(CheckoutState.Idle)
 
+    override fun invalidateNow(quoteId: String, reason: StaleReason) {
+        val cur = _state.value
+        if (cur is CheckoutState.Ready && cur.quote.quoteId == quoteId) wipe(CheckoutState.Stale(reason))   // a newer quote is left alone
+    }
+
     /** Session ended: forget everything. The server cart is untouched. */
     fun signOut() = command { wipe(CheckoutState.SignedOut) }
 
@@ -232,7 +247,7 @@ class CheckoutQuoteStore(
         }
         if (gen != generation) return
         if (quote.cartVersion != a.source.cartVersion || quote.addressId != a.source.address.addressId) {
-            fail(CheckoutFailure.Unknown); return                                  // a quote for something we did not ask for is never Ready
+            fail(CheckoutFailure.ContractViolation); return                        // a quote for something we did not ask for is never Ready
         }
         val remaining = quote.lifetime - sentAt.elapsedNow()
         if (remaining <= ZERO) { attempt = null; _state.value = CheckoutState.Expired; return }

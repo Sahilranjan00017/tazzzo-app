@@ -15,6 +15,8 @@ import com.tazzzo.app.data.checkout.CheckoutQuote
 import com.tazzzo.app.data.checkout.CheckoutQuoteItem
 import com.tazzzo.app.data.checkout.QuoteSource
 import com.tazzzo.app.data.checkout.stamp
+import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.PayableMoney
 import com.tazzzo.app.address.ca
 import com.tazzzo.app.data.address.AddressServiceability
 import com.tazzzo.app.data.remote.ApiError
@@ -23,6 +25,10 @@ import com.tazzzo.app.data.remote.ItemError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+
+/** Binding money with no discount: subtotal == payable. */
+fun bindingOf(subtotal: Money, discountPaise: Long = 0): PayableMoney =
+    PayableMoney.fromPaise(subtotal.paise, discountPaise, subtotal.paise - discountPaise)!!
 
 fun hx(status: Int, code: String? = null, items: List<ItemError> = emptyList(), retryAfter: Long? = null) =
     ApiException(ApiError.Http(status, code, items = items, retryAfterSeconds = retryAfter))
@@ -68,6 +74,8 @@ class FakeQuoteSource(private val cart: FakeCartAccess) : QuoteSource {
     private val failures = ArrayDeque<Pair<Throwable, Boolean>>()
     var gate: CompletableDeferred<Unit>? = null
     var benefit: BenefitPreviewState = BenefitPreviewState.NotApplied
+    /** The quote's binding money for a given subtotal. Default: binding, no discount. Return null for a LEGACY quote. */
+    var moneyFor: (Money) -> PayableMoney? = { bindingOf(it) }
     var tamperCartVersion = false
     /** false = the server accepted the request at the version it was sent with, before the cart moved on. */
     var enforceVersion = true
@@ -83,7 +91,7 @@ class FakeQuoteSource(private val cart: FakeCartAccess) : QuoteSource {
         return CheckoutQuote(
             quoteId = "CHKQ_${++seq}abcdef", cartVersion = if (tamperCartVersion) version + 1 else version, addressId = addressId, items = items,
             itemCount = c.itemCount, distinctItemCount = items.size, subtotal = c.subtotal, currency = "INR",
-            createdAtMillis = nowMs, expiresAtMillis = nowMs + lifetimeMs, benefit = benefit, requestId = "req_$seq"
+            createdAtMillis = nowMs, expiresAtMillis = nowMs + lifetimeMs, benefit = benefit, money = moneyFor(c.subtotal), requestId = "req_$seq"
         )
     }
 

@@ -19,50 +19,112 @@ import com.tazzzo.app.data.checkout.summary
 import com.tazzzo.app.data.checkout.text
 import com.tazzzo.app.data.checkout.view
 import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.PayableMoney
+import com.tazzzo.app.data.checkout.CheckoutSummaryView
+import com.tazzzo.app.data.checkout.NO_BINDING_MONEY_VIEW
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 class CheckoutPresentationTest {
-    private fun quote(benefit: BenefitPreviewState = BenefitPreviewState.NotApplied, cartVersion: Long = 5) = CheckoutQuote(
+    private fun quote(
+        benefit: BenefitPreviewState = BenefitPreviewState.NotApplied, cartVersion: Long = 5,
+        money: PayableMoney? = bindingOf(Money.ofPaise(9_900))
+    ) = CheckoutQuote(
         "CHKQ_abc123", cartVersion, "ADDR_abcdef1",
-        listOf(CheckoutQuoteItem("TZP-1", 2, Money.ofPaise(4_950), Money.ofPaise(9_900))), 2, 1, Money.ofPaise(9_900), "INR", 0, 300_000, benefit, "r"
+        listOf(CheckoutQuoteItem("TZP-1", 2, Money.ofPaise(4_950), Money.ofPaise(9_900))), 2, 1, Money.ofPaise(9_900), "INR", 0, 300_000, benefit, money, "r"
     )
 
-    private val forbidden = listOf("total", "payable", "amount to pay", "final amount", "grand")
-    /** "Item subtotal" is the one approved word containing "total"; everything else must not call the figure a total. */
-    /** The one approved sentence that DENIES the subtotal is the final amount is exempt from the ban on that phrase. */
-    private fun words(t: String) = t.lowercase().replace("the item subtotal isn't the final amount.", "").replace("subtotal", "")
+    private fun m(s: Long, d: Long, p: Long) = PayableMoney.fromPaise(s, d, p)!!
+    private fun texts(v: CheckoutSummaryView) = v.lines.map { "${it.label} ${it.value}" }
 
-    @Test fun theSubtotalIsAlwaysCalledItemSubtotalAndNeverATotal() {
-        val s = quote().summary()
-        assertEquals("Item subtotal", s.subtotalLabel); assertEquals("₹99", s.subtotalValue)
-        assertEquals("The item subtotal isn't the final amount.", s.note)
-        for (w in forbidden) assertFalse(w in words(s.subtotalLabel + s.note + CheckoutCopy.ORDER_CTA), w)
-    }
-
-    @Test fun noCustomerCopyAnywhereCallsTheSubtotalATotalOrPromisesTheFinalAmount() {
+    /** Every piece of customer copy the checkout and order flows can show. */
+    private fun allCopy(): List<String> {
         val all = mutableListOf<String>()
         listOf(
             CheckoutFailure.AddressRequired, CheckoutFailure.CartUnavailable, CheckoutFailure.CartBusy, CheckoutFailure.CartHasIssues, CheckoutFailure.Unauthenticated,
             CheckoutFailure.CartChanged, CheckoutFailure.CartEmpty, CheckoutFailure.Unserviceable, CheckoutFailure.ItemsUnavailable(emptyList()), CheckoutFailure.KeyConflict,
             CheckoutFailure.NotFound, CheckoutFailure.QuoteExpired, CheckoutFailure.ClientBug, CheckoutFailure.RateLimited(3), CheckoutFailure.Unavailable,
-            CheckoutFailure.Server, CheckoutFailure.Network, CheckoutFailure.Timeout, CheckoutFailure.Unknown
+            CheckoutFailure.Server, CheckoutFailure.Network, CheckoutFailure.Timeout, CheckoutFailure.Unknown, CheckoutFailure.ContractViolation
         ).forEach { f -> listOf(true, false).forEach { k -> f.view(k).let { all += it.title; all += it.hint } } }
         StaleReason.entries.forEach { all += it.view().title; all += it.view().hint }
-        all += EXPIRED_VIEW.title; all += EXPIRED_VIEW.hint
-        for (t in all) for (w in forbidden) assertFalse(w in words(t), "$w in '$t'")
+        all += listOf(EXPIRED_VIEW.title, EXPIRED_VIEW.hint, NO_BINDING_MONEY_VIEW.title, NO_BINDING_MONEY_VIEW.hint)
+        all += listOf(CheckoutCopy.SUBTOTAL_LABEL, CheckoutCopy.DISCOUNT_LABEL, CheckoutCopy.AMOUNT_DUE_LABEL, CheckoutCopy.NOTHING_DUE,
+            CheckoutCopy.ORDER_CTA, CheckoutCopy.LAUNCH_GATED, CheckoutCopy.PAYABLE_CHANGED, CheckoutCopy.CONTRACT_FAILURE)
+        listOf(m(10_000, 1_000, 9_000), m(4_950, 0, 4_950), m(10_000, 10_000, 0)).forEach { mm ->
+            quote(money = mm).summary().let { all += texts(it); all += it.dueNote.orEmpty() }
+        }
+        all += texts(quote(money = null).summary())
+        return all
     }
 
-    @Test fun theBenefitPreviewNeverAppearsInAnyBranchAndNeverCreatesAPayableAmount() {
+    @Test fun theSummaryShowsTheItemSubtotalAndTheAmountDueFromTheBindingMoney() {
+        val s = quote(money = m(9_900, 0, 9_900)).summary()
+        assertEquals(listOf("Item subtotal ₹99", "Amount due ₹99"), texts(s))
+        assertEquals(listOf(false, true), s.lines.map { it.emphasised })
+        assertEquals("₹99 due on delivery", s.dueNote)
+    }
+
+    @Test fun theDiscountRowAppearsOnlyWhenTheBindingDiscountIsPositive() {
+        assertEquals(listOf("Item subtotal ₹100", "Benefit discount -₹10", "Amount due ₹90"), texts(quote(money = m(10_000, 1_000, 9_000)).summary()))
+        assertEquals("₹90 due on delivery", quote(money = m(10_000, 1_000, 9_000)).summary().dueNote)
+        assertFalse(texts(quote(money = m(9_900, 0, 9_900)).summary()).any { "discount" in it.lowercase() })
+    }
+
+    @Test fun paiseAreShownExactly() {
+        assertEquals(listOf("Item subtotal ₹49.50", "Amount due ₹49.50"), texts(quote(money = m(4_950, 0, 4_950)).summary()))
+        assertEquals(listOf("Item subtotal ₹99.25", "Benefit discount -₹0.25", "Amount due ₹99"), texts(quote(money = m(9_925, 25, 9_900)).summary()))
+    }
+
+    @Test fun aZeroAmountDueReadsNothingDueOnDeliveryNeverPaymentDue() {
+        val s = quote(money = m(10_000, 10_000, 0)).summary()
+        assertEquals(listOf("Item subtotal ₹100", "Benefit discount -₹100", "Amount due ₹0"), texts(s))
+        assertEquals("Nothing due on delivery", s.dueNote)
+        assertFalse("payment due" in s.dueNote!!.lowercase())
+    }
+
+    @Test fun aQuoteWithoutBindingMoneyShowsTheItemSubtotalAloneAndNoAmountDue() {
+        val s = quote(money = null).summary()
+        assertEquals(listOf("Item subtotal ₹99"), texts(s))
+        assertNull(s.dueNote)
+        assertEquals(listOf(CheckoutAction.RefreshCheckout), NO_BINDING_MONEY_VIEW.actions)
+    }
+
+    @Test fun noCustomerCopyIsAdvisoryOrInventsAChargeOrSaysPaid() {
+        val banned = listOf("estimated", "estimate", "approximate", "approx", "provisional", "may change", "might change", "final amount",
+            "calculated later", "delivery fee", "platform fee", "handling", "tax", "cod fee", "coupon", "coins", "wallet", "paid",
+            "payment successful", "payment completed", "total")
+        val all = allCopy()
+        for (t in all) for (w in banned) assertFalse(w in t.lowercase().replace("subtotal", ""), "'$w' in '$t'")
+    }
+
+    @Test fun theBenefitPreviewIsNeverPresentedTheDiscountComesOnlyFromTheBindingMoney() {
+        val money = m(9_900, 500, 9_400)
         val views = listOf(BenefitPreviewState.Legacy, BenefitPreviewState.NotApplied, BenefitPreviewState.Applied(rs(5), 500), BenefitPreviewState.Unreadable)
-            .map { b -> quote(b).summary() to quote(b).lineViews(null) }
-        assertEquals(1, views.toSet().size)                                // identical output: the preview has no presentation at all
+            .map { b -> quote(b, money = money).summary() to quote(b, money = money).lineViews(null) }
+        assertEquals(1, views.toSet().size)                                // identical output: the preview itself has no presentation
         val text = views.first().let { (s, l) -> s.toString() + l.toString() }.lowercase()
-        for (w in listOf("save", "club", "benefit", "discount", "you pay")) assertFalse(w in text, w)
-        assertFalse(Regex("\\bnet\\b").containsMatchIn(text))
+        for (w in listOf("save", "club", "%", "bps", "you pay")) assertFalse(w in text, w)
+        // An Applied preview with NO binding discount shows no discount row: the preview never creates one.
+        assertFalse(texts(quote(BenefitPreviewState.Applied(rs(5), 500), money = m(9_900, 0, 9_900)).summary()).any { "discount" in it.lowercase() })
+    }
+
+    @Test fun aContractFailureOffersOnlyRefreshCheckoutNeverTheSameKey() {
+        for (k in listOf(true, false)) {
+            val v = CheckoutFailure.ContractViolation.view(k)
+            assertEquals("Checkout couldn't be loaded correctly.", v.title)
+            assertEquals(listOf(CheckoutAction.RefreshCheckout), v.actions)
+        }
+        assertFalse(CheckoutFailure.ContractViolation.isAmbiguous)
+    }
+
+    @Test fun payableChangedReadsTheApprovedSentenceAndOffersOnlyReviewCheckout() {
+        val v = StaleReason.PayableChanged.view()
+        assertEquals("Your order amount changed. Review checkout again.", v.title)
+        assertEquals(listOf(CheckoutAction.ReviewCheckout), v.actions)
     }
 
     @Test fun lineMoneyComesFromTheQuoteAndTheTitleOnlyFromTheSameVersionCart() {

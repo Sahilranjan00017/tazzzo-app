@@ -1,13 +1,15 @@
 package com.tazzzo.app.data.order
 
 import com.tazzzo.app.data.model.Money
+import com.tazzzo.app.data.model.PayableMoney
 import com.tazzzo.app.data.remote.ApiError
 import com.tazzzo.app.data.remote.ApiException
 
 /*
  * The REAL customer order (`/v1/customer/orders`). The backend order is the only truth: nothing here comes from the
- * mock `Order`, the local cart or `BillCalculator`. Today the order carries per-line prices and an ITEM SUBTOTAL only:
- * no delivery/platform fee, tax, discount, COD charge or payable amount exists on the wire, so none exists here.
+ * mock `Order`, the local cart or `BillCalculator`. Its money is the AUTHORITATIVE `money` block committed at placement
+ * (equal to the quote's binding money). No delivery/platform fee, tax, COD charge, coupon, Coins or wallet exists on the
+ * wire, so none exists here.
  */
 
 /** The backend only ever returns `CONFIRMED`. Anything else is kept as unrecognized and never guessed at. */
@@ -53,9 +55,14 @@ data class CustomerOrder(
     val paymentCondition: OrderPaymentCondition,
     val items: List<CustomerOrderItem>,
     val itemCount: Int,
-    /** The sum of the line prices. NOT an amount due. */
+    /** The sum of the line prices (the item subtotal). Equals [money]'s merchandise subtotal. */
     val subtotal: Money,
     val currency: String,
+    /**
+     * The AUTHORITATIVE money: `payable` is due on delivery (COD_DUE), never "paid". Null = an order created before the money
+     * model: no amount due is derived for it, and it is never a zero amount.
+     */
+    val money: PayableMoney?,
     val deliveryAddress: OrderDeliveryAddress?,
     val createdAtMillis: Long?,
     val confirmedAtMillis: Long?
@@ -66,7 +73,7 @@ data class CustomerOrder(
 /** Everything that can go wrong placing an order, as data. Never carries server text. */
 sealed interface OrderFailure {
     // ---- decided by the app before any request ----
-    /** Production order placement is not launch-enabled (no authoritative payable yet). */
+    /** Production order placement is not launch-enabled (deployment / end-to-end sign-off pending). */
     data object NotLaunched : OrderFailure
     /** There is no Ready, current quote to order from. */
     data object QuoteNotReady : OrderFailure
@@ -81,6 +88,12 @@ sealed interface OrderFailure {
     data object ProductUnavailable : OrderFailure
     data object StockUnavailable : OrderFailure
     data object ReservationExpired : OrderFailure
+    /**
+     * 409 PAYABLE_CHANGED: the quote's binding money is no longer the current money (or the quote has none). NO order was
+     * created. Definitive: the pending attempt is deleted, the quote is invalidated, and only a NEW quote (new key) that the
+     * customer reviews and confirms may be ordered. Never Ambiguous, never "Check order", never re-sent.
+     */
+    data object PayableChanged : OrderFailure
     /** 409 CART_VERSION_ALREADY_PURCHASED — reconciled against the original quote before it is reported. */
     data object CartAlreadyPurchased : OrderFailure
     /** 400 / 415: the app sent something the contract forbids (including an unsupported payment method). */
@@ -120,6 +133,7 @@ fun Throwable.toOrderFailure(): OrderFailure {
                 "STOCK_UNAVAILABLE" -> OrderFailure.StockUnavailable
                 "RESERVATION_EXPIRED" -> OrderFailure.ReservationExpired
                 "CART_VERSION_ALREADY_PURCHASED" -> OrderFailure.CartAlreadyPurchased
+                "PAYABLE_CHANGED" -> OrderFailure.PayableChanged
                 else -> OrderFailure.Unknown
             }
             503 -> OrderFailure.Unavailable

@@ -3,10 +3,12 @@ package com.tazzzo.app.data.order
 import com.tazzzo.app.analytics.Analytics
 import com.tazzzo.app.analytics.AnalyticsEvents
 import com.tazzzo.app.config.AppEnvironment
+import com.tazzzo.app.config.debugRealOrderingRequested
 import com.tazzzo.app.data.cart.CartAccess
 import com.tazzzo.app.data.catalog.CatalogCapabilities
 import com.tazzzo.app.data.checkout.CheckoutQuoteAccess
 import com.tazzzo.app.data.checkout.CheckoutState
+import com.tazzzo.app.data.checkout.StaleReason
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -15,16 +17,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Decides whether the app may submit a real COD order. This is a LAUNCH rule, not a property of [OrderStore]:
- * production REMOTE keeps `orderIntegration = false` until the backend exposes an authoritative amount due, while a
- * debug/test build can explicitly enable the full real path. Flipping the capability later needs no store changes.
+ * Decides whether the app may submit a real COD order. This is a LAUNCH rule, not a property of [OrderStore]: production
+ * REMOTE keeps `orderIntegration = false` until deployment and end-to-end sign-off, while a developer build can explicitly
+ * enable the full real path. Flipping the capability later needs no store changes.
+ *
+ * The developer override needs BOTH a debug binary AND an explicit build-time opt-in (`-Ptazzzo.debugRealOrdering=true`,
+ * see [debugRealOrderingRequested]); it is never persisted and has no UI. A release build ignores it: there only
+ * `orderIntegration` decides.
  */
 object OrderLaunchGate {
-    /** Debug-only explicit enable (a hard no-op in a release build, same rule as `CatalogSource`). */
-    var debugEnabled: Boolean = false
+    /** Debug-only explicit enable (a hard no-op in a release build, same rule as `CatalogSource`). Starts from the build opt-in. */
+    var debugEnabled: Boolean = AppEnvironment.isDebug && debugRealOrderingRequested()
         set(value) { if (!AppEnvironment.isDebug) return; field = value }
 
-    fun enabled(caps: CatalogCapabilities): Boolean = caps.orderIntegration || debugEnabled
+    fun enabled(caps: CatalogCapabilities): Boolean = allows(caps.orderIntegration, AppEnvironment.isDebug, debugEnabled)
+
+    /** The rule itself: the production capability, or (debug binary AND explicit opt-in). A release binary ignores the override. */
+    internal fun allows(orderIntegration: Boolean, debugBuild: Boolean, debugOptIn: Boolean): Boolean =
+        orderIntegration || (debugBuild && debugOptIn)
 }
 
 sealed interface OrderState {
@@ -32,10 +42,10 @@ sealed interface OrderState {
     data object Idle : OrderState
     /** One POST is on the wire (or being reconciled). Further placements are ignored. */
     data object Placing : OrderState
-    /** The order MAY exist. The pending quote id is persisted; "Check order" re-POSTs the SAME quote. */
+    /** The order MAY exist (timeout / lost response / 5xx). The pending quote id is persisted; "Check order" re-POSTs the SAME quote. */
     data class Ambiguous(val failure: OrderFailure) : OrderState
     data class Placed(val order: CustomerOrder) : OrderState { override fun toString() = "Placed(***)" }
-    /** A conclusive outcome: the backend answered and NO order exists for the quote. */
+    /** A conclusive outcome: the backend answered and NO order exists for the quote (e.g. PAYABLE_CHANGED). */
     data class Failed(val failure: OrderFailure) : OrderState
 }
 
@@ -90,7 +100,8 @@ class OrderStore(
         if (!isAuthenticated()) { _state.value = OrderState.Failed(OrderFailure.Unauthenticated); return@command }
         if (!launchEnabled()) { _state.value = OrderState.Failed(OrderFailure.NotLaunched); return@command }
         val quote = (quotes.state.value as? CheckoutState.Ready)?.quote
-        if (quote == null || !RemoteOrderDataSource.isValidQuoteId(quote.quoteId)) { _state.value = OrderState.Failed(OrderFailure.QuoteNotReady); return@command }
+        // A quote without binding money (legacy) is never ordered: the customer has not seen an amount the backend will honour.
+        if (quote == null || quote.money == null || !RemoteOrderDataSource.isValidQuoteId(quote.quoteId)) { _state.value = OrderState.Failed(OrderFailure.QuoteNotReady); return@command }
         begin(quote.quoteId, saveFirst = true)
         track(AnalyticsEvents.ORDER_PLACE_STARTED)
     }
@@ -205,7 +216,13 @@ class OrderStore(
                     if (isAuthenticated()) { _state.value = OrderState.Ambiguous(OrderFailure.Unavailable); return }
                     else { forgetAttempt(); _state.value = OrderState.SignedOut; return }
                 f.isAmbiguous -> { _state.value = OrderState.Ambiguous(f); return }               // pending record stays
-                else -> { forgetAttempt(); _state.value = OrderState.Failed(f); track(AnalyticsEvents.ORDER_PLACE_FAILED); return }
+                else -> {
+                    forgetAttempt()                                                             // definitive: no order exists
+                    // The reviewed money is no longer current: this quote can never be placed or re-sent again. The server cart is
+                    // untouched; a NEW quote (new key) is created only when the customer reviews checkout.
+                    if (f is OrderFailure.PayableChanged) quotes.invalidateNow(quoteId, StaleReason.PayableChanged)
+                    _state.value = OrderState.Failed(f); track(AnalyticsEvents.ORDER_PLACE_FAILED); return
+                }
             }
         }
     }

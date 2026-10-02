@@ -38,6 +38,7 @@ import com.tazzzo.app.data.checkout.CheckoutState
 import com.tazzzo.app.data.checkout.DeliveryContent
 import com.tazzzo.app.data.checkout.EXPIRED_VIEW
 import com.tazzzo.app.data.checkout.FailureView
+import com.tazzzo.app.data.checkout.NO_BINDING_MONEY_VIEW
 import com.tazzzo.app.data.checkout.displayLines
 import com.tazzzo.app.data.checkout.expiryLabel
 import com.tazzzo.app.data.checkout.lineViews
@@ -65,8 +66,8 @@ import kotlinx.coroutines.delay
 
 /**
  * REMOTE checkout: ONE functional review screen over the backend quote. No steps, no slot, no payment choice, no
- * coupons/promotions/coins/Club, no local bill. Nothing here reads the local cart, `app.bill()` or any mock repository,
- * and the order button is permanently disabled until the real order PR.
+ * coupons/promotions/coins/Club, no local bill. Nothing here reads the local cart, `app.bill()` or any mock repository.
+ * The money shown is the quote's BINDING money; Place order is enabled only for such a quote and a launch-enabled build.
  */
 @Composable
 fun RemoteCheckoutScreen() {
@@ -82,7 +83,7 @@ fun RemoteCheckoutScreen() {
     fun act(a: CheckoutAction) = when (a) {
         CheckoutAction.TryAgain -> store.retry()
         CheckoutAction.CheckOrder -> orders.checkOrder()
-        CheckoutAction.ReviewCheckout -> { orders.acknowledge(); store.start() }
+        CheckoutAction.ReviewCheckout, CheckoutAction.RefreshCheckout -> { orders.acknowledge(); store.start() }   // NEW attempt, NEW key
         CheckoutAction.ChooseAddress, CheckoutAction.ChangeAddress -> { orders.acknowledge(); app.navigate(Screen.Addresses) }
         CheckoutAction.GoToCart -> { orders.acknowledge(); app.navigate(Screen.Cart) }
         CheckoutAction.SignIn -> app.navigate(Screen.Login)
@@ -109,7 +110,8 @@ fun RemoteCheckoutScreen() {
                 Text("Preparing your checkout…", fontSize = TazType.bodySize, color = TazColors.TextSecondary)
                 SkeletonBlock(height = 72.dp, corner = 14.dp); SkeletonBlock(height = 72.dp, corner = 14.dp)
             }
-            is CheckoutState.Ready -> ReadyContent(s.quote, (selection as? AddressSelection.Selected)?.stamp?.delivery, cart,
+            // A quote without binding money (legacy) is never shown as orderable: only "Refresh checkout" (a new quote).
+            is CheckoutState.Ready -> if (s.quote.money == null) Recovery(NO_BINDING_MONEY_VIEW, null, cart, ::act) else ReadyContent(s.quote, (selection as? AddressSelection.Selected)?.stamp?.delivery, cart,
                 availability = placeOrderAvailability(OrderLaunchGate.enabled(ServiceLocator.catalogCapabilities), s, orderState),
                 onPlaceOrder = { orders.place() },
                 onChangeAddress = { act(CheckoutAction.ChangeAddress) })
@@ -181,13 +183,18 @@ private fun ReadyContent(
             }
         }
         Column(Modifier.fillMaxWidth().background(TazColors.Surface).padding(TazSpace.lg).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("${summary.subtotalLabel} · ${summary.itemsLabel}", fontSize = TazType.bodySize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
-                Text(summary.subtotalValue, fontSize = TazType.titleSize, fontWeight = FontWeight.Bold, color = TazColors.TextPrimary)
+            summary.lines.forEachIndexed { i, line ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (i == 0) "${line.label} · ${summary.itemsLabel}" else line.label, fontSize = TazType.bodySize,
+                        fontWeight = if (line.emphasised) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (line.emphasised) TazColors.TextPrimary else TazColors.TextSecondary, modifier = Modifier.weight(1f))
+                    Text(line.value, fontSize = if (line.emphasised) TazType.titleSize else TazType.bodySize,
+                        fontWeight = if (line.emphasised) FontWeight.Bold else FontWeight.Medium, color = TazColors.TextPrimary)
+                }
             }
-            Text(summary.note, fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+            summary.dueNote?.let { Text(it, fontSize = TazType.captionSize, color = TazColors.TextSecondary) }
             remainingLabel?.let { Text(it, fontSize = TazType.captionSize, color = TazColors.TextTertiary) }
-            // The REAL order. Disabled with neutral copy while production placement is gated (no authoritative amount due yet).
+            // The REAL order. Disabled with neutral copy while production placement is not launch-enabled.
             // It never reaches the mock OrderPlacement.
             PillButton(text = CheckoutCopy.ORDER_CTA, onClick = onPlaceOrder, enabled = availability.enabled, modifier = Modifier.fillMaxWidth())
             if (availability is PlaceOrderAvailability.LaunchGated) {
@@ -200,6 +207,7 @@ private fun ReadyContent(
 private fun CheckoutAction.label(): String = when (this) {
     CheckoutAction.TryAgain -> "Try again"
     CheckoutAction.ReviewCheckout -> "Review checkout"
+    CheckoutAction.RefreshCheckout -> "Refresh checkout"
     CheckoutAction.ChooseAddress -> "Choose address"
     CheckoutAction.ChangeAddress -> "Change address"
     CheckoutAction.GoToCart -> "Go to cart"
