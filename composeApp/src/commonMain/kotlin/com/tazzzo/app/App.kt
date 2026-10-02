@@ -136,15 +136,19 @@ fun App() {
 private fun AuthSessionRunner(app: TazzzoAppState) {
     LaunchedEffect(Unit) {
         val session = ServiceLocator.authSession
-        session.restore()
         if (ServiceLocator.catalogMode == CatalogMode.REMOTE) {
-            // Signed in -> load addresses; signed out / rejected -> wipe them and reset the location to 560047.
-            com.tazzzo.app.data.address.SessionLocationBinding(
-                ServiceLocator.authScope, session.active, ServiceLocator.addressBook, ServiceLocator.deliveryLocation
-            ).start(initiallyAuthenticated = session.isAuthenticated)
-            ServiceLocator.startCartBinding()
-            // One automatic reconciliation of an order left unresolved by a previous process (authenticated cold start only).
-            ServiceLocator.orderStore.resumeAfterRestore()
+            // Restore the secure session, then start the bindings knowing whether one exists, then recover a pending order:
+            // one automatic reconciliation if restored, deletion only if the credential was definitively refused. A session that
+            // is merely absent/not-yet-restored is never treated as a logout.
+            com.tazzzo.app.data.order.restoreSessionAndRecoverOrders(session, ServiceLocator.orderStore) { initiallyAuthenticated ->
+                // Signed in -> load addresses; signed out / rejected -> wipe them and reset the location to 560047.
+                com.tazzzo.app.data.address.SessionLocationBinding(
+                    ServiceLocator.authScope, session.active, ServiceLocator.addressBook, ServiceLocator.deliveryLocation
+                ).start(initiallyAuthenticated = initiallyAuthenticated)
+                ServiceLocator.startCartBinding(initiallyAuthenticated)
+            }
+        } else {
+            session.restore()
         }
         session.active.collect { app.applyAuthState(it) }
     }

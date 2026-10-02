@@ -646,10 +646,15 @@ App behaviour: `OrderStore` (in memory) orders only from a **Ready** quote; sing
 **Ambiguous** (timeout, lost response, 500/503, unreadable 2xx, unknown status) is resolved only by an explicit **Check order** that re-POSTs the
 SAME quote — never a new quote or intent. **Pending-attempt record:** while Placing/Ambiguous, ONE opaque record `tazzzo.pending-order.v1`
 (`{"v":1,"quoteId":"…"}`, nothing else) is persisted; it is written before the request leaves and deleted the moment the outcome is known.
-On an authenticated **cold start** with a record, exactly ONE automatic reconciliation is attempted per launch (never after an interactive
-login); if that is ambiguous again the record stays and "Check order" is shown. **Logout (or any sign-out, or an unauthenticated launch)
-deletes the record and never POSTs** — the record carries no identity, so it must never be reconciled under another customer; the tradeoff
-is that logging out abandons local recovery of an unresolved attempt. `CART_VERSION_ALREADY_PURCHASED` first reconciles the same quote once.
+On an authenticated **cold start** with a record, exactly ONE automatic reconciliation is attempted per launch; if that is ambiguous again the
+record stays and "Check order" is shown. **When the record is deleted — and only then:** (A) an explicit logout, (B) a DEFINITIVE auth rejection
+that clears the session (the refresh was refused with 401/400), (C) a new INTERACTIVE sign-in / account switch (the record carries no customer
+identity, so ownership cannot be proven and it is never reconciled under the new session), or (D) the attempt reaches a resolved outcome. Never
+deleted: a process restart, a launch where no session has been restored (yet) — `AuthSessionManager.restore()` now reports
+`Restored | NoSession | Rejected` so "nothing saved" is not confused with a logout — or a session PRESERVED after a transient refresh failure
+(offline, timeout, 5xx) or a 401 on the order POST while the session is preserved (that becomes "Check order"). Logout and rejection never POST.
+The tradeoff, stated plainly: an explicit logout abandons local recovery of an unresolved attempt, because the record is not persisted with a
+customer identity. `CART_VERSION_ALREADY_PURCHASED` first reconciles the same quote once.
 On success: quote reset FIRST, record deleted, then the SERVER cart is re-read (never cleared locally). Confirmation is built only from the
 backend order: "Order confirmed", "Cash on delivery", "Payment due on delivery", the lines, **"Item subtotal"** (never a total) and the frozen
 address; an unrecognized payment condition fails closed to neutral copy and nothing ever says "paid". Benefit, coins and Club are not shown or

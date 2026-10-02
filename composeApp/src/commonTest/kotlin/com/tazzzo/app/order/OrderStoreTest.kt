@@ -216,12 +216,6 @@ class OrderStoreTest {
         assertIs<OrderState.Ambiguous>(r.state()); assertEquals("CHKQ_abc123", (r.pending as FakePending).value)
     }
 
-    @Test fun a401EndsTheSessionAndDeletesTheRecord() = runTest {
-        val r = rig(); r.server.rejectNew = hx(401, "UNAUTHENTICATED")
-        r.store.place(); runCurrent()
-        assertEquals(OrderState.SignedOut, r.state()); assertNull((r.pending as FakePending).value)
-    }
-
     // ---- process death ------------------------------------------------------------------------------------------------
 
     private class Launch(val server: FakeOrderSource, val pending: com.tazzzo.app.data.order.PendingOrderStore, scope: TestScope, authed: Boolean = true) {
@@ -273,13 +267,31 @@ class OrderStoreTest {
         assertEquals(2, server.calls.size)
     }
 
-    @Test fun resumeWithoutARecordOrWithoutASessionNeverPostsAndAnUnauthenticatedLaunchDeletesTheRecord() = runTest {
+    @Test fun resumeWithoutARecordNeverPostsAndWithoutASessionYetItKeepsTheRecordAndPostsNothing() = runTest {
         val server = FakeOrderSource()
         val none = Launch(server, FakePending(), this); none.store.resumeAfterRestore(); runCurrent()
         assertTrue(server.calls.isEmpty())
         val p = FakePending().apply { value = "CHKQ_abc123" }
-        val signedOut = Launch(server, p, this, authed = false); signedOut.store.resumeAfterRestore(); runCurrent()
-        assertTrue(server.calls.isEmpty()); assertNull(p.value)
+        val notYet = Launch(server, p, this, authed = false); notYet.store.resumeAfterRestore(); runCurrent()
+        assertTrue(server.calls.isEmpty()); assertEquals("CHKQ_abc123", p.value)     // "no session yet" is not a logout
+    }
+
+    @Test fun aRejectedSessionDeletesTheRecordWithoutPosting() = runTest {
+        val p = FakePending().apply { value = "CHKQ_abc123" }; val server = FakeOrderSource()
+        val l = Launch(server, p, this, authed = false); l.store.onSessionRejected(); runCurrent()
+        assertTrue(server.calls.isEmpty()); assertNull(p.value); assertEquals(OrderState.SignedOut, l.store.state.value)
+    }
+
+    @Test fun a401WhileTheSessionIsPreservedKeepsTheRecordAndOffersCheckOrder() = runTest {
+        val r = rig(); r.server.rejectNew = hx(401, "UNAUTHENTICATED")           // the one allowed refresh failed transiently: authed stays true
+        r.store.place(); runCurrent()
+        assertIs<OrderState.Ambiguous>(r.state()); assertEquals("CHKQ_abc123", (r.pending as FakePending).value)
+    }
+
+    @Test fun a401AfterTheSessionWasDefinitivelyClearedDeletesTheRecord() = runTest {
+        val r = rig(); r.server.rejectNew = hx(401, "UNAUTHENTICATED"); r.server.onCall = { r.authed = false }   // the refusal cleared the session
+        r.store.place(); runCurrent()
+        assertEquals(OrderState.SignedOut, r.state()); assertNull((r.pending as FakePending).value)
     }
 
     @Test fun theAutomaticReconciliationRunsAtMostOncePerLaunchEvenIfARecordReappearsInTheIdleState() = runTest {
@@ -316,7 +328,7 @@ class OrderStoreTest {
         r.store.signOut(); runCurrent()
         assertEquals(OrderState.SignedOut, r.state()); assertEquals(calls, r.server.calls.size)
         assertNull((r.pending as FakePending).value); assertNull(r.store.recent.value)
-        r.store.onSignedIn(); runCurrent()
+        r.store.onInteractiveSignIn(); runCurrent()
         assertEquals(OrderState.Idle, r.state())
         r.store.resumeAfterRestore(); runCurrent()                         // nothing left to reconcile for the next customer
         assertEquals(calls, r.server.calls.size)

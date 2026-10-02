@@ -328,8 +328,8 @@ object ServiceLocator {
     }
 
     /** Wires login/logout and the delivery location to [cart], [checkoutQuote] and [orderStore]. REMOTE only. */
-    fun startCartBinding() {
-        com.tazzzo.app.data.order.OrderSessionBinding(cartScope, authSession.active, orderStore).start()
+    fun startCartBinding(initiallyAuthenticated: Boolean) {
+        com.tazzzo.app.data.order.OrderSessionBinding(cartScope, authSession.active, orderStore).start(initiallyAuthenticated)
         com.tazzzo.app.data.checkout.CheckoutSessionBinding(cartScope, authSession.active, checkoutQuote).start()
         com.tazzzo.app.data.cart.CartSessionBinding(
             cartScope, authSession.active, deliveryLocation.selectedAddressId, launchContext.pin, cart

@@ -110,7 +110,9 @@ class OrderStore(
     fun resumeAfterRestore() = command {
         if (launchReconcileDone) return@command
         launchReconcileDone = true
-        if (!isAuthenticated()) { pending.clear(); return@command }
+        // Not authenticated here means "no usable session YET", which is not a logout: the record is KEPT (it is deleted only by
+        // an explicit logout, a definitive auth rejection, an interactive sign-in, or a resolved outcome).
+        if (!isAuthenticated()) return@command
         val quoteId = pending.load() ?: return@command
         if (_state.value != OrderState.Idle) return@command
         begin(quoteId, saveFirst = false)
@@ -135,7 +137,29 @@ class OrderStore(
         _state.value = OrderState.SignedOut
     }
 
-    fun onSignedIn() = command { if (_state.value == OrderState.SignedOut) _state.value = OrderState.Idle }
+    /**
+     * The stored credential was DEFINITIVELY refused during session restoration (the session is cleared). The recovery record
+     * can never be reconciled, so it is deleted. No POST. Transient failures (offline/timeout/5xx) never reach here: the session
+     * is preserved and the record survives.
+     */
+    fun onSessionRejected() = command {
+        generation++
+        job?.cancel(); job = null
+        attemptQuoteId = null
+        pending.clear()
+        _recent.value = null
+        _state.value = OrderState.SignedOut
+    }
+
+    /**
+     * A NEW interactive sign-in (not a session restoration). The record carries no customer identity, so it cannot be proven to
+     * belong to whoever just signed in: it is deleted and never reconciled under this session.
+     */
+    fun onInteractiveSignIn() = command {
+        pending.clear()
+        attemptQuoteId = null
+        if (_state.value == OrderState.SignedOut) _state.value = OrderState.Idle
+    }
 
     /**
      * One stored order by id, for the confirmation / current-session detail: this session's order if it is the one asked for,
@@ -175,7 +199,11 @@ class OrderStore(
             when {
                 // The earlier purchase may be THIS quote: reconcile the same quote once before calling it a failure.
                 f is OrderFailure.CartAlreadyPurchased && !purchasedReconciled -> { purchasedReconciled = true; continue }
-                f is OrderFailure.Unauthenticated -> { forgetAttempt(); _state.value = OrderState.SignedOut; return }
+                // A 401 reaches us only after the one allowed refresh failed. If the session was cleared (definitive rejection) the
+                // record is dead; if it was PRESERVED (the refresh failed transiently) the order may still exist: keep the record.
+                f is OrderFailure.Unauthenticated ->
+                    if (isAuthenticated()) { _state.value = OrderState.Ambiguous(OrderFailure.Unavailable); return }
+                    else { forgetAttempt(); _state.value = OrderState.SignedOut; return }
                 f.isAmbiguous -> { _state.value = OrderState.Ambiguous(f); return }               // pending record stays
                 else -> { forgetAttempt(); _state.value = OrderState.Failed(f); track(AnalyticsEvents.ORDER_PLACE_FAILED); return }
             }
@@ -194,17 +222,24 @@ class OrderStore(
     }
 }
 
-/** Ties the order flow to the auth session: any sign-out forgets the attempt and deletes the recovery record (no POST). */
+/**
+ * Ties the order flow to the auth session.
+ *  - A signed-in -> signed-out transition (explicit logout, or a definitive rejection that clears the session) forgets the attempt
+ *    and deletes the recovery record. No POST.
+ *  - A signed-out -> signed-in transition AFTER startup is an interactive sign-in: the record is deleted (no identity to match).
+ *  - Nothing is inferred from the state the session happens to be in when the binding starts: [start] is told whether the
+ *    restoration already produced a session, so an initial or still-restoring "not signed in yet" is never mistaken for a logout.
+ */
 class OrderSessionBinding(
     private val scope: CoroutineScope,
     private val active: kotlinx.coroutines.flow.Flow<Boolean>,
     private val store: OrderStore
 ) {
-    fun start() {
+    fun start(initiallyActive: Boolean) {
         scope.launch {
-            var was = false
+            var was = initiallyActive
             active.collect { now ->
-                if (now && !was) store.onSignedIn() else if (!now && was) store.signOut()
+                if (now && !was) store.onInteractiveSignIn() else if (!now && was) store.signOut()
                 was = now
             }
         }

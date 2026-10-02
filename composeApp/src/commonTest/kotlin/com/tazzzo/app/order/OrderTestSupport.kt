@@ -62,6 +62,7 @@ class FakeOrderSource : OrderSource {
     val gets = mutableListOf<String>()
     private val failures = ArrayDeque<Pair<Throwable, Boolean>>()
     var gate: CompletableDeferred<Unit>? = null
+    var onCall: () -> Unit = {}
     /** A definitive rejection for any quote that has no order yet (e.g. expired). */
     var rejectNew: Throwable? = null
     private var n = 0
@@ -74,6 +75,7 @@ class FakeOrderSource : OrderSource {
 
     override suspend fun placeCodOrder(quoteId: String): CustomerOrder {
         calls += quoteId
+        onCall()
         gate?.await()
         orders[quoteId]?.let { return it }                       // replay first: before expiry and every other check
         val f = failures.removeFirstOrNull()
