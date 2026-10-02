@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +44,9 @@ import com.tazzzo.app.ui.common.italic
 import com.tazzzo.app.ui.common.plain
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
+import tazzzo.resources.Res
+import tazzzo.resources.bg_auth_otp
+import tazzzo.resources.bg_auth_phone
 
 /** Customer copy for the two auth steps (UI Page references `Mobile Number` and `Auth Page`). */
 object LoginCopy {
@@ -69,10 +74,20 @@ fun LoginScreen() {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Short screens (≈570dp tall) get a tighter headline block so the form starts above the fold.
         val compact = maxHeight < 700.dp
-        val headlineTop = if (compact) HEADLINE_TOP_COMPACT else HEADLINE_TOP
+        // Reference: the headline starts ~25% down the frame; the top bar (back affordance) is part of that distance.
+        val headlineTop = if (compact) HEADLINE_TOP_COMPACT else (maxHeight * HEADLINE_TOP_FRACTION - TazSize.topBarHeight).coerceAtLeast(HEADLINE_TOP_COMPACT)
         val headlineSize = if (compact) TazType.editorialTitleSize else TazType.editorialHeadlineSize
         val headlineLine = if (compact) TazType.editorialTitleLine else TazType.editorialHeadlineLine
-        PhotoBackdrop(photo = null, placeholder = PhotoPlaceholders.creamWall, anchor = PhotoAnchor.Bottom, modifier = Modifier.fillMaxSize())   // TZ-ASSET-LOGIN-001 / OTP-001 outstanding
+        PhotoBackdrop(
+            photo = if (flow.step == AuthStep.Otp) Res.drawable.bg_auth_otp else Res.drawable.bg_auth_phone,
+            placeholder = PhotoPlaceholders.creamWall, anchor = PhotoAnchor.Bottom, modifier = Modifier.fillMaxSize(),
+            // Short/wide frames crop the plate so the counter objects rise under the legal line and "Skip for now"; a soft
+            // cream wash behind that band keeps them legible. Taller frames match the reference and need none.
+            scrim = if (compact) Brush.verticalGradient(
+                0.50f to Color.Transparent, 0.62f to TazColors.Cream.copy(alpha = 0.78f),
+                0.86f to TazColors.Cream.copy(alpha = 0.78f), 1f to Color.Transparent
+            ) else null
+        )
 
         Column(
             Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()),
@@ -125,6 +140,6 @@ fun LoginScreen() {
 }
 
 /** The headline starts ~26% down the frame in the references (≈ 165/640 after the top bar). */
-private val HEADLINE_TOP = 92.dp
+private const val HEADLINE_TOP_FRACTION = 0.21f
 private val HEADLINE_TOP_COMPACT = 24.dp
 private val FORM_MAX_WIDTH = 420.dp

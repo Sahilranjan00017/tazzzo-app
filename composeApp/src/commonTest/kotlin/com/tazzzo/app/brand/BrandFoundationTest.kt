@@ -49,9 +49,10 @@ class BrandFoundationTest {
         assertEquals("Skip", ShowcaseCopy.SKIP)
     }
 
-    @Test fun eachPageHasItsOwnPhotoSlot() {
+    @Test fun eachPageHasItsOwnPhotoSlotAndPlate() {
         assertEquals(3, ShowcaseCopy.pages.map { it.assetId }.toSet().size)
         assertTrue(ShowcaseCopy.pages.all { it.assetId.startsWith("TZ-ASSET-SHOWCASE-") })
+        assertEquals(3, ShowcaseCopy.pages.map { it.photo }.toSet().size)   // no page reuses another page's photography
     }
 
     @Test fun showcaseCopyAddsNoUnsupportedClaims() {

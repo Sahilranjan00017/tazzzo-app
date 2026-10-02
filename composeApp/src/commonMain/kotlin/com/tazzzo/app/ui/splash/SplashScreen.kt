@@ -30,6 +30,8 @@ import com.tazzzo.app.ui.common.TazzzoWordmark
 import com.tazzzo.app.ui.common.VSpace
 import com.tazzzo.app.ui.common.italic
 import kotlinx.coroutines.delay
+import tazzzo.resources.Res
+import tazzzo.resources.bg_splash_grocery
 
 /**
  * Brand moment (UI Page reference `Splash`): a bright full-bleed produce plate, the vector wordmark centred with the
@@ -53,7 +55,7 @@ fun SplashScreen() {
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        PhotoBackdrop(photo = null, placeholder = PhotoPlaceholders.studio, modifier = Modifier.fillMaxSize())   // TZ-ASSET-SPLASH-001 outstanding
+        PhotoBackdrop(photo = Res.drawable.bg_splash_grocery, placeholder = PhotoPlaceholders.studio, modifier = Modifier.fillMaxSize())
         // The wordmark spans ~49% of the frame width in the reference (192/390dp), capped so tablets don't shout.
         val wordmarkWidth = (maxWidth * 0.49f).coerceAtMost(240.dp)
         // The lockup sits a little above true centre (reference: wordmark centre at ~43% of the height).

@@ -185,7 +185,7 @@ fun TazzzoPrimaryButton(
     Box(
         modifier
             .height(EDITORIAL_BUTTON_HEIGHT)
-            .graphicsLayer { alpha = if (enabled) 1f else 0.5f }
+            .graphicsLayer { alpha = if (enabled) 1f else DISABLED_ALPHA }
             .clip(TazRadius.pill)
             .background(bg)
             .tazPressable(onClick = onClick, enabled = interactive, pressScale = TazPress.control)
@@ -208,6 +208,9 @@ fun TazzzoPrimaryButton(
 }
 
 val EDITORIAL_BUTTON_HEIGHT: Dp = 54.dp
+
+/** The reference shows the CTA solid even before input; disabled stays visibly green, only slightly quieter. */
+private const val DISABLED_ALPHA = 0.72f
 
 /** Pagination dots: the active one is brighter and larger. */
 @Composable

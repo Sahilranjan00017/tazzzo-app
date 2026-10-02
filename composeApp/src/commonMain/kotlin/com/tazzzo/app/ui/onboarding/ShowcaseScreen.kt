@@ -75,14 +75,15 @@ private fun ShowcasePageContent(page: ShowcasePage) {
         // Reference proportions (640dp frame): headline block starts at ~25% of the height; the dots follow the support line.
         val headlineTop = maxHeight * HEADLINE_TOP_FRACTION
         PhotoBackdrop(
-            photo = null,                                            // TZ-ASSET-SHOWCASE-00x outstanding
+            photo = page.photo,
             placeholder = PhotoPlaceholders.greenWall,
             anchor = PhotoAnchor.Bottom,
             modifier = Modifier.fillMaxSize(),
             // Legibility scrims: a touch at the very top for status glyphs, a deeper one behind the CTA.
+            // The reference has no scrim; a light one keeps status glyphs and the CTA band legible on every crop.
             scrim = Brush.verticalGradient(
-                0f to Color.Black.copy(alpha = 0.10f), 0.2f to Color.Transparent,
-                0.78f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.22f)
+                0f to Color.Black.copy(alpha = 0.08f), 0.18f to Color.Transparent,
+                0.80f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.18f)
             )
         )
         Column(

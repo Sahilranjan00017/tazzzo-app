@@ -20,6 +20,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
+import tazzzo.resources.bg_auth_otp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazSpace
@@ -55,7 +56,7 @@ class BrandOtpEvidenceTest {
         rule.setContent {
             TazzzoTheme {
                 Box(Modifier.fillMaxSize()) {
-                    PhotoBackdrop(photo = null, placeholder = PhotoPlaceholders.creamWall, anchor = PhotoAnchor.Bottom, modifier = Modifier.fillMaxSize())
+                    PhotoBackdrop(photo = tazzzo.resources.Res.drawable.bg_auth_otp, placeholder = PhotoPlaceholders.creamWall, anchor = PhotoAnchor.Bottom, modifier = Modifier.fillMaxSize())
                     Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = 148.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         EditorialText(listOf(plain("Enter the\n"), italic("6-digit code")), size = TazType.editorialHeadlineSize, lineHeight = TazType.editorialHeadlineLine, color = TazColors.BrandEditorial)
                         VSpace(TazSpace.lg)
