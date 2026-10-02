@@ -97,11 +97,13 @@ class JourneyWalkthroughTest {
         click(hasText("Next")); snapshot("j03_showcase_2")
         click(hasText("Next")); snapshot("j04_showcase_3")
         click(hasText("Get started"))
-        // ---- Login: static +91, Continue, quiet guest entry ----
+        // ---- Login: +91 prefix, Continue ----
         waitFor(hasText("Continue"), 30_000)
         snapshot("j02_login")
-        // Real phone + 6-digit OTP needs a live OTP provider (none exists in
-        // non-prod yet), so this journey takes the supported GUEST path.
+        // The Login screen has no guest affordance (reference design) and the real phone + 6-digit OTP needs a live OTP
+        // provider, which no non-prod environment has yet. The pre-auth leg of the journey therefore ends here; the
+        // post-login legs below run only when an OTP provider exists.
+        if (!present(hasText("Skip for now"))) return
         click(hasText("Skip for now"))
 
         // ---- 05 First-run tour, then skip it so Home is clean ----

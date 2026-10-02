@@ -38,7 +38,6 @@ import com.tazzzo.app.ui.common.EditorialText
 import com.tazzzo.app.ui.common.PhotoAnchor
 import com.tazzzo.app.ui.common.PhotoBackdrop
 import com.tazzzo.app.ui.common.PhotoPlaceholders
-import com.tazzzo.app.ui.common.TextAction
 import com.tazzzo.app.ui.common.VSpace
 import com.tazzzo.app.ui.common.italic
 import com.tazzzo.app.ui.common.plain
@@ -53,14 +52,14 @@ object LoginCopy {
     const val PHONE_SUPPORT = "We’ll send you a 6-digit OTP\nto get started."
     const val OTP_SUPPORT = "We’ve sent a code to"
     const val LEGAL = "By continuing, you agree to our\nTerms of Service and Privacy Policy."
-    const val SKIP = "Skip for now"
     const val DIAL_PREFIX = "+91"
 }
 
 /**
  * Login = the phone step and the OTP step on one editorial surface (a warm cream photo slot, headline in the plain
- * upper region, the form beneath). Auth is the unchanged shared [AuthFlow]: real phone + 6-digit OTP. Guest entry
- * ("Skip for now") stays supported but is a small tertiary action under the form.
+ * upper region, the form beneath). Auth is the unchanged shared [AuthFlow]: real phone + 6-digit OTP. The reference
+ * shows no guest affordance, so none is rendered here; the guest path itself (`requestGuidedTourIfFirstTime` + Home)
+ * is untouched and remains reachable from the surfaces that offer it.
  */
 @Composable
 fun LoginScreen() {
@@ -69,8 +68,6 @@ fun LoginScreen() {
         app.requestGuidedTourIfFirstTime()
         app.goHome()
     })
-    val guest = { app.requestGuidedTourIfFirstTime(); app.goHome() }
-
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Short screens (≈570dp tall) get a tighter headline block so the form starts above the fold.
         val compact = maxHeight < 700.dp
@@ -81,8 +78,8 @@ fun LoginScreen() {
         PhotoBackdrop(
             photo = if (flow.step == AuthStep.Otp) Res.drawable.bg_auth_otp else Res.drawable.bg_auth_phone,
             placeholder = PhotoPlaceholders.creamWall, anchor = PhotoAnchor.Bottom, modifier = Modifier.fillMaxSize(),
-            // Short/wide frames crop the plate so the counter objects rise under the legal line and "Skip for now"; a soft
-            // cream wash behind that band keeps them legible. Taller frames match the reference and need none.
+            // Short/wide frames crop the plate so the counter objects rise under the legal line; a soft cream wash behind
+            // that band keeps it legible. Taller frames match the reference and need none.
             scrim = if (compact) Brush.verticalGradient(
                 0.50f to Color.Transparent, 0.62f to TazColors.Cream.copy(alpha = 0.78f),
                 0.86f to TazColors.Cream.copy(alpha = 0.78f), 1f to Color.Transparent
@@ -122,18 +119,13 @@ fun LoginScreen() {
             }
             VSpace(TazSpace.xxl)
 
-            AuthEntry(flow = flow, phoneCta = "Continue", otpCta = "Verify", modifier = Modifier.widthIn(max = FORM_MAX_WIDTH).padding(horizontal = TazSpace.xxl))
+            AuthEntry(flow = flow, phoneCta = "Continue", otpCta = "", modifier = Modifier.widthIn(max = FORM_MAX_WIDTH).padding(horizontal = TazSpace.xxl))
 
             VSpace(TazSpace.md)
             Text(
                 LoginCopy.LEGAL, fontSize = TazType.captionSize, lineHeight = TazType.captionLine, color = TazColors.TextTertiary,
                 textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = TazSpace.xxxl)
             )
-            // Guest entry: supported, deliberately quiet, never competing with Continue.
-            if (flow.step == AuthStep.Phone) {
-                VSpace(TazSpace.sm)
-                TextAction(LoginCopy.SKIP, onClick = guest, color = TazColors.TextSecondary)
-            }
             Spacer(Modifier.height(TazSpace.xxl).navigationBarsPadding())
         }
     }

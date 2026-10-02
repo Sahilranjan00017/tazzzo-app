@@ -120,9 +120,9 @@ enum class PhotoAnchor { Center, Bottom }
 
 /**
  * A full-bleed photographic slot. With [photo] it crops the plate ([ContentScale.Crop]) at [anchor]; with null it
- * draws [placeholder] — the DEVELOPMENT stand-in while the clean plate (docs/design/UI_ASSET_MANIFEST.md) is
- * outstanding. The slot, crop, [scrim] and content-safe area are identical either way, so a real plate is a
- * one-resource swap. Decorative: no accessibility output.
+ * draws [placeholder], the development stand-in for a slot whose plate does not exist yet (see
+ * docs/design/UI_ASSET_MANIFEST.md). The slot, crop, [scrim] and content-safe area are identical either way, so a
+ * plate is a one-resource swap. Decorative: no accessibility output.
  */
 @Composable
 fun PhotoBackdrop(
@@ -148,7 +148,7 @@ fun PhotoBackdrop(
     }
 }
 
-/** Development placeholders: brand-tinted gradients that keep the slot honest until the plate arrives. */
+/** Development placeholders for slots that have no plate yet (Home, PDP fallback): brand-tinted gradients. */
 object PhotoPlaceholders {
     /** Deep editorial green wall (Showcase). */
     val greenWall: Brush = Brush.verticalGradient(0f to Color(0xFF1C4634), 0.55f to TazColors.BrandEditorial, 1f to TazColors.BrandEditorialDeep)
@@ -223,7 +223,7 @@ fun PagerDots(count: Int, index: Int, modifier: Modifier = Modifier, activeColor
     }
 }
 
-/** A small tertiary text action ("Skip", "Skip for now", "Change number") with a full 44dp touch target. */
+/** A small tertiary text action ("Skip", "Try again", "Resend code") with a full 44dp touch target. */
 @Composable
 fun TextAction(
     text: String,

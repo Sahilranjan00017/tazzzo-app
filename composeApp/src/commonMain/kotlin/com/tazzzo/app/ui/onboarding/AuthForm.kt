@@ -32,6 +32,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
@@ -46,6 +49,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -96,12 +101,16 @@ fun AuthEntry(flow: AuthFlow, phoneCta: String, otpCta: String, modifier: Modifi
     }
 }
 
-/** A static "+91" (no picker exists, so no chevron) separated from the digits by a hairline. */
+/**
+ * "+91 ˅" as in the reference, separated from the digits by a hairline. The prefix is India-only and the chevron is a
+ * visual affordance of the reference, not a control: no country picker exists, so nothing here is clickable.
+ */
 @Composable
 internal fun DialPrefix() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(LoginCopy.DIAL_PREFIX, fontSize = TazType.titleSize, fontWeight = FontWeight.Medium, color = TazColors.BrandEditorial)
-        Spacer(Modifier.width(TazSpace.md))
+        Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = TazColors.BrandEditorial, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(TazSpace.sm))
         Box(Modifier.width(1.dp).height(24.dp).background(TazColors.BorderStrong))
         Spacer(Modifier.width(TazSpace.md))
     }
@@ -154,18 +163,26 @@ private fun PhoneStep(flow: AuthFlow, cta: String) {
     }
 }
 
+/**
+ * No Verify button (reference): [AuthFlow.onOtpChanged] submits the moment the sixth digit lands. While verifying the
+ * cells are disabled and a quiet status line shows. A wrong/expired code clears the digits (AuthFlow); a TRANSIENT
+ * failure keeps them, and only then a tertiary "Try again" re-submits the same code — the retry the button used to carry.
+ */
 @Composable
-private fun OtpStep(flow: AuthFlow, cta: String) {
+private fun OtpStep(flow: AuthFlow, @Suppress("UNUSED_PARAMETER") cta: String) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         OtpCells(value = flow.otpInput, onValueChange = flow::onOtpChanged, enabled = !flow.verifying)
+        if (flow.verifying) {
+            Spacer(Modifier.height(TazSpace.sm))
+            Text("Verifying…", fontSize = TazType.captionSize, color = TazColors.TextSecondary,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
         FailureText(flow.failure)
+        if (flow.failure != null && flow.canVerify) {
+            TextAction("Try again", onClick = flow::submitOtp, color = TazColors.BrandEditorial)
+        }
         Spacer(Modifier.height(TazSpace.lg))
         ResendRow(flow)
-        Spacer(Modifier.height(TazSpace.lg))
-        TazzzoPrimaryButton(
-            text = cta, onClick = flow::submitOtp, modifier = Modifier.fillMaxWidth(),
-            enabled = flow.canVerify || flow.verifying, loading = flow.verifying
-        )
     }
 }
 

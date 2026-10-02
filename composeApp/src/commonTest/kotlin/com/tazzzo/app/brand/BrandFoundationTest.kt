@@ -75,9 +75,8 @@ class BrandFoundationTest {
 
     // ---- login ---------------------------------------------------------------------------------------------------------
 
-    @Test fun theDialPrefixIsStaticPlusNinetyOneAndGuestEntryStaysAsAQuietSkip() {
+    @Test fun theDialPrefixIsIndiaOnly() {
         assertEquals("+91", LoginCopy.DIAL_PREFIX)
-        assertEquals("Skip for now", LoginCopy.SKIP)
         assertTrue("6-digit" in LoginCopy.PHONE_SUPPORT)
     }
 

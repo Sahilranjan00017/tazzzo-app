@@ -70,8 +70,6 @@ class BrandOtpEvidenceTest {
                             androidx.compose.material3.Text("Didn’t receive the code?", fontSize = TazType.captionSize, color = TazColors.TextSecondary)
                             androidx.compose.material3.Text("Resend in 00:30", fontSize = TazType.captionSize, color = TazColors.BrandEditorial,
                                 textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
-                            VSpace(TazSpace.lg)
-                            TazzzoPrimaryButton(text = "Verify", onClick = {}, modifier = Modifier.fillMaxWidth(), tone = ButtonTone.Editorial, enabled = false)
                         }
                     }
                 }
