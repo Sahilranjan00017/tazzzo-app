@@ -72,15 +72,15 @@ val Screen.stateKey: String
 /** Which way the customer is travelling. Drives the transition, nothing else. */
 enum class NavDirection { Forward, Backward, Replace }
 
-enum class HomeTab(val label: String, val emoji: String) {
-    HOME("Home", "🏠"),
-    CATEGORIES("Categories", "🗂️"),
-    // Savings is a destination, not a filter buried in a list. Every benchmark
-    // gives it a permanent slot, because "what is cheap today" is one of the
-    // three questions a customer opens a grocery app to answer.
-    DEALS("Deals", "🏷️"),
-    ORDER_AGAIN("Order Again", "🔄"),
-    ACCOUNT("Account", "👤")
+/** The primary tabs (UI Page `Home.jpeg`): Home · Shop · Orders · Profile. DEALS and ORDER_AGAIN exist only for the MOCK catalogue. */
+enum class HomeTab(val label: String) {
+    HOME("Home"),
+    SHOP("Shop"),
+    DEALS("Deals"),
+    /** Real surface: the truthful "history isn't available yet" state until the list endpoint exists. Never mock history. */
+    ORDERS("Orders"),
+    ORDER_AGAIN("Order Again"),
+    PROFILE("Profile")
 }
 
 /**

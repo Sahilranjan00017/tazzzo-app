@@ -12,6 +12,6 @@ internal fun visibleHomeTabs(caps: CatalogCapabilities): List<HomeTab> = HomeTab
     when (tab) {
         HomeTab.DEALS -> caps.deals
         HomeTab.ORDER_AGAIN -> caps.orderHistoryIntegration
-        else -> true
+        else -> true                       // HOME, SHOP, ORDERS (truthful state), PROFILE are always present
     }
 }

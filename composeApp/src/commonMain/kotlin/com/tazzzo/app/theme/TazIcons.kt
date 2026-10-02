@@ -42,6 +42,10 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material.icons.filled.Toll
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.PersonOutline
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -64,6 +68,11 @@ object TazIcons {
     // bottom nav
     val Home: ImageVector = Icons.Default.Home
     val Categories: ImageVector = Icons.Default.Apps
+    /** Primary tabs (Home.jpeg): a rounded house, a 2x2 grid, a receipt, a person. */
+    val Shop: ImageVector = Icons.Outlined.GridView
+    val Orders: ImageVector = Icons.AutoMirrored.Outlined.ReceiptLong
+    val Profile: ImageVector = Icons.Outlined.PersonOutline
+    val HomeOutlined: ImageVector = Icons.Outlined.Home
     val OrderAgain: ImageVector = Icons.Default.Replay
     val Account: ImageVector = Icons.Default.Person
 

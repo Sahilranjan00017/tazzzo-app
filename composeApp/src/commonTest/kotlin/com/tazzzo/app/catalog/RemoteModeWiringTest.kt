@@ -75,11 +75,11 @@ class RemoteModeWiringTest {
 
     // ---- unsupported surfaces disappear --------------------------------------------------------------------------------
 
-    @Test fun remoteModeHidesDealsAndOrderAgainButKeepsHomeCategoriesAccount() {
-        assertEquals(listOf(HomeTab.HOME, HomeTab.CATEGORIES, HomeTab.ACCOUNT), visibleHomeTabs(CatalogCapabilities.REMOTE))
+    @Test fun remoteModeShowsHomeShopOrdersProfileAndHidesDealsAndOrderAgain() {
+        assertEquals(listOf(HomeTab.HOME, HomeTab.SHOP, HomeTab.ORDERS, HomeTab.PROFILE), visibleHomeTabs(CatalogCapabilities.REMOTE))
     }
 
-    @Test fun mockModeKeepsAllFiveTabs() {
+    @Test fun mockModeKeepsEveryTab() {
         assertEquals(HomeTab.entries.toList(), visibleHomeTabs(CatalogCapabilities.MOCK))
     }
 

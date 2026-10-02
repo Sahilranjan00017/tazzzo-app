@@ -1050,7 +1050,7 @@ fun BoxScope.CartBar(aboveNav: Boolean = false) {
             Modifier
                 // Clear the nav bar's full height (bar + its hairline). The nav
                 // applies the system inset itself, so it is applied here once.
-                .padding(bottom = if (aboveNav) TazSize.navBarHeight + 1.dp else 0.dp)
+                .padding(bottom = if (aboveNav) TazSize.floatingNavClearance else 0.dp)
                 .padding(horizontal = TazSpace.gutter, vertical = TazSpace.md)
                 .navigationBarsPadding()
                 .fillMaxWidth()

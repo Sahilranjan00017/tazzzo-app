@@ -99,7 +99,7 @@ import com.tazzzo.app.ui.interaction.tazPressable
 // ---------------------------------------------------------------------------------------------------
 
 @Composable
-private fun rememberTaxonomyBrowser(): TaxonomyBrowser {
+internal fun rememberTaxonomyBrowser(): TaxonomyBrowser {
     val scope = rememberCoroutineScope()
     return remember { TaxonomyBrowser(scope, ServiceLocator.remoteCatalog) }
 }
@@ -188,28 +188,6 @@ private fun SkeletonRow() {
 }
 
 /** Home in REMOTE mode: delivery status + real category navigation. Unsupported rails are not shown. */
-@Composable
-fun RemoteHomeContent() {
-    val app = LocalAppState.current
-    val browser = rememberTaxonomyBrowser()
-    Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
-        Row(Modifier.fillMaxWidth().background(TazColors.Surface).padding(horizontal = TazSpace.lg, vertical = TazSpace.md), verticalAlignment = Alignment.CenterVertically) {
-            LogoImage(32.dp)
-        }
-        ServiceabilityBannerView()
-        com.tazzzo.app.ui.address.DeliverySuggestionBanner()
-        RemoteTaxonomyList(
-            browser,
-            header = {
-                Text(
-                    "Shop by category", fontSize = TazType.h2Size, fontWeight = TazType.h2Weight, color = TazColors.TextPrimary,
-                    modifier = Modifier.padding(start = TazSpace.lg, top = TazSpace.lg, end = TazSpace.lg, bottom = TazSpace.xs)
-                )
-            },
-            onOpen = { app.navigate(Screen.CategoryDetail(it.id)) }
-        )
-    }
-}
 
 /** The Categories tab in REMOTE mode. */
 @Composable

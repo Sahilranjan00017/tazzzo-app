@@ -12,10 +12,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,8 +30,6 @@ import com.tazzzo.app.HomeTab
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.data.repository.ServiceLocator
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -44,13 +40,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
-import com.tazzzo.app.theme.TazMotion
-import com.tazzzo.app.ui.interaction.TazHaptic
 import com.tazzzo.app.ui.interaction.TazPress
-import com.tazzzo.app.ui.interaction.rememberHaptics
 import com.tazzzo.app.ui.interaction.tazPressable
+import androidx.compose.animation.core.tween
+import com.tazzzo.app.theme.TazMotion
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -58,13 +51,9 @@ import com.tazzzo.app.theme.TazSize
 import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.ui.common.CartBar
-import com.tazzzo.app.ui.common.TazIcon
-import com.tazzzo.app.ui.common.guidedTarget
 import com.tazzzo.app.ui.guided.GuidedJourneyOverlay
 import com.tazzzo.app.ui.voice.VoiceComingSoonSheet
 import kotlinx.coroutines.delay
-import com.tazzzo.app.theme.TazElevation
-import androidx.compose.foundation.shape.RoundedCornerShape
 
 /**
  * The main shell of the app: 5 bottom tabs + floating cart bar + one-time
@@ -74,22 +63,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 fun MainScaffold() {
     val app = LocalAppState.current
     Box(Modifier.fillMaxSize().background(TazColors.Cream)) {
-        Column(Modifier.fillMaxSize()) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                val remote = ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE
-                // A tab the active catalogue cannot support (e.g. a remembered DEALS in REMOTE mode)
-                // falls back to Home rather than rendering mock content.
-                val tab = if (app.homeTab in visibleHomeTabs(ServiceLocator.catalogCapabilities)) app.homeTab else HomeTab.HOME
-                when (tab) {
-                    HomeTab.HOME -> if (remote) com.tazzzo.app.ui.catalog.RemoteHomeContent() else HomeTabContent()
-                    HomeTab.CATEGORIES -> if (remote) com.tazzzo.app.ui.catalog.RemoteCategoriesContent() else CategoriesTabContent()
-                    HomeTab.DEALS -> DealsTabContent()
-                    HomeTab.ORDER_AGAIN -> OrderAgainTabContent()
-                    HomeTab.ACCOUNT -> AccountTabContent()
-                }
+        // The navigation FLOATS over the content (UI Page `Home.jpeg`); each tab's content leaves TazSize.floatingNavClearance
+        // of room at the bottom so nothing scrolls under the capsule.
+        Box(Modifier.fillMaxSize()) {
+            val remote = ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE
+            // A tab the active catalogue cannot support (e.g. a remembered DEALS in REMOTE mode)
+            // falls back to Home rather than rendering mock content.
+            val tab = if (app.homeTab in visibleHomeTabs(ServiceLocator.catalogCapabilities)) app.homeTab else HomeTab.HOME
+            when (tab) {
+                HomeTab.HOME -> if (remote) RemoteHomeContent() else HomeTabContent()
+                HomeTab.SHOP -> if (remote) com.tazzzo.app.ui.catalog.RemoteCategoriesContent() else CategoriesTabContent()
+                HomeTab.DEALS -> DealsTabContent()
+                HomeTab.ORDERS -> if (remote) com.tazzzo.app.ui.order.RemoteOrdersContent(inTab = true) else OrdersScreen()
+                HomeTab.ORDER_AGAIN -> OrderAgainTabContent()
+                HomeTab.PROFILE -> AccountTabContent()
             }
-            BottomNavBar()
         }
+        FloatingNavBar(Modifier.align(Alignment.BottomCenter))
 
         CartBar(aboveNav = true)
         TransientMessageToast()
@@ -166,103 +156,5 @@ private fun BoxScope.TransientMessageToast() {
     }
 }
 
-/** One icon family for the shell — no emoji reaches the navigation bar. */
-private fun navIconFor(tab: HomeTab): ImageVector = when (tab) {
-    HomeTab.HOME -> TazIcons.Home
-    HomeTab.CATEGORIES -> TazIcons.Categories
-    HomeTab.DEALS -> TazIcons.Offer
-    HomeTab.ORDER_AGAIN -> TazIcons.OrderAgain
-    HomeTab.ACCOUNT -> TazIcons.Account
-}
 
-/** Geometry of the selected-tab pill sitting behind the icon. */
-private val NavPillHeight = 28.dp
-private val NavPillWidth = 52.dp
-
-@Composable
-private fun BottomNavBar() {
-    val app = LocalAppState.current
-    val haptics = rememberHaptics()
-    Surface(
-        color = TazColors.Surface,
-        shadowElevation = TazElevation.floating,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-    ) {
-        Column(Modifier.fillMaxWidth()) {
-            // hairline top border — separates the bar from cream content
-            Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .guidedTarget("bottomnav")
-                    .navigationBarsPadding()
-                    .height(TazSize.navBarHeight),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                visibleHomeTabs(ServiceLocator.catalogCapabilities).forEach { tab ->
-                    val selected = app.homeTab == tab
-                    // Animated so the tab change is felt, not just observed.
-                    val tint by animateColorAsState(
-                        if (selected) TazColors.Green else TazColors.TextTertiary,
-                        tween(TazMotion.fast), label = "navTint"
-                    )
-                    val pillColor by animateColorAsState(
-                        if (selected) TazColors.GreenSoft else Color.Transparent,
-                        tween(TazMotion.fast), label = "navPill"
-                    )
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            // Merge FIRST, then select. Verified on device: with
-                            // the merge applied after, uiautomator reported the
-                            // label and the selected state on two different
-                            // nodes — a screen reader would announce the tab
-                            // name without ever saying it was the current one.
-                            // Merging outside the selectable makes one node
-                            // carrying label + role + selected + action.
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = tab.label
-                            }
-                            .tazPressable(
-                                onClick = {
-                                    if (!selected) {
-                                        haptics.perform(TazHaptic.Select)
-                                        app.homeTab = tab
-                                    }
-                                },
-                                pressScale = TazPress.compact,
-                                haptic = null,          // fired above, only on a real change
-                                role = Role.Tab,
-                                selected = selected
-                            ),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            Modifier
-                                .height(NavPillHeight)
-                                .width(NavPillWidth)
-                                .clip(TazRadius.pill)
-                                .background(pillColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            TazIcon(navIconFor(tab), null, size = TazSize.iconMd, tint = tint)
-                        }
-                        Spacer(Modifier.height(TazSpace.xxs))
-                        Text(
-                            tab.label,
-                            fontSize = TazType.navLabelSize,
-                            lineHeight = TazType.microLine,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                            color = tint,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
