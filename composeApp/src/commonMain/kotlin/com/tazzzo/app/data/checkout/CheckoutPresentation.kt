@@ -6,8 +6,11 @@ import kotlin.time.Duration
 /** Customer wording is fixed here: the quote is an ITEM subtotal, never a total, and final charges are not promised. */
 object CheckoutCopy {
     const val SUBTOTAL_LABEL = "Item subtotal"
-    const val CHARGES_NOTE = "Final charges are confirmed when your order is placed."
-    const val ORDER_CTA = "Place order coming next"
+    /** The subtotal is items only: never imply it equals what is due. */
+    const val CHARGES_NOTE = "The item subtotal isn't the final amount."
+    const val ORDER_CTA = "Place order"
+    /** Shown while production order placement is gated (no authoritative amount due on the backend yet). */
+    const val LAUNCH_GATED = "Ordering will be available once the final amount is confirmed."
     const val NEUTRAL_ITEM = "Item"
 }
 
@@ -21,6 +24,8 @@ sealed interface CheckoutAction {
     data object ChangeAddress : CheckoutAction
     data object GoToCart : CheckoutAction
     data object SignIn : CheckoutAction
+    /** Re-POST the SAME quote to learn whether an unanswered order exists. Never a new quote. */
+    data object CheckOrder : CheckoutAction
 }
 
 data class FailureView(val title: String, val hint: String, val actions: List<CheckoutAction>)

@@ -39,15 +39,17 @@ class FakeAddresses(initial: AddressSelection = selected()) : CheckoutAddressSou
 }
 
 /** A cart as the quote store sees it. Only the read side exists: checkout can never mutate the cart. */
-class FakeCartAccess(initial: CartState = CartState.Loaded(cartOf(5, line("TZP-1", 2, unit = 50)))) : CartAccess {
+open class FakeCartAccess(initial: CartState = CartState.Loaded(cartOf(5, line("TZP-1", 2, unit = 50)))) : CartAccess {
     val flow = MutableStateFlow(initial)
     val pendingFlow = MutableStateFlow<Map<String, PendingTarget>>(emptyMap())
     var refreshes = 0
     /** What the server cart looks like after the NEXT refresh. */
     var onRefresh: (CartState) -> CartState = { it }
+    /** Called at the start of every refresh (lets a test record ordering against other collaborators). */
+    var onRefreshHook: () -> Unit = {}
     override val state: StateFlow<CartState> = flow
     override val pending: StateFlow<Map<String, PendingTarget>> = pendingFlow
-    override suspend fun refreshAndAwait(): CartState { refreshes++; flow.value = onRefresh(flow.value); return flow.value }
+    override suspend fun refreshAndAwait(): CartState { onRefreshHook(); refreshes++; flow.value = onRefresh(flow.value); return flow.value }
     fun version() = (flow.value as CartState.Loaded).cart.version
     fun setCart(c: ServerCart) { flow.value = CartState.Loaded(c) }
 }

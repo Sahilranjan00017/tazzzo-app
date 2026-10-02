@@ -613,3 +613,60 @@ final payable total, or explicitly contract that the quote is merchandise-subtot
 **BACKEND CONTRACT / ENVIRONMENT REQUEST (checkout):** real-environment sign-off needs the same auth path, token keys and replica-set Mongo
 as before, plus a serviceable saved address, active products with active INR prices, inventory at that PIN and a non-empty server cart. No
 checkout feature flag exists. Not blocking for automated PR-07 work.
+
+---
+
+## 10. COD order (PR-08)
+
+Backend contract used (`/v1/customer/orders`, bearer; source: backend `origin/main` `4838096`, read-only):
+
+| Operation | Route | Body / headers | Success |
+|---|---|---|---|
+| place COD order | `POST /v1/customer/orders` | `{"quoteId":"CHKQ_…","paymentMethod":"COD"}` — **no** `Idempotency-Key`, **no** `If-Match`, no address/cart version/total | **200** (first placement and replay alike), `no-store`, no ETag |
+| read one order | `GET /v1/customer/orders/{orderId}` | – | 200, the stored snapshot |
+
+There is **no list/history, cancel, track, invoice or reorder endpoint.** Order response: `orderId` (`ORD_…`), `status` (always
+`CONFIRMED`), `paymentMethod` (`COD`), `paymentCondition` (`COD_DUE` = confirmed, payment owed on delivery, nothing collected),
+`items[{skuId,title,brandCode?,quantity,unitPricePaise,lineTotalPaise}]`, `itemCount`, `subtotalPaise`, `currency`, `deliveryAddress`
+(frozen snapshot, no coordinates), `createdAt`, `confirmedAt`, `requestId`. Not exposed: quoteId, customer/address ids, versions, the
+authoritative benefit snapshot. **There is no delivery fee, platform fee, tax, tip, discount, COD charge, grand total or payable.**
+
+Errors: `400 INVALID_REQUEST` / `PAYMENT_METHOD_UNSUPPORTED` · `401` · `404 NOT_FOUND` · `410 QUOTE_EXPIRED` · `409` `ADDRESS_CHANGED`,
+`NOT_SERVICEABLE`, `PRICE_CHANGED`, `PRODUCT_UNAVAILABLE`, `STOCK_UNAVAILABLE`, `RESERVATION_EXPIRED`, `CART_VERSION_ALREADY_PURCHASED` ·
+`415` · `500` · `503`.
+
+**Idempotency is structural:** a unique index on `(customerId, quoteId)`, and the replay lookup runs BEFORE quote expiry and every other
+check. So re-POSTing the same quote returns the same order (200) even after the quote expired, concurrent duplicates resolve to one order,
+and any definitive 4xx proves **no order exists** for that quote. At placement the backend (one Mongo transaction, replica set) re-checks
+expiry, identity, the cart-purchased guard, address version, serviceability, price equality, catalogue eligibility and Benefits, reserves
+**and consumes** inventory, finalizes the cart (emptied and version+1 if unchanged since the quote; preserved if it was edited) and inserts the
+order. The quote is NOT consumed or linked.
+
+App behaviour: `OrderStore` (in memory) orders only from a **Ready** quote; single flight; the body is exactly the contract above.
+**Ambiguous** (timeout, lost response, 500/503, unreadable 2xx, unknown status) is resolved only by an explicit **Check order** that re-POSTs the
+SAME quote — never a new quote or intent. **Pending-attempt record:** while Placing/Ambiguous, ONE opaque record `tazzzo.pending-order.v1`
+(`{"v":1,"quoteId":"…"}`, nothing else) is persisted; it is written before the request leaves and deleted the moment the outcome is known.
+On an authenticated **cold start** with a record, exactly ONE automatic reconciliation is attempted per launch (never after an interactive
+login); if that is ambiguous again the record stays and "Check order" is shown. **Logout (or any sign-out, or an unauthenticated launch)
+deletes the record and never POSTs** — the record carries no identity, so it must never be reconciled under another customer; the tradeoff
+is that logging out abandons local recovery of an unresolved attempt. `CART_VERSION_ALREADY_PURCHASED` first reconciles the same quote once.
+On success: quote reset FIRST, record deleted, then the SERVER cart is re-read (never cleared locally). Confirmation is built only from the
+backend order: "Order confirmed", "Cash on delivery", "Payment due on delivery", the lines, **"Item subtotal"** (never a total) and the frozen
+address; an unrecognized payment condition fails closed to neutral copy and nothing ever says "paid". Benefit, coins and Club are not shown or
+changed. REMOTE Orders shows "Order history isn't available yet" plus this session's order if one was placed; Coins and Club are unavailable;
+the mock orders/coins are guarded; Order again stays hidden (`orderHistoryIntegration = false`).
+
+**Production gate:** `orderIntegration = false` for REMOTE; `OrderLaunchGate.enabled(caps) = caps.orderIntegration || debugEnabled` (the debug
+switch is a no-op in a release build). With the gate closed the Place order button is disabled with "Ordering will be available once the final
+amount is confirmed." The gate is injected into `OrderStore`, so enabling production later is a one-line capability flip, not a store change.
+
+**ORDER PAYABLE CONTRACT — LAUNCH BLOCKER:** the backend must expose an authoritative customer-visible amount due before production order
+placement is enabled: merchandise subtotal, authoritative discount/benefit, delivery/handling/platform fees if applicable, tax if applicable,
+COD charge if applicable, and the final payable. If a component is intentionally zero or absent, the backend must state that contractually.
+(An unmerged backend branch stores a V1 money snapshot, but it is not on the wire.)
+**BACKEND CONTRACT IMPROVEMENT REQUEST — CUSTOMER ORDER HISTORY ENDPOINT:** an authenticated, paginated list of the customer's orders (PR-08B).
+**BACKEND CONTRACT IMPROVEMENT REQUEST — ORDER ↔ QUOTE REFERENCE:** expose the quoteId or a safe client reference on the order.
+**BACKEND CONTRACT IMPROVEMENT REQUEST — OPENAPI ORDER ERRORS:** document the real order error codes.
+**BACKEND CONTRACT / ENVIRONMENT REQUEST (orders):** real E2E needs non-prod auth, token keys, a replica-set Mongo, a serviceable saved address, a
+priced product, inventory, a real cart and a valid quote, and the strict `orders` schema deployed safely (the docs note the `orders` collection must
+be empty before the strict schema rolls out; that remains pending). Not covered by mocks.

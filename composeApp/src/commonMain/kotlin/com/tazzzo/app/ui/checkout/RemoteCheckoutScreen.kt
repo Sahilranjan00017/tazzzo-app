@@ -44,6 +44,12 @@ import com.tazzzo.app.data.checkout.lineViews
 import com.tazzzo.app.data.checkout.summary
 import com.tazzzo.app.data.checkout.text
 import com.tazzzo.app.data.checkout.view
+import com.tazzzo.app.data.order.OrderFailure
+import com.tazzzo.app.data.order.OrderLaunchGate
+import com.tazzzo.app.data.order.OrderState
+import com.tazzzo.app.data.order.PlaceOrderAvailability
+import com.tazzzo.app.data.order.placeOrderAvailability
+import com.tazzzo.app.data.order.view
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazRadius
@@ -70,18 +76,33 @@ fun RemoteCheckoutScreen() {
     val selection by ServiceLocator.checkoutAddresses.selection.collectAsState()
     val cartState by ServiceLocator.cart.state.collectAsState()
     val cart = (cartState as? CartState.Loaded)?.cart
+    val orders = ServiceLocator.orderStore
+    val orderState by orders.state.collectAsState()
 
     fun act(a: CheckoutAction) = when (a) {
         CheckoutAction.TryAgain -> store.retry()
-        CheckoutAction.ReviewCheckout -> store.start()
-        CheckoutAction.ChooseAddress, CheckoutAction.ChangeAddress -> app.navigate(Screen.Addresses)
-        CheckoutAction.GoToCart -> app.navigate(Screen.Cart)
+        CheckoutAction.CheckOrder -> orders.checkOrder()
+        CheckoutAction.ReviewCheckout -> { orders.acknowledge(); store.start() }
+        CheckoutAction.ChooseAddress, CheckoutAction.ChangeAddress -> { orders.acknowledge(); app.navigate(Screen.Addresses) }
+        CheckoutAction.GoToCart -> { orders.acknowledge(); app.navigate(Screen.Cart) }
         CheckoutAction.SignIn -> app.navigate(Screen.Login)
     }
 
     Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
         TazTopBar(title = "Checkout", onBack = { app.back() })
-        when (val s = state) {
+        val os = orderState
+        // An order attempt in progress, unresolved or conclusively failed takes over the screen: only "Check order" is offered
+        // for an unresolved one, never a second order.
+        if (os is OrderState.Placing) {
+            Column(Modifier.padding(TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
+                Text("Placing your order…", fontSize = TazType.bodySize, color = TazColors.TextSecondary)
+                SkeletonBlock(height = 72.dp, corner = 14.dp)
+            }
+        } else if (os is OrderState.Ambiguous) {
+            Recovery(os.failure.view(), null, cart, ::act)
+        } else if (os is OrderState.Failed && os.failure != OrderFailure.NotLaunched) {
+            Recovery(os.failure.view(), null, cart, ::act)
+        } else when (val s = state) {
             CheckoutState.SignedOut -> EmptyState("🛒", "Log in to check out", "Your cart is saved to your account.", "Log in", onAction = { act(CheckoutAction.SignIn) })
             CheckoutState.Idle -> EmptyState("🛒", "Ready to review your order", null, "Review checkout", onAction = { act(CheckoutAction.ReviewCheckout) })
             CheckoutState.Creating -> Column(Modifier.padding(TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
@@ -89,6 +110,8 @@ fun RemoteCheckoutScreen() {
                 SkeletonBlock(height = 72.dp, corner = 14.dp); SkeletonBlock(height = 72.dp, corner = 14.dp)
             }
             is CheckoutState.Ready -> ReadyContent(s.quote, (selection as? AddressSelection.Selected)?.stamp?.delivery, cart,
+                availability = placeOrderAvailability(OrderLaunchGate.enabled(ServiceLocator.catalogCapabilities), s, orderState),
+                onPlaceOrder = { orders.place() },
                 onChangeAddress = { act(CheckoutAction.ChangeAddress) })
             CheckoutState.Expired -> Recovery(EXPIRED_VIEW, null, cart, ::act)
             is CheckoutState.Stale -> Recovery(s.reason.view(), null, cart, ::act)
@@ -122,7 +145,10 @@ private fun Recovery(v: FailureView, failure: CheckoutFailure?, cart: com.tazzzo
 }
 
 @Composable
-private fun ReadyContent(quote: CheckoutQuote, delivery: DeliveryContent?, cart: com.tazzzo.app.data.cart.ServerCart?, onChangeAddress: () -> Unit) {
+private fun ReadyContent(
+    quote: CheckoutQuote, delivery: DeliveryContent?, cart: com.tazzzo.app.data.cart.ServerCart?,
+    availability: PlaceOrderAvailability, onPlaceOrder: () -> Unit, onChangeAddress: () -> Unit
+) {
     val store = ServiceLocator.checkoutQuote
     var remainingLabel by remember(quote.quoteId) { mutableStateOf<String?>(null) }
     LaunchedEffect(quote.quoteId) {
@@ -161,8 +187,12 @@ private fun ReadyContent(quote: CheckoutQuote, delivery: DeliveryContent?, cart:
             }
             Text(summary.note, fontSize = TazType.captionSize, color = TazColors.TextTertiary)
             remainingLabel?.let { Text(it, fontSize = TazType.captionSize, color = TazColors.TextTertiary) }
-            // No order path exists yet: this never reaches the mock OrderPlacement.
-            PillButton(text = CheckoutCopy.ORDER_CTA, onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth())
+            // The REAL order. Disabled with neutral copy while production placement is gated (no authoritative amount due yet).
+            // It never reaches the mock OrderPlacement.
+            PillButton(text = CheckoutCopy.ORDER_CTA, onClick = onPlaceOrder, enabled = availability.enabled, modifier = Modifier.fillMaxWidth())
+            if (availability is PlaceOrderAvailability.LaunchGated) {
+                Text(CheckoutCopy.LAUNCH_GATED, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+            }
         }
     }
 }
@@ -174,4 +204,5 @@ private fun CheckoutAction.label(): String = when (this) {
     CheckoutAction.ChangeAddress -> "Change address"
     CheckoutAction.GoToCart -> "Go to cart"
     CheckoutAction.SignIn -> "Log in"
+    CheckoutAction.CheckOrder -> "Check order"
 }

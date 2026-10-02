@@ -69,6 +69,13 @@ class DeliveryAddressSource(
             .stateIn(scope, SharingStarted.Eagerly, AddressSelection.None)
 }
 
+/** What the order flow needs from the quote store: the current quote, and a synchronous reset after a placed order. */
+interface CheckoutQuoteAccess {
+    val state: StateFlow<CheckoutState>
+    /** Forget the quote NOW. Must be called on the store's own scope (the order store shares it). */
+    fun resetNow()
+}
+
 /** The inputs a quote was built from. Backend idempotency fingerprint = (cartVersion, addressId); the address version/content is client-side only. */
 data class CheckoutSource(val cartVersion: Long, val address: AddressStamp) {
     override fun toString(): String = "CheckoutSource(***)"
@@ -117,9 +124,9 @@ class CheckoutQuoteStore(
     private val onAddressSuspect: () -> Unit = {},
     private val newKey: () -> String = { IdempotencyKey.generate() },
     private val clock: TimeSource = TimeSource.Monotonic
-) {
+) : CheckoutQuoteAccess {
     private val _state = MutableStateFlow<CheckoutState>(CheckoutState.Idle)
-    val state: StateFlow<CheckoutState> = _state
+    override val state: StateFlow<CheckoutState> = _state
 
     private class Attempt(val key: String, val source: CheckoutSource, var ambiguous: Boolean = false) {
         override fun toString() = "Attempt(***)"
@@ -158,6 +165,9 @@ class CheckoutQuoteStore(
             job = scope.launch { post(gen) }
         } else if (_state.value != CheckoutState.Creating) beginAttempt()
     }
+
+    /** An order was placed from this quote: it is spent. Back to Idle, key dropped, nothing re-requested. */
+    override fun resetNow() = wipe(CheckoutState.Idle)
 
     /** Session ended: forget everything. The server cart is untouched. */
     fun signOut() = command { wipe(CheckoutState.SignedOut) }

@@ -174,6 +174,21 @@ internal object RemoteModeCheckoutGuard : CheckoutRepository {
     override suspend fun placeOrder(request: OrderRequest): PlaceOrderResult = refuse()
 }
 
+/** REMOTE must never answer with the three seeded fake orders: real orders come from the OrderStore. */
+internal object RemoteModeOrderGuard : OrderRepository {
+    private fun refuse(): Nothing = throw UnsupportedOperationException("The mock orders are not available in REMOTE mode")
+    override suspend fun placeOrder(lines: List<CartLine>, bill: BillSummary, address: String, payment: PaymentMethodKind?, slot: DeliverySlot?, instructionIds: List<String>): Order = refuse()
+    override suspend fun getOrders(): List<Order> = refuse()
+}
+
+/** REMOTE has no coins contract: no fake balance and no local credit. */
+internal object RemoteModeCoinGuard : CoinRepository {
+    private fun refuse(): Nothing = throw UnsupportedOperationException("The mock coins are not available in REMOTE mode")
+    override suspend fun getBalance(): Int = refuse()
+    override suspend fun getLedger(): List<CoinTransaction> = refuse()
+    override suspend fun credit(amount: Int, title: String) = refuse()
+}
+
 internal object RemoteModeCatalogGuard : CatalogRepository {
     private fun refuse(): Nothing =
         throw UnsupportedOperationException("The mock catalogue is not available in REMOTE catalogue mode")
@@ -299,8 +314,22 @@ object ServiceLocator {
         )
     }
 
-    /** Wires login/logout and the delivery location to [cart] and [checkoutQuote]. REMOTE only. */
+    // --- real COD order (PR-08): in memory, plus ONE opaque pending-quote recovery record ---
+    val orderStore: com.tazzzo.app.data.order.OrderStore by lazy {
+        com.tazzzo.app.data.order.OrderStore(
+            scope = cartScope,
+            source = com.tazzzo.app.data.order.RemoteOrderDataSource(apiClient),
+            quotes = checkoutQuote,
+            cart = cart,
+            pending = com.tazzzo.app.data.order.PersistentPendingOrderStore(persistentStoreForCatalog),
+            isAuthenticated = { authSession.isAuthenticated },
+            launchEnabled = { com.tazzzo.app.data.order.OrderLaunchGate.enabled(catalogCapabilities) }
+        )
+    }
+
+    /** Wires login/logout and the delivery location to [cart], [checkoutQuote] and [orderStore]. REMOTE only. */
     fun startCartBinding() {
+        com.tazzzo.app.data.order.OrderSessionBinding(cartScope, authSession.active, orderStore).start()
         com.tazzzo.app.data.checkout.CheckoutSessionBinding(cartScope, authSession.active, checkoutQuote).start()
         com.tazzzo.app.data.cart.CartSessionBinding(
             cartScope, authSession.active, deliveryLocation.selectedAddressId, launchContext.pin, cart
@@ -310,8 +339,16 @@ object ServiceLocator {
     val auth: com.tazzzo.app.data.auth.AuthRepository by lazy {
         com.tazzzo.app.data.auth.RemoteAuthRepository(authRemote, authSession)
     }
-    val orders: OrderRepository = MockOrderRepository()
-    val coins: CoinRepository = MockCoinRepository()
+    private val mockOrders: OrderRepository = MockOrderRepository()
+    private val mockCoins: CoinRepository = MockCoinRepository()
+
+    /** The LEGACY mock orders. MOCK mode only; in REMOTE it REFUSES (real orders come from [orderStore]). */
+    val orders: OrderRepository
+        get() = if (catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) mockOrders else RemoteModeOrderGuard
+
+    /** The LEGACY mock coins. MOCK mode only; REMOTE has no coins contract. */
+    val coins: CoinRepository
+        get() = if (catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) mockCoins else RemoteModeCoinGuard
     private val mockAddresses: AddressRepository = MockAddressRepository()
 
     /**
@@ -320,7 +357,7 @@ object ServiceLocator {
      */
     val addresses: AddressRepository
         get() = if (catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) mockAddresses else RemoteModeAddressGuard
-    private val mockCheckout: CheckoutRepository = MockCheckoutRepository(mockCatalog, orders)
+    private val mockCheckout: CheckoutRepository = MockCheckoutRepository(mockCatalog, mockOrders)
 
     /** The LEGACY mock checkout. MOCK mode only; in REMOTE mode it REFUSES (the server cart has no checkout yet). */
     val checkout: CheckoutRepository

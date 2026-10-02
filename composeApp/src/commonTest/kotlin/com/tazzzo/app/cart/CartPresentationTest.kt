@@ -91,7 +91,7 @@ class CartPresentationTest {
     @Test fun summaryIsAnItemSubtotalWithNoDeliveryOrTaxClaim() {
         val s = cartOf(2, line("TZP-1", 2, unit = 50), line("TZP-2", 1, unit = 25)).toSummary()
         assertEquals("3 items", s.itemsLabel); assertEquals("₹125", s.subtotalLabel)
-        assertTrue(s.subtotalCaption.startsWith("Item subtotal") && "Final charges" in s.subtotalCaption)
+        assertTrue(s.subtotalCaption.startsWith("Item subtotal") && "final amount" in s.subtotalCaption)
         assertFalse(s.hasBlockedLines)
     }
 

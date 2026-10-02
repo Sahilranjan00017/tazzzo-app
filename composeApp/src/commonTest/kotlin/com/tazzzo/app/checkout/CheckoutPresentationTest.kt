@@ -33,12 +33,13 @@ class CheckoutPresentationTest {
 
     private val forbidden = listOf("total", "payable", "amount to pay", "final amount", "grand")
     /** "Item subtotal" is the one approved word containing "total"; everything else must not call the figure a total. */
-    private fun words(t: String) = t.lowercase().replace("subtotal", "")
+    /** The one approved sentence that DENIES the subtotal is the final amount is exempt from the ban on that phrase. */
+    private fun words(t: String) = t.lowercase().replace("the item subtotal isn't the final amount.", "").replace("subtotal", "")
 
     @Test fun theSubtotalIsAlwaysCalledItemSubtotalAndNeverATotal() {
         val s = quote().summary()
         assertEquals("Item subtotal", s.subtotalLabel); assertEquals("₹99", s.subtotalValue)
-        assertEquals("Final charges are confirmed when your order is placed.", s.note)
+        assertEquals("The item subtotal isn't the final amount.", s.note)
         for (w in forbidden) assertFalse(w in words(s.subtotalLabel + s.note + CheckoutCopy.ORDER_CTA), w)
     }
 
