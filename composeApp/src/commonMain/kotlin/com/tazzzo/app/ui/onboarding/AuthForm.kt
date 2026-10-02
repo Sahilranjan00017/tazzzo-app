@@ -4,7 +4,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ime
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -113,7 +114,7 @@ private fun PhoneStep(flow: AuthFlow, cta: String) {
     // on a short screen (320x569dp class).
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    val imeVisible = WindowInsets.isImeVisible
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0        // common on every target (isImeVisible is Android-only)
     val ctaIntoView = remember { BringIntoViewRequester() }
     // Keyed on the IME actually being shown (not just focus), so the scroll range already includes the keyboard inset.
     LaunchedEffect(focused, imeVisible) { if (focused && imeVisible) { delay(120); runCatching { ctaIntoView.bringIntoView() } } }
