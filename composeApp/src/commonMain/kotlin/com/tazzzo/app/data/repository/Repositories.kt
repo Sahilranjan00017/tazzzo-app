@@ -164,6 +164,16 @@ internal object RemoteModeAddressGuard : AddressRepository {
         throw UnsupportedOperationException("The mock address list is not available in REMOTE mode")
 }
 
+/** REMOTE mode has no checkout yet: a server cart must never reach the mock checkout / order placement. */
+internal object RemoteModeCheckoutGuard : CheckoutRepository {
+    private fun refuse(): Nothing =
+        throw UnsupportedOperationException("The mock checkout is not available in REMOTE mode")
+    override suspend fun getSlots(addressId: String): List<DeliverySlot> = refuse()
+    override suspend fun getPaymentMethods(): List<PaymentMethod> = refuse()
+    override suspend fun validateCart(lines: List<CartLine>): CartValidation = refuse()
+    override suspend fun placeOrder(request: OrderRequest): PlaceOrderResult = refuse()
+}
+
 internal object RemoteModeCatalogGuard : CatalogRepository {
     private fun refuse(): Nothing =
         throw UnsupportedOperationException("The mock catalogue is not available in REMOTE catalogue mode")
@@ -258,6 +268,29 @@ object ServiceLocator {
         )
     }
 
+    // --- real server cart (PR-06): in memory only, the backend owns it ---
+    /** One thread at a time: the cart store's state is confined to this dispatcher. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val cartScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1)
+    )
+    val cart: com.tazzzo.app.data.cart.CartStore by lazy {
+        com.tazzzo.app.data.cart.CartStore(
+            scope = cartScope,
+            source = com.tazzzo.app.data.cart.RemoteCartDataSource(apiClient),
+            isAuthenticated = { authSession.isAuthenticated },
+            addressId = { deliveryLocation.selectedAddressId.value },
+            onAddressSuspect = { addressBook.refresh() }
+        )
+    }
+
+    /** Wires login/logout and the delivery location to [cart]. REMOTE only. */
+    fun startCartBinding() {
+        com.tazzzo.app.data.cart.CartSessionBinding(
+            cartScope, authSession.active, deliveryLocation.selectedAddressId, launchContext.pin, cart
+        ).start()
+    }
+
     val auth: com.tazzzo.app.data.auth.AuthRepository by lazy {
         com.tazzzo.app.data.auth.RemoteAuthRepository(authRemote, authSession)
     }
@@ -271,7 +304,11 @@ object ServiceLocator {
      */
     val addresses: AddressRepository
         get() = if (catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) mockAddresses else RemoteModeAddressGuard
-    val checkout: CheckoutRepository = MockCheckoutRepository(mockCatalog, orders)
+    private val mockCheckout: CheckoutRepository = MockCheckoutRepository(mockCatalog, orders)
+
+    /** The LEGACY mock checkout. MOCK mode only; in REMOTE mode it REFUSES (the server cart has no checkout yet). */
+    val checkout: CheckoutRepository
+        get() = if (catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK) mockCheckout else RemoteModeCheckoutGuard
     val support: SupportRepository = MockSupportRepository()
 
     /**

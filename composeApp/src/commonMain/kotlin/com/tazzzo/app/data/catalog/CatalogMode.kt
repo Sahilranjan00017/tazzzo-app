@@ -45,23 +45,27 @@ data class CatalogCapabilities(
     val counts: Boolean,
     val sorting: Boolean,
     /**
-     * Whether a product from this catalogue may enter a cart. False for REMOTE
-     * until the real server cart lands: a real product must never reach the
-     * local/mock cart and fake checkout.
+     * Whether a product from this catalogue may enter a cart. REMOTE products go to the SERVER cart
+     * only (never the local/mock cart); MOCK products go to the local demo cart.
      */
-    val cartIntegration: Boolean
+    val cartIntegration: Boolean,
+    /**
+     * Whether this catalogue's cart may proceed to checkout / order placement. False for REMOTE until
+     * the real checkout quote and order PRs land: a server cart must never reach the mock checkout.
+     */
+    val checkoutIntegration: Boolean
 ) {
     companion object {
         /** What the running backend provides today: taxonomy, product lists, PDP, serviceability — and nothing else. */
         val REMOTE = CatalogCapabilities(
             search = false, bestsellers = false, deals = false, banners = false,
-            counts = false, sorting = false, cartIntegration = false
+            counts = false, sorting = false, cartIntegration = true, checkoutIntegration = false
         )
 
         /** The in-memory demo/test catalogue. */
         val MOCK = CatalogCapabilities(
             search = true, bestsellers = true, deals = true, banners = true,
-            counts = true, sorting = true, cartIntegration = true
+            counts = true, sorting = true, cartIntegration = true, checkoutIntegration = true
         )
 
         fun forMode(mode: CatalogMode) = when (mode) { CatalogMode.REMOTE -> REMOTE; CatalogMode.MOCK -> MOCK }

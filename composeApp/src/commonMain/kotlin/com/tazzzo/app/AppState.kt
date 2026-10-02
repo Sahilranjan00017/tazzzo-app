@@ -318,9 +318,11 @@ class TazzzoAppState(
         if (obsoleteCart && saved.isEmpty() && cartEntries.isEmpty()) {
             restoreNotice = "Your saved basket was from an earlier version of the app and couldn't be restored."
         }
-        // REMOTE mode has no cart yet (cartIntegration = false), and restoring would look every saved
-        // line up in the MOCK catalogue — exactly the real/mock mixture this mode forbids.
-        val cartRestorable = ServiceLocator.catalogCapabilities.cartIntegration
+        // The local cart is a MOCK-catalogue concept. In REMOTE mode the cart lives on the server, and restoring
+        // saved lines would look them up in the MOCK catalogue — the real/mock mixture this mode forbids.
+        val cartRestorable = ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.MOCK
+        // A local cart saved by an older build must not survive into REMOTE mode: purge it, never migrate it.
+        if (!cartRestorable && saved.isNotEmpty()) { st.clearCart(); restoreNotice = null }
         if (cartRestorable && saved.isNotEmpty() && cartEntries.isEmpty()) {
             val products = saved.map { it.id }.distinct().associateWith {
                 com.tazzzo.app.data.repository.ServiceLocator.catalog.getProduct(it)
