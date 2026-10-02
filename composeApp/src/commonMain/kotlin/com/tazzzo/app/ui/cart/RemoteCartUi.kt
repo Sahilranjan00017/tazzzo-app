@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -94,13 +97,23 @@ fun CartNoticeHost() {
  * ever navigates by `skuId`.
  */
 @Composable
-fun RemoteAddControl(product: CatalogProduct, modifier: Modifier = Modifier) {
+fun RemoteAddControl(product: CatalogProduct, modifier: Modifier = Modifier, compact: Boolean = false) {
     val app = LocalAppState.current
     val cart = ServiceLocator.cart
     val state by cart.state.collectAsState()
     val pending by cart.pending.collectAsState()
     val confirmed = (state as? CartState.Loaded)?.cart?.quantityOf(product.skuId) ?: 0
     val control = purchaseControl(product, ServiceLocator.catalogCapabilities, confirmed, pending[product.skuId])
+    if (compact) {
+        CompactAddControl(
+            product, control,
+            onAdd = { if (ServiceLocator.authSession.isAuthenticated) cart.increment(product.skuId, product.maxOrderQuantity) else app.navigate(Screen.Login) },
+            onMinus = { cart.decrement(product.skuId) },
+            onPlus = { cart.increment(product.skuId, product.maxOrderQuantity) },
+            modifier = modifier
+        )
+        return
+    }
     when (control) {
         is PurchaseControl.Disabled -> Box(
             modifier.fillMaxWidth().clip(TazRadius.chip).background(TazColors.SurfaceSunken)
@@ -131,6 +144,60 @@ fun RemoteAddControl(product: CatalogProduct, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * The product-card control of the approved design (UI Page `Home.jpeg`): a 36dp round deep-green "+" that becomes a
+ * compact green stepper once the SERVER cart holds the SKU. Same decisions as the full control ([purchaseControl]);
+ * only the drawing differs. A disabled product shows its reason as quiet text, never a dead button.
+ */
+@Composable
+private fun CompactAddControl(
+    product: CatalogProduct, control: PurchaseControl,
+    onAdd: () -> Unit, onMinus: () -> Unit, onPlus: () -> Unit, modifier: Modifier = Modifier
+) {
+    when (control) {
+        is PurchaseControl.Disabled -> Text(
+            control.label, fontSize = TazType.microSize, fontWeight = FontWeight.SemiBold, color = TazColors.TextTertiary,
+            textAlign = TextAlign.End, maxLines = 2,
+            modifier = modifier.widthIn(max = 88.dp).semantics { disabled(); contentDescription = control.label }
+        )
+        PurchaseControl.Add -> Box(
+            modifier.size(TazSize.touchTarget).wrapContentSize(unbounded = true).size(COMPACT_ADD)
+                .clip(androidx.compose.foundation.shape.CircleShape).background(TazColors.BrandEditorial)
+                .semantics(mergeDescendants = true) { contentDescription = "Add ${product.name} to cart" }
+                .tazPressable(onClick = onAdd, pressScale = TazPress.control, role = Role.Button),
+            contentAlignment = Alignment.Center
+        ) { TazIcon(TazIcons.Plus, null, size = TazSize.iconSm, tint = TazColors.White) }
+        is PurchaseControl.Stepper -> Row(
+            modifier.height(COMPACT_ADD).clip(TazRadius.pill).background(TazColors.BrandEditorial),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+        ) {
+            CompactStepperTarget("Decrease quantity of ${product.name}", onMinus) { TazIcon(TazIcons.Minus, null, size = TazSize.iconXs, tint = TazColors.White) }
+            Text(
+                "${control.quantity}", color = TazColors.White.copy(alpha = if (control.pending) 0.7f else 1f),
+                fontSize = TazType.bodySize, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1,
+                modifier = Modifier.widthIn(min = 18.dp)
+            )
+            CompactStepperTarget(
+                if (control.canIncrease) "Increase quantity of ${product.name}" else "Maximum quantity of ${product.name} reached",
+                { if (control.canIncrease) onPlus() }
+            ) { TazIcon(TazIcons.Plus, null, size = TazSize.iconXs, tint = TazColors.White.copy(alpha = if (control.canIncrease) 1f else 0.4f)) }
+        }
+    }
+}
+
+/** A 36dp visual target whose hit area is the 44dp accessibility minimum. */
+@Composable
+private fun CompactStepperTarget(contentDescription: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        Modifier.size(COMPACT_ADD).wrapContentSize(unbounded = true).size(TazSize.touchTarget)
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription }
+            .tazPressable(onClick = onClick, pressScale = TazPress.compact, role = Role.Button),
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+private val COMPACT_ADD = 36.dp
 
 @Composable
 private fun QuantityPill(

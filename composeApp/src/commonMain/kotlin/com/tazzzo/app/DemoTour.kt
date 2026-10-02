@@ -26,11 +26,23 @@ expect fun isDemoFailLoadEnabled(): Boolean
 /** Explicit developer/demo request for the MOCK catalogue (debug builds only; see CatalogSource). */
 expect fun isMockCatalogRequested(): Boolean
 
+/**
+ * TAZZZO_DEMO_START=shop|search → once Splash has routed to Home (an onboarded install), land on that surface, for
+ * simulator screenshots where nothing can tap the UI. Does NOT change the catalogue mode (REMOTE stays REMOTE).
+ * Null = no request. Dev tool; inert in production.
+ */
+expect fun demoStartSurface(): String?
+
 @Composable
 fun DemoTourRunner() {
     val app = LocalAppState.current
     LaunchedEffect(Unit) {
         if (isDemoHomeEnabled()) { app.enterDemoHome(); return@LaunchedEffect }
+        demoStartSurface()?.let { surface ->
+            delay(3_000)                                    // Splash auto-routes at 1.8s
+            if (app.current is Screen.Home) when (surface) { "shop" -> app.homeTab = HomeTab.SHOP; "search" -> app.navigate(Screen.Search) }
+            return@LaunchedEffect
+        }
         if (!isDemoTourEnabled()) return@LaunchedEffect
 
         // Dev-only search smoke test — evidence in the device log, ships nowhere.

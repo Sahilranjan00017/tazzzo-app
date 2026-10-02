@@ -2,8 +2,14 @@
 
 **Status (2026-10-03):** the six UI-01 slots (Splash, Showcase ×3, Login, OTP) are **FILLED** with plates derived from
 the supplied reference renders, per the Product direction that the supplied images are the visual source of truth.
-The UI-02 Home slots are FILLED the same way; only the PDP fallback plate remains OPEN (UI-03/UI-04). Every slot is still a single resource swap if a higher-quality
+The UI-02 Home slots are FILLED the same way; only the PDP fallback plate remains OPEN (UI-04). Every slot is still a single resource swap if a higher-quality
 master is produced later.
+
+**Product photography (UI-03):** product cards no longer use bundled or placeholder imagery. The Home rail, the PLP grid and
+(when it exists) search results render the backend's `thumbnailUrl` through the shared remote image pipeline
+(`image/RemoteImageLoader.kt` → `CatalogProductImage`), with a Tazzzo-styled skeleton while loading and a neutral well when
+there is no URL or the load fails. No product packshot is ever shipped in the app bundle. Shop category tiles reuse the five
+Home category plates (`cat_home_*`) by taxonomy name; other categories show a serif initial until a plate is supplied.
 
 **How the UI-01 plates were made** (`design/brand/tools/` has no copy of this; the pipeline lives with the job notes and
 is described here so it can be repeated): the reference render → the baked UI (status bar, headline, support line,

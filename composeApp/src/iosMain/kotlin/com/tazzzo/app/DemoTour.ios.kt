@@ -17,3 +17,6 @@ actual fun isDemoHomeEnabled(): Boolean = demoFlag("TAZZZO_DEMO_HOME")
 actual fun isDemoFailLoadEnabled(): Boolean = demoFlag("TAZZZO_DEMO_FAIL_LOAD")
 
 actual fun isMockCatalogRequested(): Boolean = demoFlag("TAZZZO_MOCK_CATALOG")
+
+actual fun demoStartSurface(): String? =
+    (NSProcessInfo.processInfo.environment["TAZZZO_DEMO_START"] as? String)?.trim()?.lowercase()?.takeIf { it in setOf("shop", "search") }

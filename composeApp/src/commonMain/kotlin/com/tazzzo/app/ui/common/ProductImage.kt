@@ -87,6 +87,49 @@ fun ProvideProductImageLoader(loader: ProductImageLoader, content: @Composable (
 }
 
 /**
+ * The REMOTE catalogue's product image (UI-03): the ONE way a `CatalogProduct` photo is rendered on the Home rail, the
+ * PLP grid and search results. Fixed-aspect well in [background]; three states — a shimmering skeleton while the
+ * [LocalProductImageLoader] works, the photo (`Fit`, padded, never stretched or cropped), or the neutral Tazzzo well
+ * (a quiet basket glyph) when there is no URL or the load failed. The container never changes size between states,
+ * so a grid does not jump as photos arrive. Accessibility: the image is described by the product's name.
+ *
+ * Retry is by recomposition: a failed URL is not cached as failed, so scrolling back or a page refresh asks again.
+ */
+@Composable
+fun CatalogProductImage(
+    url: String?,
+    name: String,
+    modifier: Modifier = Modifier,
+    aspectRatio: Float = 1f,
+    background: Color = TazColors.SurfaceSunken,
+    contentPadding: Dp = 8.dp,
+    overlay: @Composable BoxScope.() -> Unit = {}
+) {
+    val loader = LocalProductImageLoader.current
+    var state by remember(url) {
+        mutableStateOf(if (url.isNullOrBlank()) ProductImageState.Unavailable else ProductImageState.Loading)
+    }
+    LaunchedEffect(url, loader) {
+        if (!url.isNullOrBlank()) {
+            state = try { loader.load(url) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (t: Throwable) { ProductImageState.Unavailable }
+        }
+    }
+    Box(modifier.aspectRatio(aspectRatio).background(background), contentAlignment = Alignment.Center) {
+        when (val s = state) {
+            ProductImageState.Loading -> SkeletonBlock(modifier = Modifier.fillMaxSize(), corner = 0.dp)
+            is ProductImageState.Ready -> Image(
+                bitmap = s.bitmap, contentDescription = name,
+                modifier = Modifier.fillMaxSize().padding(contentPadding), contentScale = ContentScale.Fit
+            )
+            ProductImageState.Unavailable -> TazIcon(
+                com.tazzzo.app.theme.TazIcons.Bag, null, size = 28.dp, tint = TazColors.TextDisabled
+            )
+        }
+        overlay()
+    }
+}
+
+/**
  * Renders a product's image inside a fixed-aspect, neutral container.
  *
  * @param aspectRatio 1.52f for grid cards, 1.4f for the PDP hero (the real

@@ -73,7 +73,8 @@ import com.tazzzo.app.theme.TazSpace
 import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.theme.tazEditorialFamily
 import com.tazzzo.app.ui.address.DeliverySuggestionBanner
-import com.tazzzo.app.ui.cart.RemoteAddControl
+import com.tazzzo.app.ui.catalog.TazProductCard
+import com.tazzzo.app.ui.common.TazSearchShell
 import com.tazzzo.app.ui.catalog.ServiceabilityBannerView
 import com.tazzzo.app.ui.catalog.rememberTaxonomyBrowser
 import com.tazzzo.app.ui.common.EditorialText
@@ -203,20 +204,7 @@ private fun HomeHeader(data: HomeHeaderData, onLocation: () -> Unit, onCart: () 
 
 @Composable
 private fun HomeSearchShell(onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = TazSpace.lg, vertical = TazSpace.sm).height(50.dp)
-            .shadow(6.dp, TazRadius.pill, ambientColor = Color.Black.copy(alpha = 0.06f), spotColor = Color.Black.copy(alpha = 0.10f))
-            .clip(TazRadius.pill).background(TazColors.Surface)
-            .tazPressable(onClick = onClick, pressScale = TazPress.card)
-            .semantics { contentDescription = "Search" }
-            .padding(horizontal = TazSpace.lg),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(TazIcons.Search, contentDescription = null, tint = TazColors.TextSecondary, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(TazSpace.md))
-        // No scan affordance: there is no scanner, so nothing pretends to be one.
-        Text(HomeCopy.SEARCH_PLACEHOLDER, fontFamily = tazEditorialFamily(), fontSize = 15.sp, color = TazColors.TextTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+    TazSearchShell(onClick = onClick, modifier = Modifier.padding(horizontal = TazSpace.lg, vertical = TazSpace.sm))
 }
 
 // ---- hero -----------------------------------------------------------------------------------------------------------
@@ -309,38 +297,9 @@ private fun HomeProductRail(state: PagedState<CatalogProduct>, onSeeAll: () -> U
             Row(Modifier.padding(horizontal = TazSpace.lg), horizontalArrangement = Arrangement.spacedBy(TazSpace.md)) { repeat(3) { SkeletonBlock(width = CARD_W, height = 170.dp, corner = 16.dp) } }
         } else {
             LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = TazSpace.lg), horizontalArrangement = Arrangement.spacedBy(TazSpace.md)) {
-                items(items, key = { it.skuId }) { p -> HomeProductCard(p, onClick = { onOpen(p) }) }
+                // The canonical card (ui/catalog/ProductCard.kt) with the reference's round well: photos arrive through the shared pipeline.
+                items(items, key = { it.skuId }) { p -> TazProductCard(p, onClick = { onOpen(p) }, width = CARD_W, wellShape = CircleShape) }
             }
-        }
-    }
-}
-
-/** The reference card: round image well on cream, discount chip, name, price with struck MRP, circular green add. */
-@Composable
-private fun HomeProductCard(product: CatalogProduct, onClick: () -> Unit) {
-    Column(Modifier.width(CARD_W).clip(TazRadius.card).tazPressable(onClick = onClick, pressScale = TazPress.card).semantics { contentDescription = product.name }) {
-        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
-            Box(Modifier.matchParentSize().clip(CircleShape).background(TazColors.SurfaceSunken), contentAlignment = Alignment.Center) {
-                // Product photography needs the image pipeline (UI-03); until then the well stays a calm neutral.
-                Icon(TazIcons.Store, contentDescription = null, tint = TazColors.TextDisabled, modifier = Modifier.size(28.dp))
-            }
-            product.discountPercentLabel()?.let { d ->
-                Box(Modifier.align(Alignment.TopEnd).clip(TazRadius.pill).background(TazColors.GreenSoft).padding(horizontal = TazSpace.sm, vertical = 3.dp)) {
-                    Text(d, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = TazColors.Success)
-                }
-            }
-        }
-        Spacer(Modifier.height(TazSpace.sm))
-        Text(product.name, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        // No pack-size line: the backend does not send one.
-        Spacer(Modifier.height(TazSpace.xs))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                val price = product.priceLabel()
-                Text(price ?: "Price unavailable", fontSize = if (price != null) TazType.priceSize else TazType.captionSize, fontWeight = TazType.priceWeight, color = if (price != null) TazColors.TextPrimary else TazColors.TextTertiary)
-                product.mrpLabel()?.let { Text(it, fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough) }
-            }
-            RemoteAddControl(product)
         }
     }
 }

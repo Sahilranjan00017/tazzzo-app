@@ -55,6 +55,8 @@ fun App() {
         CatalogRunner()
         if (ServiceLocator.catalogMode == CatalogMode.REMOTE) { com.tazzzo.app.ui.cart.CartNoticeHost(); OrderStateRunner(appState) }
         DemoTourRunner()
+        // The ONE product-image pipeline (UI-03): every product surface reads it through LocalProductImageLoader.
+        com.tazzzo.app.ui.common.ProvideProductImageLoader(com.tazzzo.app.image.ProductImagePipeline.loader) {
         TazzzoTheme {
             Surface(Modifier.fillMaxSize().background(TazColors.Cream), color = TazColors.Cream) {
                 // One host for direction AND continuity.
@@ -99,7 +101,7 @@ fun App() {
                         is Screen.ProductDetail ->
                             if (remoteCatalog) RemoteProductDetailScreen(screen.productId)
                             else ProductDetailScreen(screen.productId)
-                        is Screen.Search -> if (ServiceLocator.catalogCapabilities.search) SearchScreen() else UnavailableSurface("Search")
+                        is Screen.Search -> if (remoteCatalog) com.tazzzo.app.ui.catalog.RemoteSearchScreen() else SearchScreen()
                         is Screen.Cart ->
                             if (ServiceLocator.catalogMode == CatalogMode.REMOTE) com.tazzzo.app.ui.cart.RemoteCartScreen() else CartScreen()
                         is Screen.Checkout ->
@@ -124,6 +126,7 @@ fun App() {
                     }
                 }
             }
+        }
         }
     }
 }
