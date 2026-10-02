@@ -55,9 +55,10 @@ class CatalogModeAndPrivacyTest {
         val c = CatalogCapabilities.forMode(CatalogMode.REMOTE)
         assertFalse(c.search || c.bestsellers || c.deals || c.banners || c.counts || c.sorting)
         assertTrue(c.cartIntegration, "REMOTE products go to the server cart")
-        assertFalse(c.checkoutIntegration, "a server cart must not reach the mock checkout")
+        assertTrue(c.checkoutIntegration, "REMOTE checkout is the real quote review")
+        assertFalse(c.orderIntegration, "no order can be placed from REMOTE yet")
         val m = CatalogCapabilities.forMode(CatalogMode.MOCK)
-        assertTrue(m.search && m.bestsellers && m.deals && m.banners && m.counts && m.sorting && m.cartIntegration && m.checkoutIntegration)
+        assertTrue(m.search && m.bestsellers && m.deals && m.banners && m.counts && m.sorting && m.cartIntegration && m.checkoutIntegration && m.orderIntegration)
         assertNotEquals(CatalogCapabilities.REMOTE, CatalogCapabilities.MOCK)
     }
 

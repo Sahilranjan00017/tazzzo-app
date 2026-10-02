@@ -566,3 +566,50 @@ open its product page. Please add `productId` to cart items (or support a PDP lo
 
 **BACKEND CONTRACT IMPROVEMENT REQUEST — CART MUTATION IDEMPOTENCY:** cart writes have no `Idempotency-Key`. Absolute
 PUT / DELETE make reconciliation safe today, but a key would let a client retry an ambiguous write directly.
+
+---
+
+## 9. Checkout quote (PR-07)
+
+Backend contract used (`/v1/customer/checkout`, bearer; source: backend `origin/main` `4838096`, read-only):
+
+| Operation | Route | Headers | Success |
+|---|---|---|---|
+| create quote | `POST …/quote` body `{"addressId":"ADDR_…"}` | `If-Match: "cart-<n>"` **required**, `Idempotency-Key` **required** (`^[A-Za-z0-9_-]{8,64}$`) | **200** (also on replay), `no-store`, no ETag |
+| read quote | `GET …/quotes/{quoteId}` | – | 200, the STORED quote (never re-priced), 410 if expired |
+
+Quote response: `quoteId`, `cartVersion`, `addressId`, `items[{skuId,quantity,unitPricePaise,lineTotalPaise}]`, `itemCount`,
+`distinctItemCount`, `subtotalPaise`, `currency`, `createdAt`, `expiresAt` (default **300 s**, configurable 30–3600 s),
+`benefitPreview?`, `requestId`. **Not in the quote:** payable total, delivery fee, tax, platform fee, tip, discount-adjusted amount,
+address snapshot, product title/image/MRP, per-item issues, slot, payment, coupon, coins. It is a snapshot, not a stock reservation.
+
+Errors: `400` malformed header/body · `401` · `404` unknown/foreign/changed address · `409 IDEMPOTENCY_CONFLICT` (same key, different
+cartVersion/addressId) · `409 CHECKOUT_CART_EMPTY` · `409 CHECKOUT_UNSERVICEABLE` · `409 CHECKOUT_ITEM_UNAVAILABLE` + `items[{skuId,reason}]`
+(`PRODUCT_UNAVAILABLE`, `PRICE_UNAVAILABLE`, `OUT_OF_STOCK`, `INSUFFICIENT_STOCK`, `STOCK_UNKNOWN`, `NOT_BUYABLE`; all-or-nothing) ·
+`410 QUOTE_EXPIRED` (GET, and a POST replay of an expired quote) · `412` stale cart · `415` · `428 PRECONDITION_REQUIRED` /
+`IDEMPOTENCY_REQUIRED` · `503` (incl. a temporary enrichment failure, never disguised as an item problem). Replay lookup runs BEFORE the cart
+version check; rejections store nothing; there is no idempotency TTL; an expired quote cannot be refreshed — a new quote needs a new key.
+
+`benefitPreview` (advisory; the order re-evaluates it): absent = legacy quote · `{applied:false}` (no discount fields, no reason) ·
+`{applied:true, discountPaise>=1, discountBps 1..10000}`. It never changes `subtotalPaise` and there is no net/payable field.
+
+App behaviour: `CheckoutQuoteStore`, in memory only. A new attempt re-reads the server cart (a cart GET can advance the version), needs a
+selected saved address, refuses a cart the server already reports as blocked, then POSTs the version just returned with a fresh key. The
+key is kept only for an EXPLICIT "Try again" after an ambiguous failure while (cartVersion, addressId, address version/content) are
+unchanged — backend replay semantics make that safe — and is dropped on any change, expiry, 409 conflict or new attempt. Nothing is retried
+automatically. A Ready quote goes **Stale** when the cart version, the selected address id, or that address's version/content changes (a
+default-flag change does not) and is never re-quoted automatically. Expiry uses the server's `createdAt→expiresAt` duration on a monotonic
+clock; the server's 410 stays authoritative. `412` → re-read cart, new key on the next explicit attempt. The review screen shows quoted
+lines, **"Item subtotal"** and "Final charges are confirmed when your order is placed."; the benefit preview is modelled and tested but not
+shown; there is no slot, payment, coupon, coin or Club UI; the order button is disabled ("Place order coming next"). `checkoutIntegration` is
+true for REMOTE, new `orderIntegration` stays false; the mock checkout, `OrderPlacement` and `OrderSuccess` are unreachable in REMOTE. The
+server cart is never cleared or mutated by checkout.
+
+**BACKEND CONTRACT IMPROVEMENT REQUEST — PAYABLE TOTAL:** expose delivery fee, taxes, other charges, the authoritative benefit/discount and a
+final payable total, or explicitly contract that the quote is merchandise-subtotal only.
+**BACKEND CONTRACT IMPROVEMENT REQUEST — ADDRESS SNAPSHOT:** return a safe address snapshot (at least the postal code) in the quote.
+**BACKEND CONTRACT IMPROVEMENT REQUEST — BENEFIT PREVIEW OPENAPI:** pin the conditional schema (`applied=false`: no discount fields;
+`applied=true`: both required). **BACKEND CONTRACT IMPROVEMENT REQUEST — POST 410:** document replay-after-expiry on POST.
+**BACKEND CONTRACT / ENVIRONMENT REQUEST (checkout):** real-environment sign-off needs the same auth path, token keys and replica-set Mongo
+as before, plus a serviceable saved address, active products with active INR prices, inventory at that PIN and a non-empty server cart. No
+checkout feature flag exists. Not blocking for automated PR-07 work.

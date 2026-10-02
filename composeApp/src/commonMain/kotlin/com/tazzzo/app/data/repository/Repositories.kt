@@ -284,8 +284,24 @@ object ServiceLocator {
         )
     }
 
-    /** Wires login/logout and the delivery location to [cart]. REMOTE only. */
+    // --- real checkout quote (PR-07): in memory only, the backend quote is authoritative ---
+    val checkoutAddresses: com.tazzzo.app.data.checkout.CheckoutAddressSource by lazy {
+        com.tazzzo.app.data.checkout.DeliveryAddressSource(cartScope, deliveryLocation.selectedAddressId, addressBook.state)
+    }
+    val checkoutQuote: com.tazzzo.app.data.checkout.CheckoutQuoteStore by lazy {
+        com.tazzzo.app.data.checkout.CheckoutQuoteStore(
+            scope = cartScope,
+            source = com.tazzzo.app.data.checkout.RemoteCheckoutDataSource(apiClient),
+            cart = cart,
+            addresses = checkoutAddresses,
+            isAuthenticated = { authSession.isAuthenticated },
+            onAddressSuspect = { addressBook.refresh() }
+        )
+    }
+
+    /** Wires login/logout and the delivery location to [cart] and [checkoutQuote]. REMOTE only. */
     fun startCartBinding() {
+        com.tazzzo.app.data.checkout.CheckoutSessionBinding(cartScope, authSession.active, checkoutQuote).start()
         com.tazzzo.app.data.cart.CartSessionBinding(
             cartScope, authSession.active, deliveryLocation.selectedAddressId, launchContext.pin, cart
         ).start()

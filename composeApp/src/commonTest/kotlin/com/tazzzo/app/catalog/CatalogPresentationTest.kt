@@ -135,9 +135,10 @@ class CatalogPresentationTest {
         assertEquals(PurchaseAction.Reason.CartNotAvailable, a.reason)
     }
 
-    @Test fun theRemoteCatalogueHasACartButNoCheckoutAndNothingElse() {
+    @Test fun theRemoteCatalogueHasACartAndCheckoutReviewButNoOrdersAndNothingElse() {
         assertTrue(remote.cartIntegration)
-        assertFalse(remote.checkoutIntegration)
+        assertTrue(remote.checkoutIntegration)
+        assertFalse(remote.orderIntegration)
         assertFalse(remote.search || remote.deals || remote.bestsellers || remote.banners || remote.counts || remote.sorting)
     }
 

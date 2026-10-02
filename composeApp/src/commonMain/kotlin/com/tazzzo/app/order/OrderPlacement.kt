@@ -63,6 +63,9 @@ object OrderPlacement {
         navigate: Boolean = true
     ): PlaceOrderResult? {
         if (session.placement is CheckoutSession.Placement.InFlight) return null
+        // REMOTE has no order path yet (PR-08): the mock repository is a refusing guard there, and a real quote must never
+        // become a local mock order, a coin credit or a Club step. Refuse BEFORE any state, analytics or local effect.
+        if (checkout === com.tazzzo.app.data.repository.RemoteModeCheckoutGuard) return null
         session.placement = CheckoutSession.Placement.InFlight
         Analytics.track(AnalyticsEvents.ORDER_ATTEMPTED)
 

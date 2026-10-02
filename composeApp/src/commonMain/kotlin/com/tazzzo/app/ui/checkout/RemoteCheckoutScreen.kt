@@ -1,0 +1,177 @@
+package com.tazzzo.app.ui.checkout
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.tazzzo.app.LocalAppState
+import com.tazzzo.app.Screen
+import com.tazzzo.app.data.cart.CartState
+import com.tazzzo.app.data.checkout.AddressSelection
+import com.tazzzo.app.data.checkout.CheckoutAction
+import com.tazzzo.app.data.checkout.CheckoutCopy
+import com.tazzzo.app.data.checkout.CheckoutFailure
+import com.tazzzo.app.data.checkout.CheckoutQuote
+import com.tazzzo.app.data.checkout.CheckoutState
+import com.tazzzo.app.data.checkout.DeliveryContent
+import com.tazzzo.app.data.checkout.EXPIRED_VIEW
+import com.tazzzo.app.data.checkout.FailureView
+import com.tazzzo.app.data.checkout.displayLines
+import com.tazzzo.app.data.checkout.expiryLabel
+import com.tazzzo.app.data.checkout.lineViews
+import com.tazzzo.app.data.checkout.summary
+import com.tazzzo.app.data.checkout.text
+import com.tazzzo.app.data.checkout.view
+import com.tazzzo.app.data.repository.ServiceLocator
+import com.tazzzo.app.theme.TazColors
+import com.tazzzo.app.theme.TazRadius
+import com.tazzzo.app.theme.TazSpace
+import com.tazzzo.app.theme.TazType
+import com.tazzzo.app.ui.common.EmptyState
+import com.tazzzo.app.ui.common.PillButton
+import com.tazzzo.app.ui.common.SkeletonBlock
+import com.tazzzo.app.ui.common.TazTopBar
+import com.tazzzo.app.ui.interaction.TazPress
+import com.tazzzo.app.ui.interaction.tazPressable
+import kotlinx.coroutines.delay
+
+/**
+ * REMOTE checkout: ONE functional review screen over the backend quote. No steps, no slot, no payment choice, no
+ * coupons/promotions/coins/Club, no local bill. Nothing here reads the local cart, `app.bill()` or any mock repository,
+ * and the order button is permanently disabled until the real order PR.
+ */
+@Composable
+fun RemoteCheckoutScreen() {
+    val app = LocalAppState.current
+    val store = ServiceLocator.checkoutQuote
+    val state by store.state.collectAsState()
+    val selection by ServiceLocator.checkoutAddresses.selection.collectAsState()
+    val cartState by ServiceLocator.cart.state.collectAsState()
+    val cart = (cartState as? CartState.Loaded)?.cart
+
+    fun act(a: CheckoutAction) = when (a) {
+        CheckoutAction.TryAgain -> store.retry()
+        CheckoutAction.ReviewCheckout -> store.start()
+        CheckoutAction.ChooseAddress, CheckoutAction.ChangeAddress -> app.navigate(Screen.Addresses)
+        CheckoutAction.GoToCart -> app.navigate(Screen.Cart)
+        CheckoutAction.SignIn -> app.navigate(Screen.Login)
+    }
+
+    Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
+        TazTopBar(title = "Checkout", onBack = { app.back() })
+        when (val s = state) {
+            CheckoutState.SignedOut -> EmptyState("🛒", "Log in to check out", "Your cart is saved to your account.", "Log in", onAction = { act(CheckoutAction.SignIn) })
+            CheckoutState.Idle -> EmptyState("🛒", "Ready to review your order", null, "Review checkout", onAction = { act(CheckoutAction.ReviewCheckout) })
+            CheckoutState.Creating -> Column(Modifier.padding(TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
+                Text("Preparing your checkout…", fontSize = TazType.bodySize, color = TazColors.TextSecondary)
+                SkeletonBlock(height = 72.dp, corner = 14.dp); SkeletonBlock(height = 72.dp, corner = 14.dp)
+            }
+            is CheckoutState.Ready -> ReadyContent(s.quote, (selection as? AddressSelection.Selected)?.stamp?.delivery, cart,
+                onChangeAddress = { act(CheckoutAction.ChangeAddress) })
+            CheckoutState.Expired -> Recovery(EXPIRED_VIEW, null, cart, ::act)
+            is CheckoutState.Stale -> Recovery(s.reason.view(), null, cart, ::act)
+            is CheckoutState.Failed -> Recovery(s.failure.view(s.canRetrySameKey), s.failure, cart, ::act)
+        }
+    }
+}
+
+@Composable
+private fun Recovery(v: FailureView, failure: CheckoutFailure?, cart: com.tazzzo.app.data.cart.ServerCart?, onAction: (CheckoutAction) -> Unit) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(TazSpace.lg), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(v.title, fontSize = TazType.h2Size, fontWeight = TazType.h2Weight, color = TazColors.TextPrimary)
+        Spacer(Modifier.height(TazSpace.xs))
+        Text(v.hint, fontSize = TazType.bodySize, color = TazColors.TextSecondary)
+        if (failure is CheckoutFailure.ItemsUnavailable) {
+            Spacer(Modifier.height(TazSpace.md))
+            failure.items.forEach { r ->
+                val title = cart?.item(r.skuId)?.title ?: CheckoutCopy.NEUTRAL_ITEM
+                Row(Modifier.fillMaxWidth().padding(vertical = TazSpace.xs)) {
+                    Text(title, fontSize = TazType.bodySize, color = TazColors.TextPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(r.text(), fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Danger)
+                }
+            }
+        }
+        Spacer(Modifier.height(TazSpace.lg))
+        v.actions.forEach { a ->
+            PillButton(text = a.label(), onClick = { onAction(a) }, modifier = Modifier.fillMaxWidth(), filled = a == v.actions.first())
+            Spacer(Modifier.height(TazSpace.sm))
+        }
+    }
+}
+
+@Composable
+private fun ReadyContent(quote: CheckoutQuote, delivery: DeliveryContent?, cart: com.tazzzo.app.data.cart.ServerCart?, onChangeAddress: () -> Unit) {
+    val store = ServiceLocator.checkoutQuote
+    var remainingLabel by remember(quote.quoteId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(quote.quoteId) {
+        while (true) {
+            remainingLabel = store.remaining()?.let { expiryLabel(it) }
+            delay(1_000)
+        }
+    }
+    val summary = quote.summary()
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(TazSpace.lg),
+            verticalArrangement = Arrangement.spacedBy(TazSpace.md)
+        ) {
+            // The address shown is the CURRENT local projection of the selected saved address; the quote itself holds only its id.
+            Column(Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface).padding(TazSpace.md), verticalArrangement = Arrangement.spacedBy(TazSpace.xxs)) {
+                Text("Deliver to", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+                delivery?.displayLines()?.forEach { Text(it, fontSize = TazType.bodySize, color = TazColors.TextPrimary) }
+                Text("Change address", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Success,
+                    modifier = Modifier.tazPressable(onClick = onChangeAddress, pressScale = TazPress.compact).padding(top = TazSpace.xs))
+            }
+            quote.lineViews(cart).forEach { l ->
+                Row(Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface).padding(TazSpace.md), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(l.title, fontSize = TazType.productNameSize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("${l.quantity} × ${l.unitPriceLabel}", fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+                    }
+                    Text(l.lineTotalLabel, fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary)
+                }
+            }
+        }
+        Column(Modifier.fillMaxWidth().background(TazColors.Surface).padding(TazSpace.lg).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("${summary.subtotalLabel} · ${summary.itemsLabel}", fontSize = TazType.bodySize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
+                Text(summary.subtotalValue, fontSize = TazType.titleSize, fontWeight = FontWeight.Bold, color = TazColors.TextPrimary)
+            }
+            Text(summary.note, fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+            remainingLabel?.let { Text(it, fontSize = TazType.captionSize, color = TazColors.TextTertiary) }
+            // No order path exists yet: this never reaches the mock OrderPlacement.
+            PillButton(text = CheckoutCopy.ORDER_CTA, onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+private fun CheckoutAction.label(): String = when (this) {
+    CheckoutAction.TryAgain -> "Try again"
+    CheckoutAction.ReviewCheckout -> "Review checkout"
+    CheckoutAction.ChooseAddress -> "Choose address"
+    CheckoutAction.ChangeAddress -> "Change address"
+    CheckoutAction.GoToCart -> "Go to cart"
+    CheckoutAction.SignIn -> "Log in"
+}

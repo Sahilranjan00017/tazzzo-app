@@ -262,10 +262,12 @@ private fun CartContent(
                 Text(summary.subtotalLabel, fontSize = TazType.titleSize, fontWeight = FontWeight.Bold, color = TazColors.TextPrimary)
             }
             Text(summary.subtotalCaption, fontSize = TazType.captionSize, color = TazColors.TextTertiary)
-            // REMOTE checkout does not exist yet: this never reaches the mock checkout.
+            // Real checkout: a quote of the SERVER cart. Never the mock checkout, never a local bill.
+            val canCheckout = ServiceLocator.catalogCapabilities.checkoutIntegration && !summary.hasBlockedLines && !syncing && pending.isEmpty()
             PillButton(
-                text = "Checkout isn't available yet", onClick = {}, enabled = false,
-                disabledHint = null, modifier = Modifier.fillMaxWidth()
+                text = if (summary.hasBlockedLines) "Resolve items to continue" else "Review checkout",
+                onClick = { ServiceLocator.checkoutQuote.enter(); app.navigate(Screen.Checkout) },
+                enabled = canCheckout, disabledHint = null, modifier = Modifier.fillMaxWidth()
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(
