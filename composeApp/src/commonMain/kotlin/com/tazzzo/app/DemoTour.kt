@@ -27,7 +27,7 @@ expect fun isDemoFailLoadEnabled(): Boolean
 expect fun isMockCatalogRequested(): Boolean
 
 /**
- * TAZZZO_DEMO_START=shop|search|pdp|cart|addresses|checkout|orders|orderdetail → once Splash has routed to Home (an onboarded install), land on that surface, for
+ * TAZZZO_DEMO_START=shop|search|pdp|cart|addresses|checkout|orders|orderdetail|profile|help|about|coins → once Splash has routed to Home (an onboarded install), land on that surface, for
  * simulator screenshots where nothing can tap the UI. Does NOT change the catalogue mode (REMOTE stays REMOTE).
  * Null = no request. Dev tool; inert in production.
  */
@@ -49,6 +49,10 @@ fun DemoTourRunner() {
                 "checkout" -> app.navigate(Screen.Checkout)
                 "orders" -> app.homeTab = HomeTab.ORDERS
                 "orderdetail" -> app.navigate(Screen.OrderDetail("ORD_sample0001"))
+                "profile" -> app.homeTab = HomeTab.PROFILE
+                "help" -> app.navigate(Screen.Help)
+                "about" -> app.navigate(Screen.About)
+                "coins" -> app.navigate(Screen.Coins)
             }
             return@LaunchedEffect
         }
