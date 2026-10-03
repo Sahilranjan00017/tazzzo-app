@@ -133,12 +133,14 @@ jobs:
       - name: Release heap (CI only)
         run: |
           mkdir -p ~/.gradle
-          printf 'org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8\nkotlin.daemon.jvmargs=-Xmx4g\n' >> ~/.gradle/gradle.properties
+          # The Kotlin/Native compiler runs inside the Gradle daemon, so org.gradle.jvmargs is the heap that matters here (7 GB runner).
+          printf 'org.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8\nkotlin.daemon.jvmargs=-Xmx1g\n' >> ~/.gradle/gradle.properties
       - name: iOS Release framework link
         run: |
           start=$(date +%s)
           ./gradlew :composeApp:linkReleaseFrameworkIosArm64 --console=plain
           echo "link_seconds=$(( $(date +%s) - start ))"
+          ./gradlew --stop   # free the daemon's heap before the Xcode archive starts its own Gradle run
       - name: Unsigned iOS Release archive
         run: |
           start=$(date +%s)
