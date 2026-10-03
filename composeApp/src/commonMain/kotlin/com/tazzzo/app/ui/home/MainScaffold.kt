@@ -72,7 +72,7 @@ fun MainScaffold() {
             val tab = if (app.homeTab in visibleHomeTabs(ServiceLocator.catalogCapabilities)) app.homeTab else HomeTab.HOME
             when (tab) {
                 HomeTab.HOME -> if (remote) RemoteHomeContent() else HomeTabContent()
-                HomeTab.SHOP -> if (remote) com.tazzzo.app.ui.catalog.RemoteCategoriesContent() else CategoriesTabContent()
+                HomeTab.SHOP -> if (remote) com.tazzzo.app.ui.catalog.RemoteShopContent() else CategoriesTabContent()
                 HomeTab.DEALS -> DealsTabContent()
                 HomeTab.ORDERS -> if (remote) com.tazzzo.app.ui.order.RemoteOrdersContent(inTab = true) else OrdersScreen()
                 HomeTab.ORDER_AGAIN -> OrderAgainTabContent()

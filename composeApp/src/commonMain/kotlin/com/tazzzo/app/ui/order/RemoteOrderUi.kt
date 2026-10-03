@@ -121,8 +121,8 @@ fun RemoteOrdersContent(inTab: Boolean) {
         if (inTab) TazTopBar(title = "Orders") else TazTopBar(title = "Orders", onBack = { app.back() })
         val order = recent
         if (order == null) {
-            EmptyState(
-                "📦", com.tazzzo.app.ui.home.HomeCopy.ORDERS_UNAVAILABLE_TITLE, com.tazzzo.app.ui.home.HomeCopy.ORDERS_UNAVAILABLE_BODY,
+            com.tazzzo.app.ui.common.EditorialEmptyState(
+                com.tazzzo.app.theme.TazIcons.Receipt, com.tazzzo.app.ui.home.HomeCopy.ORDERS_UNAVAILABLE_TITLE, com.tazzzo.app.ui.home.HomeCopy.ORDERS_UNAVAILABLE_BODY,
                 com.tazzzo.app.ui.home.HomeCopy.CONTINUE_SHOPPING, onAction = { if (inTab) app.homeTab = com.tazzzo.app.HomeTab.HOME else app.goHome() }
             )
         } else {

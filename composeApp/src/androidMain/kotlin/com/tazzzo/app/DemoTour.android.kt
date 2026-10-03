@@ -22,3 +22,6 @@ actual fun isDemoHomeEnabled(): Boolean = DemoFlags.startAtHome
 actual fun isDemoFailLoadEnabled(): Boolean = DemoFlags.failLoad
 
 actual fun isMockCatalogRequested(): Boolean = DemoFlags.mockCatalog
+
+/** The simulator-screenshot start surface is an iOS tool; Android QA drives the UI directly. */
+actual fun demoStartSurface(): String? = null
