@@ -2,8 +2,8 @@
 
 **Status (2026-10-03):** the six UI-01 slots (Splash, Showcase ×3, Login, OTP) are **FILLED** with plates derived from
 the supplied reference renders, per the Product direction that the supplied images are the visual source of truth.
-The UI-02 Home slots are FILLED the same way; only the PDP fallback plate remains OPEN (UI-04). Every slot is still a single resource swap if a higher-quality
-master is produced later.
+The UI-02 Home slots are FILLED the same way, and the PDP fallback plate is FILLED (UI-04, generated neutral surface). No slot is
+open. Every slot is still a single resource swap if a higher-quality master is produced later.
 
 **Product photography (UI-03):** product cards no longer use bundled or placeholder imagery. The Home rail, the PLP grid and
 (when it exists) search results render the backend's `thumbnailUrl` through the shared remote image pipeline
@@ -45,7 +45,7 @@ device); the compositions, colour and lighting are the reference's own.
 | TZ-ASSET-HOME-QUALITY-001 — **FILLED** `bg_home_quality.webp` (derived from `Home.jpeg`) | Home — "Quality you can count on." banner | Right-hand 50% of a 2.2:1 card | Landscape | 1600 × 730 | Rice sacks, jars, a bowl of grains on a pale sage ground (≈ #DEDBC8). Left half plain. | No | WebP |
 | TZ-ASSET-HOME-BULK-001 — **FILLED** `bg_home_bulk.webp` (derived from `Home.jpeg`; nav region softened) | Home — bulk band | Right-hand 55% of a full-width band | Landscape | 1600 × 900 | Sacks and jars on a dark green ground (≈ #0E2F1E). Left half plain dark green. | **Yes** (cut-out preferred) | WebP (lossless) or PNG |
 | TZ-ASSET-CAT-STAPLES-001 … CAT-SNACKS-001 — **FILLED** `cat_home_staples/fresh/meat_eggs/dairy/snacks.webp` (alpha circles derived from `Home.jpeg`; mapped to REAL taxonomy names by keyword in `homeCategoryArt`, neutral initial otherwise) | Home — category circles | 1:1 circle, object centred | 600 × 600 each | One hero object per category on a pale neutral ground (flour sack, tomatoes+carrots, chicken on a board, milk+curd, snack bowl). Object fills ~70% of the circle. Final category set follows the **live taxonomy names**, not the reference. | **Yes** | PNG → WebP (lossless) |
-| TZ-ASSET-PDP-HERO-001 | PDP (Veg Page direction) | Top 42% of the screen, curved bottom edge | 4:3 landscape, crop anchored centre | 1600 × 1200 | Product photography comes from the **backend thumbnail/image URL**; this slot is only the neutral fallback plate (stone counter, soft shadow) used while an image loads or is absent. | No | WebP |
+| TZ-ASSET-PDP-HERO-001 — **FILLED** `bg_pdp_fallback.webp` (neutral cream/stone surface with a soft contact shadow; generated, owned; shown under every hero and alone when the product has no photo) | PDP (Veg Page direction) | Top 42% of the screen, curved bottom edge | 4:3 landscape, crop anchored centre | 1600 × 1200 | Product photography comes from the **backend thumbnail/image URL**; this slot is only the neutral fallback plate (stone counter, soft shadow) used while an image loads or is absent. | No | WebP |
 
 ## Not requested (deliberately)
 
@@ -57,6 +57,6 @@ device); the compositions, colour and lighting are the reference's own.
 ## Development placeholders
 
 `PhotoBackdrop(photo = null)` draws a brand-tinted gradient that preserves the slot's aspect ratio, crop anchor,
-legibility scrim and content-safe area. It is used only by slots that are still OPEN (today: the PDP fallback plate,
-UI-04); the six UI-01 screens and the three UI-02 Home slots pass a real `Res.drawable.bg_*` and never draw the gradient. Replacing a slot = adding the WebP to
+legibility scrim and content-safe area. No shipped screen uses it any more: the six UI-01 screens, the three UI-02 Home
+slots and the UI-04 PDP hero all pass a real `Res.drawable.bg_*`; it remains for future slots. Replacing a slot = adding the WebP to
 `composeApp/src/commonMain/composeResources/drawable/` and passing its `Res.drawable.*` id.

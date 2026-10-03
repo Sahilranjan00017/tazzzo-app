@@ -103,6 +103,10 @@ fun CatalogProductImage(
     aspectRatio: Float = 1f,
     background: Color = TazColors.SurfaceSunken,
     contentPadding: Dp = 8.dp,
+    /** A photographic plate drawn under the photo and shown alone when the photo is missing (the PDP hero). */
+    plate: org.jetbrains.compose.resources.DrawableResource? = null,
+    contentScale: ContentScale = ContentScale.Fit,
+    fallbackGlyphSize: Dp = 28.dp,
     overlay: @Composable BoxScope.() -> Unit = {}
 ) {
     val loader = LocalProductImageLoader.current
@@ -115,14 +119,16 @@ fun CatalogProductImage(
         }
     }
     Box(modifier.aspectRatio(aspectRatio).background(background), contentAlignment = Alignment.Center) {
+        if (plate != null) Image(painterResource(plate), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         when (val s = state) {
-            ProductImageState.Loading -> SkeletonBlock(modifier = Modifier.fillMaxSize(), corner = 0.dp)
+            ProductImageState.Loading -> if (plate == null) SkeletonBlock(modifier = Modifier.fillMaxSize(), corner = 0.dp)
+                else Box(Modifier.fillMaxSize().background(TazColors.CreamStrong.copy(alpha = 0.35f)))
             is ProductImageState.Ready -> Image(
                 bitmap = s.bitmap, contentDescription = name,
-                modifier = Modifier.fillMaxSize().padding(contentPadding), contentScale = ContentScale.Fit
+                modifier = Modifier.fillMaxSize().padding(contentPadding), contentScale = contentScale
             )
             ProductImageState.Unavailable -> TazIcon(
-                com.tazzzo.app.theme.TazIcons.Bag, null, size = 28.dp, tint = TazColors.TextDisabled
+                com.tazzzo.app.theme.TazIcons.Bag, null, size = fallbackGlyphSize, tint = TazColors.TextDisabled
             )
         }
         overlay()

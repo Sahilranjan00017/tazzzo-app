@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.cart.CartAction
@@ -97,13 +98,23 @@ fun CartNoticeHost() {
  * ever navigates by `skuId`.
  */
 @Composable
-fun RemoteAddControl(product: CatalogProduct, modifier: Modifier = Modifier, compact: Boolean = false) {
+fun RemoteAddControl(product: CatalogProduct, modifier: Modifier = Modifier, compact: Boolean = false, bar: Boolean = false) {
     val app = LocalAppState.current
     val cart = ServiceLocator.cart
     val state by cart.state.collectAsState()
     val pending by cart.pending.collectAsState()
     val confirmed = (state as? CartState.Loaded)?.cart?.quantityOf(product.skuId) ?: 0
     val control = purchaseControl(product, ServiceLocator.catalogCapabilities, confirmed, pending[product.skuId])
+    if (bar) {
+        BarAddControl(
+            product, control,
+            onAdd = { if (ServiceLocator.authSession.isAuthenticated) cart.increment(product.skuId, product.maxOrderQuantity) else app.navigate(Screen.Login) },
+            onMinus = { cart.decrement(product.skuId) },
+            onPlus = { cart.increment(product.skuId, product.maxOrderQuantity) },
+            modifier = modifier
+        )
+        return
+    }
     if (compact) {
         CompactAddControl(
             product, control,
@@ -185,6 +196,62 @@ private fun CompactAddControl(
         }
     }
 }
+
+/**
+ * The PDP purchase surface (UI Page `Veg Page.jpeg`): a 54dp deep-green "Add to cart" pill with the bag glyph, which
+ * becomes a 54dp stepper once the SERVER cart holds the SKU. Same [purchaseControl] decisions as every other style;
+ * a disabled product shows its reason in a quiet pill, never a dead CTA.
+ */
+@Composable
+private fun BarAddControl(
+    product: CatalogProduct, control: PurchaseControl,
+    onAdd: () -> Unit, onMinus: () -> Unit, onPlus: () -> Unit, modifier: Modifier = Modifier
+) {
+    when (control) {
+        is PurchaseControl.Disabled -> Box(
+            modifier.height(BAR_HEIGHT).clip(TazRadius.pill).background(TazColors.SurfaceSunken)
+                .semantics { disabled(); contentDescription = control.label }.padding(horizontal = TazSpace.xl),
+            contentAlignment = Alignment.Center
+        ) { Text(control.label, fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold, color = TazColors.TextTertiary, maxLines = 1) }
+        PurchaseControl.Add -> Row(
+            modifier.height(BAR_HEIGHT).clip(TazRadius.pill).background(TazColors.BrandEditorial)
+                .semantics(mergeDescendants = true) { contentDescription = "Add ${product.name} to cart" }
+                .tazPressable(onClick = onAdd, pressScale = TazPress.control, role = Role.Button)
+                .padding(horizontal = TazSpace.xxl),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
+        ) {
+            TazIcon(TazIcons.Bag, null, size = TazSize.iconMd, tint = TazColors.EditorialOnDark)
+            Spacer(Modifier.width(TazSpace.md))
+            Text("Add to cart", fontFamily = com.tazzzo.app.theme.tazEditorialFamily(), fontSize = 19.sp, color = TazColors.EditorialOnDark, maxLines = 1)
+        }
+        is PurchaseControl.Stepper -> Row(
+            modifier.height(BAR_HEIGHT).clip(TazRadius.pill).background(TazColors.BrandEditorial).padding(horizontal = TazSpace.sm),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically
+        ) {
+            BarStepperTarget("Decrease quantity of ${product.name}", onMinus) { TazIcon(TazIcons.Minus, null, size = TazSize.iconMd, tint = TazColors.EditorialOnDark) }
+            Text(
+                "${control.quantity}", color = TazColors.EditorialOnDark.copy(alpha = if (control.pending) 0.7f else 1f),
+                fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.widthIn(min = 32.dp)
+            )
+            BarStepperTarget(
+                if (control.canIncrease) "Increase quantity of ${product.name}" else "Maximum quantity of ${product.name} reached",
+                { if (control.canIncrease) onPlus() }
+            ) { TazIcon(TazIcons.Plus, null, size = TazSize.iconMd, tint = TazColors.EditorialOnDark.copy(alpha = if (control.canIncrease) 1f else 0.4f)) }
+        }
+    }
+}
+
+@Composable
+private fun BarStepperTarget(contentDescription: String, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        Modifier.size(TazSize.touchTarget).clip(androidx.compose.foundation.shape.CircleShape)
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription }
+            .tazPressable(onClick = onClick, pressScale = TazPress.compact, role = Role.Button),
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+private val BAR_HEIGHT = 54.dp
 
 /** A 36dp visual target whose hit area is the 44dp accessibility minimum. */
 @Composable
