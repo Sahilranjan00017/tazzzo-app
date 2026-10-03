@@ -1235,7 +1235,8 @@ private val productArt: Map<String, DrawableResource> = mapOf(
     "p63" to Res.drawable.prod_p63,
 )
 
-fun productArtFor(productId: String): DrawableResource? = productArt[productId]
+fun productArtFor(productId: String): DrawableResource? =
+    if (com.tazzzo.app.config.AppEnvironment.allowsDevTooling) productArt[productId] else null   // MOCK photography never reaches a release build
 
 /** Ids with bundled photography, for tests that must not hardcode the set. */
 val bundledProductArtIds: Set<String> get() = productArt.keys
@@ -1244,7 +1245,8 @@ private val categoryArt: Map<String, DrawableResource> =
     categoryArtTiles.associate { it.id to it.art }
 
 
-fun categoryArtFor(categoryId: String): DrawableResource? = categoryArt[categoryId]
+fun categoryArtFor(categoryId: String): DrawableResource? =
+    if (com.tazzzo.app.config.AppEnvironment.allowsDevTooling) categoryArt[categoryId] else null   // MOCK photography never reaches a release build
 
 /** Registers this element's on-screen bounds so the guided journey can spotlight it. */
 fun Modifier.guidedTarget(key: String): Modifier = composed {
@@ -1441,13 +1443,14 @@ fun HeroBasketBanner(modifier: Modifier = Modifier) {
 /** Delivery promise — cinematic dark-green banner with animated speed lines. */
 @Composable
 fun DeliveryPromoBanner(modifier: Modifier = Modifier) {
+    val ambient = MotionSettings.ambientEnabled
     val anim = rememberInfiniteTransition()
-    val dash by anim.animateFloat(
+    val dash by if (ambient) anim.animateFloat(
         0f, 1f, infiniteRepeatable(tween(900, easing = LinearEasing))
-    )
-    val bob by anim.animateFloat(
+    ) else remember { mutableStateOf(0f) }
+    val bob by if (ambient) anim.animateFloat(
         0f, 1f, infiniteRepeatable(tween(450), RepeatMode.Reverse)
-    )
+    ) else remember { mutableStateOf(0f) }
     Box(
         modifier.fillMaxWidth().height(BannerHeight)
             .shadow(BannerElevation, TazRadius.tile, spotColor = Color.Black.copy(alpha = 0.26f))

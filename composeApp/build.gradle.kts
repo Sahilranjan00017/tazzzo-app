@@ -84,6 +84,17 @@ dependencies {
 /** `-Ptazzzo.debugRealOrdering=true`: the debug build may submit real COD orders. Anything else (or absent) = false. */
 val debugRealOrdering: Boolean = providers.gradleProperty("tazzzo.debugRealOrdering").orNull == "true"
 
+// MOCK-only photography (legacy MOCK catalogue art: prod_*, cat_*.jpg, the old hero and coins banners, 2.3 MB) is referenced only
+// behind AppEnvironment.allowsDevTooling, so a release build never loads it. Keep it out of the release package.
+// The assets are removed from the merged release assets (not via ignore patterns, which do not see generated Compose resources).
+val mockOnlyAssetPattern = Regex("(prod_p[0-9]+\\.jpg|cat_[a-z_]+\\.jpg|hero_basket\\.jpg|banner_coins\\.jpg)")
+tasks.matching { it.name == "mergeReleaseAssets" }.configureEach {
+    doLast {
+        val out = (this as com.android.build.gradle.tasks.MergeSourceSetFolders).outputDir.get().asFile
+        out.walkTopDown().filter { it.isFile && mockOnlyAssetPattern.matches(it.name) }.forEach { it.delete() }
+    }
+}
+
 android {
     namespace = "com.tazzzo.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
