@@ -73,15 +73,15 @@ class InteractionSemanticsTest {
     fun bottom_nav_publishes_selected_state_to_the_accessibility_tree() {
         // Absent before E1: a screen reader said "Home" but never "selected".
         rule.onNodeWithContentDescription("Home").assertIsSelected()
-        rule.onNodeWithContentDescription("Categories").assertIsNotSelected()
-        rule.onNodeWithContentDescription("Order Again").assertIsNotSelected()
-        rule.onNodeWithContentDescription("Account").assertIsNotSelected()
+        // Tabs since UI-02: Home, Shop, Deals, Orders, Order Again, Profile (formerly Categories / Account).
+        for (tab in listOf("Shop", "Deals", "Orders", "Order Again", "Profile"))
+            rule.onNodeWithContentDescription(tab).assertIsNotSelected()
     }
 
     @Test
     fun switching_tab_moves_the_selected_state() {
-        rule.onNodeWithContentDescription("Categories").performClick()
-        rule.onNodeWithContentDescription("Categories").assertIsSelected()
+        rule.onNodeWithContentDescription("Shop").performClick()
+        rule.onNodeWithContentDescription("Shop").assertIsSelected()
         rule.onNodeWithContentDescription("Home").assertIsNotSelected()
     }
 

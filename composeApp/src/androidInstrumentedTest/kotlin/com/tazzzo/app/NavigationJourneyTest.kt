@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -81,11 +82,21 @@ class NavigationJourneyTest {
     @Before
     fun landOnHome() { waitFor(hasContentDescription("Home")) }
 
+    /**
+     * Since UI-02 the aisle tiles live on the Shop tab (Home is the editorial landing page and no longer lists them), and the
+     * old "Categories" tab is now "Shop". Journeys that start from an aisle therefore enter through that tab.
+     */
+    private fun openShop() {
+        rule.onNodeWithContentDescription("Shop").performClick()
+        rule.onNodeWithContentDescription("Shop").assertIsSelected()
+        waitFor(hasContentDescription("Vegetables & Fruits"))
+    }
+
     // ---------------------------------------------------------------- journeys
 
     @Test
-    fun home_to_category_to_pdp_and_back_returns_through_the_stack() {
-        waitFor(hasContentDescription("Vegetables & Fruits"))
+    fun shop_to_category_to_pdp_and_back_returns_through_the_stack() {
+        openShop()
         rule.onAllNodes(hasContentDescription("Vegetables & Fruits") and hasClickAction()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
 
@@ -101,8 +112,8 @@ class NavigationJourneyTest {
         }
 
         systemBack()
-        waitFor(hasContentDescription("Home"))
-        rule.onNodeWithContentDescription("Home").assertIsSelected()
+        waitFor(hasContentDescription("Shop"))
+        rule.onNodeWithContentDescription("Shop").assertIsSelected()   // back returns to the tab the journey started from
     }
 
     @Test
@@ -130,7 +141,7 @@ class NavigationJourneyTest {
 
     @Test
     fun rapid_taps_do_not_stack_duplicate_destinations() {
-        waitFor(hasContentDescription("Vegetables & Fruits"))
+        openShop()
         // Five taps as fast as the harness can issue them. Once the first tap
         // navigates away the node is gone, so later taps legitimately fail to
         // find it — that is the harness, not the app, and is swallowed here.
@@ -142,11 +153,11 @@ class NavigationJourneyTest {
             }
         }
         waitFor(hasText("Fresh Onion"))
-        // One back press must return to Home. If the guard failed, the stack
+        // One back press must return to the Shop tab. If the guard failed, the stack
         // holds five copies and this lands on the category listing again.
         systemBack()
-        waitFor(hasContentDescription("Home"))
-        rule.onNodeWithContentDescription("Home").assertIsSelected()
+        waitFor(hasContentDescription("Shop"))
+        rule.onNodeWithContentDescription("Shop").assertIsSelected()
     }
 
     @Test
@@ -165,7 +176,7 @@ class NavigationJourneyTest {
 
     @Test
     fun category_scroll_position_survives_opening_a_product_and_coming_back() {
-        waitFor(hasContentDescription("Vegetables & Fruits"))
+        openShop()
         rule.onAllNodes(hasContentDescription("Vegetables & Fruits") and hasClickAction()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
         waitFor(hasText("Fresh Onion"))
@@ -192,11 +203,15 @@ class NavigationJourneyTest {
 
     @Test
     fun tab_switching_preserves_each_tabs_state() {
-        rule.onNodeWithContentDescription("Categories").performClick()
-        rule.onNodeWithContentDescription("Categories").assertIsSelected()
+        rule.onNodeWithContentDescription("Shop").performClick()
+        rule.onNodeWithContentDescription("Shop").assertIsSelected()
+        waitFor(hasContentDescription("Vegetables & Fruits"))
         rule.onNodeWithContentDescription("Home").performClick()
         rule.onNodeWithContentDescription("Home").assertIsSelected()
         // Home still has its content; it was not rebuilt into a loading state.
+        waitFor(hasTestTag("homeFeed"))
+        // ...and Shop kept its own: switching back shows the aisles again without a reload.
+        rule.onNodeWithContentDescription("Shop").performClick()
         waitFor(hasContentDescription("Vegetables & Fruits"))
     }
 }
