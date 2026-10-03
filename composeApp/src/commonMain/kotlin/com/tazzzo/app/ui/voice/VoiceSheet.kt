@@ -95,7 +95,7 @@ fun VoiceComingSoonSheet(onDismiss: () -> Unit) {
             Box(
                 Modifier
                     .clip(TazRadius.pill)
-                    .background(TazColors.OrangeSoft)
+                    .background(TazColors.GreenSoft)
                     .padding(horizontal = TazSpace.md, vertical = TazSpace.xs)
             ) {
                 Text(
@@ -103,7 +103,7 @@ fun VoiceComingSoonSheet(onDismiss: () -> Unit) {
                     fontSize = TazType.microSize,
                     lineHeight = TazType.microLine,
                     fontWeight = FontWeight.Bold,
-                    color = TazColors.Orange
+                    color = TazColors.BrandEditorial
                 )
             }
 

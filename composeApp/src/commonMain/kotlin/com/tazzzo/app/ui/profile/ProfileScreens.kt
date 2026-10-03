@@ -92,6 +92,7 @@ fun RemoteProfileContent() {
                     ProfileEntry.COINS -> app.navigate(Screen.Coins)
                     ProfileEntry.HELP -> app.navigate(Screen.Help)
                     ProfileEntry.ABOUT -> app.navigate(Screen.About)
+                    ProfileEntry.GENIE -> app.navigate(Screen.Voice)
                 }
             },
             askLogout = { confirmLogout = true },
@@ -122,7 +123,7 @@ fun ProfileLayout(
                 RowsCard(listOf(ProfileEntry.ADDRESSES, ProfileEntry.ORDERS, ProfileEntry.COINS), addressCount, actions.open)
                 Spacer(Modifier.height(TazSpace.xl))
                 SectionLabel(ProfileCopy.SECTION_MORE)
-                RowsCard(listOf(ProfileEntry.HELP, ProfileEntry.ABOUT), addressCount, actions.open)
+                RowsCard(listOf(ProfileEntry.HELP, ProfileEntry.ABOUT, ProfileEntry.GENIE), addressCount, actions.open)
                 Spacer(Modifier.height(TazSpace.xl))
                 LogoutRow(onClick = actions.askLogout)
             } else {
@@ -160,7 +161,7 @@ private fun SignedOutCard(onLogin: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(TazRadius.tile).background(TazColors.Surface).padding(TazSpace.xl), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(72.dp).clip(CircleShape).background(TazColors.GreenSoft), contentAlignment = Alignment.Center) { TazIcon(TazIcons.Profile, null, size = 32.dp, tint = TazColors.BrandEditorial) }
         Spacer(Modifier.height(TazSpace.lg))
-        EditorialText(listOf(plain(ProfileCopy.SIGNED_OUT_TITLE)), size = 24.sp, lineHeight = 28.sp, color = TazColors.TextPrimary)
+        EditorialText(listOf(plain(ProfileCopy.SIGNED_OUT_TITLE)), size = TazType.editorialStateTitleSize, lineHeight = TazType.editorialStateTitleLine, color = TazColors.TextPrimary)
         Spacer(Modifier.height(TazSpace.sm))
         Text(ProfileCopy.SIGNED_OUT_BODY, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextSecondary, textAlign = TextAlign.Center)
         Spacer(Modifier.height(TazSpace.xl))
@@ -193,6 +194,7 @@ private fun iconFor(e: ProfileEntry): ImageVector = when (e) {
     ProfileEntry.COINS -> TazIcons.Coin
     ProfileEntry.HELP -> TazIcons.Help
     ProfileEntry.ABOUT -> TazIcons.Info
+    ProfileEntry.GENIE -> TazIcons.Mic
 }
 
 @Composable
@@ -232,7 +234,7 @@ private fun LogoutRow(onClick: () -> Unit) {
 private fun LogoutSheet(onCancel: () -> Unit, onConfirm: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onCancel, containerColor = TazColors.Surface) {
         Column(Modifier.fillMaxWidth().padding(horizontal = TazSpace.xl).padding(bottom = TazSpace.xxl).navigationBarsPadding().testTag("logoutSheet"), horizontalAlignment = Alignment.CenterHorizontally) {
-            EditorialText(listOf(plain(ProfileCopy.LOG_OUT_TITLE)), size = 24.sp, lineHeight = 28.sp, color = TazColors.TextPrimary)
+            EditorialText(listOf(plain(ProfileCopy.LOG_OUT_TITLE)), size = TazType.editorialStateTitleSize, lineHeight = TazType.editorialStateTitleLine, color = TazColors.TextPrimary)
             Spacer(Modifier.height(TazSpace.sm))
             Text(ProfileCopy.LOG_OUT_BODY, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextSecondary, textAlign = TextAlign.Center)
             Spacer(Modifier.height(TazSpace.xl))

@@ -33,6 +33,8 @@ sealed interface Screen {
     data object ClubCheckout : Screen
     /** Permanent receipt + service centre for one order. */
     data class OrderDetail(val orderId: String) : Screen
+    /** Tazzzo Genie: the voice-ordering surface (truthful "coming soon" until a real capability exists). */
+    data object Voice : Screen
 }
 
 /**
@@ -67,6 +69,7 @@ val Screen.stateKey: String
         is Screen.Club -> "club"
         is Screen.ClubCheckout -> "clubCheckout"
         is Screen.OrderDetail -> "order:$orderId"
+        is Screen.Voice -> "voice"
     }
 
 /** Which way the customer is travelling. Drives the transition, nothing else. */

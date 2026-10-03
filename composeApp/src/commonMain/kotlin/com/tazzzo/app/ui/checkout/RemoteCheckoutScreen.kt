@@ -279,7 +279,7 @@ private fun Recovery(v: FailureView, failure: CheckoutFailure?, cart: ServerCart
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = TazSpace.xxl, vertical = TazSpace.xxxl).testTag("recovery"), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(84.dp).clip(CircleShape).background(TazColors.GreenSoft), contentAlignment = Alignment.Center) { TazIcon(icon, null, size = 34.dp, tint = TazColors.BrandEditorial) }
         Spacer(Modifier.height(TazSpace.xl))
-        EditorialText(listOf(plain(copy.title)), size = 24.sp, lineHeight = 28.sp, color = TazColors.TextPrimary)
+        EditorialText(listOf(plain(copy.title)), size = TazType.editorialStateTitleSize, lineHeight = TazType.editorialStateTitleLine, color = TazColors.TextPrimary)
         copy.support?.let { Spacer(Modifier.height(TazSpace.sm)); Text(it, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextSecondary, textAlign = TextAlign.Center) }
         if (failure is CheckoutFailure.ItemsUnavailable) {
             Spacer(Modifier.height(TazSpace.lg))
@@ -311,7 +311,7 @@ private fun PlacingPanel() {
             androidx.compose.material3.CircularProgressIndicator(Modifier.size(30.dp), color = TazColors.BrandEditorial, strokeWidth = 2.5.dp)
         }
         Spacer(Modifier.height(TazSpace.xl))
-        EditorialText(listOf(plain(PurchaseCopy.PLACING)), size = 24.sp, lineHeight = 28.sp, color = TazColors.TextPrimary)
+        EditorialText(listOf(plain(PurchaseCopy.PLACING)), size = TazType.editorialStateTitleSize, lineHeight = TazType.editorialStateTitleLine, color = TazColors.TextPrimary)
         Spacer(Modifier.height(TazSpace.sm))
         Text("Please keep the app open.", fontSize = TazType.bodySize, color = TazColors.TextSecondary)
     }
@@ -336,7 +336,7 @@ internal fun Header(title: String, onBack: () -> Unit) {
             contentAlignment = Alignment.Center
         ) { TazIcon(TazIcons.Back, null, size = TazSize.iconSm, tint = TazColors.BrandEditorial) }
         Spacer(Modifier.width(TazSpace.md))
-        EditorialText(listOf(plain(title)), size = 30.sp, lineHeight = 34.sp, color = TazColors.BrandEditorial, textAlign = TextAlign.Start)
+        EditorialText(listOf(plain(title)), size = TazType.editorialPageTitleSize, lineHeight = TazType.editorialPageTitleLine, color = TazColors.BrandEditorial, textAlign = TextAlign.Start)
     }
 }
 
