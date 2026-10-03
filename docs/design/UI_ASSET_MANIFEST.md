@@ -57,6 +57,6 @@ device); the compositions, colour and lighting are the reference's own.
 ## Development placeholders
 
 `PhotoBackdrop(photo = null)` draws a brand-tinted gradient that preserves the slot's aspect ratio, crop anchor,
-legibility scrim and content-safe area. It is used only by slots that are still OPEN (Home, PDP fallback); the six
-UI-01 screens pass a real `Res.drawable.bg_*` and never draw the gradient. Replacing a slot = adding the WebP to
+legibility scrim and content-safe area. It is used only by slots that are still OPEN (today: the PDP fallback plate,
+UI-04); the six UI-01 screens and the three UI-02 Home slots pass a real `Res.drawable.bg_*` and never draw the gradient. Replacing a slot = adding the WebP to
 `composeApp/src/commonMain/composeResources/drawable/` and passing its `Res.drawable.*` id.
