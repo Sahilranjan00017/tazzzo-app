@@ -121,6 +121,7 @@ fun App() {
                         is Screen.About -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteAboutScreen() else AboutScreen()
                         is Screen.Club -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubScreen()
                         is Screen.ClubCheckout -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubCheckoutScreen()
+                        is Screen.Voice -> com.tazzzo.app.ui.voice.GenieScreen()
                         is Screen.OrderDetail -> if (remoteCatalog) com.tazzzo.app.ui.order.RemoteOrderDetailScreen(screen.orderId) else OrderDetailScreen(screen.orderId)
                     }
                     }

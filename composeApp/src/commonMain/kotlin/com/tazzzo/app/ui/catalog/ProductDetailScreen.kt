@@ -231,7 +231,7 @@ private fun Eyebrow(text: String) {
 private fun TitleAndPrice(f: PdpFacts) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         EditorialText(
-            listOf(plain(f.name)), size = 34.sp, lineHeight = 38.sp, color = TazColors.TextPrimary, textAlign = TextAlign.Start,
+            listOf(plain(f.name)), size = TazType.editorialProductTitleSize, lineHeight = TazType.editorialProductTitleLine, color = TazColors.TextPrimary, textAlign = TextAlign.Start,
             modifier = Modifier.weight(1f).semantics { contentDescription = f.name }
         )
         Spacer(Modifier.width(TazSpace.lg))

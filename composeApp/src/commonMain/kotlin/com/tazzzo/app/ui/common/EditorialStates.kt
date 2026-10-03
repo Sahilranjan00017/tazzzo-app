@@ -123,8 +123,8 @@ fun EditorialFailureState(
     }
 }
 
-private val STATE_TITLE_SIZE = 24.sp
-private val STATE_TITLE_LINE = 28.sp
+private val STATE_TITLE_SIZE = TazType.editorialStateTitleSize
+private val STATE_TITLE_LINE = TazType.editorialStateTitleLine
 
 // ---- layout-shaped skeletons -----------------------------------------------------------------------------------------
 

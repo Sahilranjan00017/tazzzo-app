@@ -341,7 +341,7 @@ private fun Plate(res: DrawableResource, modifier: Modifier, alignment: Alignmen
 
 @Composable
 private fun Eyebrow(text: String, color: Color) {
-    Text(text, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.2.sp, color = color)
+    Text(text, fontSize = TazType.eyebrowSize, fontWeight = FontWeight.SemiBold, letterSpacing = TazType.eyebrowTracking, color = color)
 }
 
 /** The in-banner pill CTA: 40dp, serif label, trailing arrow. Dark = green on light photography; light = cream on green. */

@@ -119,7 +119,7 @@ fun OrderConfirmationLayout(orderId: String, load: OrderLoad, actions: OrderActi
             OrderLoad.Missing -> Column(Modifier.fillMaxSize()) {
                 Spacer(Modifier.statusBarsPadding().height(TazSpace.xl))
                 SuccessMark()
-                EditorialText(listOf(plain(OrderCopy.CONFIRMATION_TITLE)), size = 32.sp, lineHeight = 36.sp, color = TazColors.TextPrimary, modifier = Modifier.fillMaxWidth())
+                EditorialText(listOf(plain(OrderCopy.CONFIRMATION_TITLE)), size = TazType.editorialHeroSize, lineHeight = TazType.editorialHeroLine, color = TazColors.TextPrimary, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(TazSpace.sm))
                 Text(OrderCopy.CONFIRMATION_LOAD_FAILED_BODY, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = TazSpace.xxl))
                 Spacer(Modifier.height(TazSpace.lg))
@@ -131,7 +131,7 @@ fun OrderConfirmationLayout(orderId: String, load: OrderLoad, actions: OrderActi
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("orderConfirmationContent")) {
                     Spacer(Modifier.statusBarsPadding().height(TazSpace.xl))
                     SuccessMark()
-                    EditorialText(listOf(plain(OrderCopy.CONFIRMATION_TITLE)), size = 32.sp, lineHeight = 36.sp, color = TazColors.TextPrimary, modifier = Modifier.fillMaxWidth())
+                    EditorialText(listOf(plain(OrderCopy.CONFIRMATION_TITLE)), size = TazType.editorialHeroSize, lineHeight = TazType.editorialHeroLine, color = TazColors.TextPrimary, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(TazSpace.sm))
                     Text(OrderCopy.CONFIRMATION_SUPPORT, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = TazSpace.xxl))
                     Spacer(Modifier.height(TazSpace.xxl))

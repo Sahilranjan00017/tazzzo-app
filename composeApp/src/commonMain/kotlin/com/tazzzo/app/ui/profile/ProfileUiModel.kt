@@ -29,6 +29,8 @@ object ProfileCopy {
     const val COINS_SUB = "Not available yet"
     const val HELP = "Help"
     const val ABOUT = "About Tazzzo"
+    const val GENIE = "Tazzzo Genie"
+    const val GENIE_SUB = "Voice ordering is coming soon"
     const val LOG_OUT = "Log out"
     const val LOG_OUT_TITLE = "Log out of Tazzzo?"
     const val LOG_OUT_BODY = "Your cart and addresses stay saved to your account."
@@ -58,12 +60,13 @@ enum class ProfileEntry(val title: String, val subtitle: String?) {
     ORDERS(ProfileCopy.ORDERS, null),
     COINS(ProfileCopy.COINS, ProfileCopy.COINS_SUB),
     HELP(ProfileCopy.HELP, null),
-    ABOUT(ProfileCopy.ABOUT, null)
+    ABOUT(ProfileCopy.ABOUT, null),
+    GENIE(ProfileCopy.GENIE, ProfileCopy.GENIE_SUB)
 }
 
 /** Account rows need a session; Help and About do not. */
 fun profileEntries(signedIn: Boolean): List<ProfileEntry> =
-    if (signedIn) ProfileEntry.entries.toList() else listOf(ProfileEntry.HELP, ProfileEntry.ABOUT)
+    if (signedIn) ProfileEntry.entries.toList() else listOf(ProfileEntry.HELP, ProfileEntry.ABOUT, ProfileEntry.GENIE)
 
 /** Identity the app can truthfully show for the REMOTE session: none today (see the file header). */
 data class ProfileIdentity(val name: String?, val phone: String?, val email: String?) {

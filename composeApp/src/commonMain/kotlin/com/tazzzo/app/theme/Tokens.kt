@@ -78,6 +78,13 @@ object TazType {
     val editorialBodySize: TextUnit = 17.sp;     val editorialBodyLine: TextUnit = 23.sp      // Showcase support line
     val editorialSubSize: TextUnit = 15.sp;      val editorialSubLine: TextUnit = 21.sp       // Login / OTP support line
     val taglineSize: TextUnit = 16.sp;           val taglineTracking: TextUnit = 2.sp         // "Best Value. Smart Shopping."
+    // --- UI-08 consolidation of the sizes the UI-02..07 screens settled on (no screen hard-codes these any more) ---
+    val editorialHeroSize: TextUnit = 32.sp;     val editorialHeroLine: TextUnit = 36.sp      // Order placed, price hero
+    val editorialPageTitleSize: TextUnit = 30.sp; val editorialPageTitleLine: TextUnit = 34.sp // pushed-route headers (Cart, Checkout, Orders…)
+    val editorialScreenTitleSize: TextUnit = 26.sp; val editorialScreenTitleLine: TextUnit = 30.sp // Browse header
+    val editorialStateTitleSize: TextUnit = 24.sp; val editorialStateTitleLine: TextUnit = 28.sp  // empty / failure / sheet headlines
+    val editorialProductTitleSize: TextUnit = 34.sp; val editorialProductTitleLine: TextUnit = 38.sp // PDP name
+    val eyebrowSize: TextUnit = 9.sp;            val eyebrowTracking: TextUnit = 2.2.sp       // GOOD FOOD, EVERYDAY
 
     /** The number inside a quantity stepper. Heavier than body at the same size
      *  so the count reads at a glance while the − and + stay quiet. */

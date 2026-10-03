@@ -28,6 +28,7 @@ import com.tazzzo.app.ui.profile.ProfileIdentity
 import com.tazzzo.app.ui.profile.ProfileLayout
 import com.tazzzo.app.ui.profile.SupportChannels
 import com.tazzzo.app.ui.profile.legalLinks
+import com.tazzzo.app.ui.voice.GenieLayout
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,7 +64,7 @@ class ProfileUi07EvidenceTest {
     @Test fun profile_signed_in() {
         content(nav = true) { ProfileLayout(true, ProfileIdentity.NONE, 2, appVersionLabel(), false, actions) }
         rule.onNodeWithContentDescription("Saved addresses").assertIsDisplayed()
-        rule.onNodeWithContentDescription("Log out").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Log out").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("appVersion").performScrollTo().assertIsDisplayed()
         snapshot("ui07_profile_signed_in")
     }
@@ -100,5 +101,12 @@ class ProfileUi07EvidenceTest {
         content { CoinsUnavailableLayout(onBack = {}) }
         rule.onNodeWithText("Tazzzo Coins aren't available yet").assertIsDisplayed()
         snapshot("ui07_coins")
+    }
+
+    @Test fun genie_coming_soon() {
+        content { GenieLayout(onBack = {}, onShop = {}) }
+        rule.onNodeWithText("Voice ordering is coming soon".uppercase()).assertIsDisplayed()
+        rule.onNodeWithTag("genieShop").performScrollTo().assertIsDisplayed()
+        snapshot("ui08_genie")
     }
 }

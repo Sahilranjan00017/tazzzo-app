@@ -20,13 +20,14 @@ import kotlin.test.assertTrue
 class ProfileUiModelTest {
 
     @Test fun aSignedInProfileOffersOnlyRealDestinations() {
-        assertEquals(listOf(ProfileEntry.ADDRESSES, ProfileEntry.ORDERS, ProfileEntry.COINS, ProfileEntry.HELP, ProfileEntry.ABOUT), profileEntries(true))
-        for (forbidden in listOf("Delete account", "Membership", "Club", "Notifications", "Language", "Voice", "Wallet", "Refunds", "Gift"))
+        assertEquals(listOf(ProfileEntry.ADDRESSES, ProfileEntry.ORDERS, ProfileEntry.COINS, ProfileEntry.HELP, ProfileEntry.ABOUT, ProfileEntry.GENIE), profileEntries(true))
+        for (forbidden in listOf("Delete account", "Membership", "Club", "Notifications", "Language", "Wallet", "Refunds", "Gift"))
             assertFalse(ProfileEntry.entries.any { it.title.contains(forbidden, ignoreCase = true) }, forbidden)
+        assertEquals("Voice ordering is coming soon", ProfileEntry.GENIE.subtitle)   // truthful; the row opens the Genie page
     }
 
     @Test fun aSignedOutProfileOffersHelpAndAboutOnlyAndNoCustomerData() {
-        assertEquals(listOf(ProfileEntry.HELP, ProfileEntry.ABOUT), profileEntries(false))
+        assertEquals(listOf(ProfileEntry.HELP, ProfileEntry.ABOUT, ProfileEntry.GENIE), profileEntries(false))
         assertEquals("Log in", ProfileCopy.LOG_IN)
     }
 

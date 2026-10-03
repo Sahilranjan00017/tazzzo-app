@@ -199,7 +199,7 @@ private fun BrowseHeader(title: String, breadcrumb: List<String>, onBack: () -> 
         Spacer(Modifier.width(TazSpace.md))
         Column(Modifier.weight(1f)) {
             EditorialText(
-                listOf(plain(title)), size = 26.sp, lineHeight = 30.sp, color = TazColors.BrandEditorial, textAlign = TextAlign.Start,
+                listOf(plain(title)), size = TazType.editorialScreenTitleSize, lineHeight = TazType.editorialScreenTitleLine, color = TazColors.BrandEditorial, textAlign = TextAlign.Start,
                 modifier = Modifier.semantics { contentDescription = title }
             )
             if (breadcrumb.isNotEmpty()) Text(
