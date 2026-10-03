@@ -7,6 +7,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
@@ -87,7 +88,7 @@ class CheckoutJourneyTest {
     @Test
     fun chosen_slot_and_fee_follow_the_order_from_review_to_receipt() {
         waitFor(hasContentDescription("Home"))
-        waitFor(hasContentDescription("Vegetables & Fruits"))
+        waitFor(hasTestTag("homeFeed"))   // Home no longer lists the aisle tiles (they moved to Shop in UI-02)
 
         // Small basket, BELOW the free-delivery threshold, so delivery is a real line.
         addFromHome("Fresh Onion", 2)                                  // ₹64

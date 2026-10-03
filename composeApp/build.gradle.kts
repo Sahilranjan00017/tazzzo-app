@@ -95,6 +95,23 @@ tasks.matching { it.name == "mergeReleaseAssets" }.configureEach {
     }
 }
 
+// iOS equivalent. Compose resources are copied into the .app by SyncComposeResourcesForIosTask; in an Xcode Release build
+// (CONFIGURATION=Release) the same MOCK-only photography is dropped from that task's own output directory. A source-set split is
+// not possible because the Res accessors that MOCK code compiles against are generated from the same directory. The
+// assets are only ever requested behind AppEnvironment.allowsDevTooling (false in a release binary).
+// (The task class is internal to the Compose plugin, so it is selected by name and its declared output directory is used.)
+tasks.matching { it.name == "syncComposeResourcesForIos" }.configureEach {
+    val releaseConfiguration = providers.environmentVariable("CONFIGURATION").map { it.equals("Release", ignoreCase = true) }.orElse(false)
+    inputs.property("stripMockOnlyAssets", releaseConfiguration)
+    doLast {
+        if (releaseConfiguration.get()) {
+            outputs.files.forEach { dir ->
+                dir.walkTopDown().filter { it.isFile && mockOnlyAssetPattern.matches(it.name) }.forEach { it.delete() }
+            }
+        }
+    }
+}
+
 android {
     namespace = "com.tazzzo.app"
     compileSdk = libs.versions.android.compileSdk.get().toInt()

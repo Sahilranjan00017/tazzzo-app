@@ -7,6 +7,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
@@ -72,10 +73,10 @@ class RedesignEvidenceTest {
 
     @Test fun categories_account_and_help_render_derived_data_not_comp_values() {
         waitFor(hasContentDescription("Home"))
-        waitFor(hasContentDescription("Vegetables & Fruits") and hasClickAction())
+        waitFor(hasTestTag("homeFeed"))   // aisle tiles moved from Home to Shop in UI-02
 
         // ---- Categories: group pills, a real coupon, real counts ----
-        click(hasContentDescription("Categories"))
+        click(hasContentDescription("Shop"))
         waitFor(hasText("All categories"), 30_000)
         waitFor(hasText("All"))
         assert(present(hasText("Grocery & Kitchen"))) { "group pills missing" }
@@ -93,7 +94,7 @@ class RedesignEvidenceTest {
         snapshot("r1_categories")
 
         // ---- Account: derived counts, coins not a rupee wallet ----
-        click(hasContentDescription("Account"))
+        click(hasContentDescription("Profile"))
         waitFor(hasText("Tazzzo Coins"), 30_000)
         assert(present(hasText("coins", substring = true))) { "coin balance missing" }
         // The mockup's rupee wallet must not have shipped.

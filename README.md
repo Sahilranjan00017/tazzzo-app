@@ -24,7 +24,7 @@ tazzzo/
 │       │   │   ├── model/          # Category, Product, Order, Coins…
 │       │   │   ├── MockCatalog.kt  # full taxonomy: 19 aisles, 60+ products
 │       │   │   ├── repository/     # interfaces + Mock impls (swap → Remote)
-│       │   │   └── remote/         # ApiConfig: microservice base URLs
+│       │   │   └── remote/         # (ApiConfig removed: hosts live in config/AppEnvironment)
 │       │   └── ui/
 │       │       ├── splash/         # logo splash
 │       │       ├── onboarding/     # marquee + login/skip, phone OTP
@@ -66,7 +66,7 @@ compiles the Kotlin framework automatically via `./gradlew embedAndSignAppleFram
 UI never touches the network directly — it talks to interfaces in
 `data/repository/Repositories.kt`, currently backed by `Mock*` classes.
 
-1. Set the real gateway/service URLs in `data/remote/ApiConfig.kt`
+1. Set the real gateway host per environment in `config/AppEnvironment.kt`
    (auth / catalog / orders / coins / voice / support services — endpoint
    sketch documented in that file).
 2. Add Ktor client to `composeApp/build.gradle.kts` (`ktor-client-core`,
