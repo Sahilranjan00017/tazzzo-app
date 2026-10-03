@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.sp
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
@@ -334,128 +335,187 @@ fun RemoteCartScreen() {
     val syncing by cart.syncing.collectAsState()
     var confirmClear by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { cart.refresh() }          // a GET also advances expiry housekeeping: always show the server's latest
-    Column(Modifier.fillMaxSize().background(TazColors.Cream)) {
-        TazTopBar(title = "Cart", onBack = { app.back() })
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (val s = state) {
-                CartState.SignedOut -> EmptyState("🛒", "Log in to see your cart", "Your cart is saved to your account.", "Log in", onAction = { app.navigate(Screen.Login) })
-                CartState.Idle, CartState.Loading -> Column(Modifier.padding(TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
-                    SkeletonBlock(height = 72.dp, corner = 14.dp); SkeletonBlock(height = 72.dp, corner = 14.dp)
+    val canCheckout = ServiceLocator.catalogCapabilities.checkoutIntegration
+    CartScreenLayout(
+        state = state, pending = pending, syncing = syncing, confirmClear = confirmClear, checkoutSupported = canCheckout,
+        actions = CartActions(
+            back = { app.back() },
+            startShopping = { app.homeTab = com.tazzzo.app.HomeTab.SHOP; app.goHome() },
+            login = { app.navigate(Screen.Login) },
+            retry = { cart.refresh() },
+            minus = { cart.decrement(it) }, plus = { cart.increment(it) },
+            lineAction = { sku, act ->
+                when (act) {
+                    CartAction.Remove -> cart.remove(sku)
+                    CartAction.RetryCart -> cart.refresh()
+                    is CartAction.ReduceQuantity -> cart.setQuantity(sku, act.target)
+                    else -> act.addressScreen()?.let { app.navigate(it) }
                 }
-                is CartState.Failed -> CartFailurePanel(s.failure, onRetry = { cart.refresh() }, onLogin = { app.navigate(Screen.Login) })
-                is CartState.Loaded -> {
-                    if (s.cart.isEmpty) EmptyState("🛒", "Your cart is empty", "Add something from the catalogue.", "Browse", onAction = { app.back() })
-                    else CartContent(s.cart, pending, syncing, confirmClear,
-                        onClear = { if (confirmClear) { confirmClear = false; cart.clear() } else confirmClear = true },
-                        onCancelClear = { confirmClear = false })
-                }
+            },
+            reviewCheckout = {
+                // Real checkout: a quote of the SERVER cart. An unresolved order attempt must be checked first: never open a new quote beside it.
+                val os = ServiceLocator.orderStore.state.value
+                if (os !is com.tazzzo.app.data.order.OrderState.Placing && os !is com.tazzzo.app.data.order.OrderState.Ambiguous) ServiceLocator.checkoutQuote.enter()
+                app.navigate(Screen.Checkout)
+            },
+            clear = { if (confirmClear) { confirmClear = false; cart.clear() } else confirmClear = true },
+            cancelClear = { confirmClear = false }
+        )
+    )
+}
+
+class CartActions(
+    val back: () -> Unit, val startShopping: () -> Unit, val login: () -> Unit, val retry: () -> Unit,
+    val minus: (String) -> Unit, val plus: (String) -> Unit, val lineAction: (String, CartAction) -> Unit,
+    val reviewCheckout: () -> Unit, val clear: () -> Unit, val cancelClear: () -> Unit
+)
+
+/**
+ * The cart (UI-05), in the approved language: editorial "Your cart", one rounded card per SERVER line with the real photo
+ * through the shared pipeline, the backend's unit price / struck MRP / line total, and the deep-green stepper on the same
+ * cart mutations as everywhere else. The summary shows the server's item subtotal only — never a delivery fee, tax,
+ * savings or coupon — and says so; binding money belongs to checkout.
+ */
+@Composable
+fun CartScreenLayout(
+    state: CartState, pending: Map<String, PendingTarget>, syncing: Boolean, confirmClear: Boolean, checkoutSupported: Boolean, actions: CartActions
+) {
+    Box(Modifier.fillMaxSize().background(TazColors.Cream).testTag("cart")) {
+        Column(Modifier.fillMaxSize()) {
+            com.tazzzo.app.ui.checkout.Header(com.tazzzo.app.ui.checkout.PurchaseCopy.CART_TITLE, onBack = actions.back)
+            when (state) {
+                CartState.SignedOut -> com.tazzzo.app.ui.common.EditorialEmptyState(TazIcons.Profile, com.tazzzo.app.ui.checkout.PurchaseCopy.CART_SIGNED_OUT_TITLE, com.tazzzo.app.ui.checkout.PurchaseCopy.CART_SIGNED_OUT_BODY, "Log in", onAction = actions.login)
+                CartState.Idle, CartState.Loading -> CartSkeleton()
+                is CartState.Failed -> CartFailurePanel(state.failure, onRetry = actions.retry, onLogin = actions.login)
+                is CartState.Loaded ->
+                    if (state.cart.isEmpty) com.tazzzo.app.ui.common.EditorialEmptyState(TazIcons.Bag, com.tazzzo.app.ui.checkout.PurchaseCopy.CART_EMPTY_TITLE, com.tazzzo.app.ui.checkout.PurchaseCopy.CART_EMPTY_BODY, com.tazzzo.app.ui.checkout.PurchaseCopy.START_SHOPPING, onAction = actions.startShopping)
+                    else CartContent(state.cart, pending, syncing, confirmClear, checkoutSupported, actions)
             }
         }
     }
 }
 
 @Composable
-private fun CartContent(
-    cart: ServerCart, pending: Map<String, PendingTarget>, syncing: Boolean, confirmClear: Boolean,
-    onClear: () -> Unit, onCancelClear: () -> Unit
-) {
-    val app = LocalAppState.current
-    val store = ServiceLocator.cart
+private fun CartContent(cart: ServerCart, pending: Map<String, PendingTarget>, syncing: Boolean, confirmClear: Boolean, checkoutSupported: Boolean, actions: CartActions) {
     val summary = cart.toSummary()
-    Column(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize()) {
         LazyColumn(
-            Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(TazSpace.lg),
+            Modifier.fillMaxSize().testTag("cartLines"),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = TazSpace.lg, end = TazSpace.lg, bottom = CART_BAR_CLEARANCE),
             verticalArrangement = Arrangement.spacedBy(TazSpace.md)
         ) {
             if (summary.hasBlockedLines) item {
-                Text(
-                    "Some items need your attention before you can check out.",
-                    fontSize = TazType.captionSize, color = TazColors.Danger,
-                    modifier = Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface).padding(TazSpace.md)
-                )
+                Row(Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.WarningSoft).padding(TazSpace.md), verticalAlignment = Alignment.CenterVertically) {
+                    TazIcon(TazIcons.Info, null, size = TazSize.iconSm, tint = TazColors.Warning)
+                    Spacer(Modifier.width(TazSpace.sm))
+                    Text("Some items need your attention before you can check out.", fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Warning)
+                }
             }
             // Keyed by skuId. The row is NOT clickable: the cart carries no productId, so it never opens a PDP.
             items(cart.items, key = { it.skuId }) { line ->
-                CartLineRow(line.toView(), pending[line.skuId], onMinus = { store.decrement(line.skuId) }, onPlus = { store.increment(line.skuId) }, onAction = { act ->
-                    when (act) {
-                        CartAction.Remove -> store.remove(line.skuId)
-                        CartAction.RetryCart -> store.refresh()
-                        is CartAction.ReduceQuantity -> store.setQuantity(line.skuId, act.target)
-                        else -> act.addressScreen()?.let { app.navigate(it) }
-                    }
-                })
+                CartLineCard(line, line.toView(), pending[line.skuId], onMinus = { actions.minus(line.skuId) }, onPlus = { actions.plus(line.skuId) }, onAction = { actions.lineAction(line.skuId, it) })
+            }
+            item {
+                Row(Modifier.fillMaxWidth().padding(top = TazSpace.xs), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    com.tazzzo.app.ui.checkout.TextAction(
+                        if (confirmClear) com.tazzzo.app.ui.checkout.PurchaseCopy.CLEAR_CART_CONFIRM else com.tazzzo.app.ui.checkout.PurchaseCopy.CLEAR_CART, TazColors.Danger, onClick = actions.clear
+                    )
+                    if (confirmClear) com.tazzzo.app.ui.checkout.TextAction("Cancel", TazColors.TextSecondary, onClick = actions.cancelClear)
+                }
             }
         }
+        // The sticky summary: the server's item subtotal and the one deep-green CTA into the real checkout.
+        val canCheckout = checkoutSupported && !summary.hasBlockedLines && !syncing && pending.isEmpty()
+        // The strip under the bar is cream so scrolled lines never show through the inset gap.
         Column(
-            Modifier.fillMaxWidth().background(TazColors.Surface).padding(TazSpace.lg).navigationBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(TazSpace.sm)
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(TazColors.Cream).padding(horizontal = TazSpace.lg).navigationBarsPadding().padding(bottom = TazSpace.md, top = TazSpace.sm)
+                .shadow(16.dp, TazRadius.sheetAll, ambientColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.10f), spotColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.16f))
+                .clip(TazRadius.sheetAll).background(TazColors.Surface).padding(horizontal = TazSpace.lg, vertical = TazSpace.md).testTag("cartSummary")
         ) {
+            val cta = if (summary.hasBlockedLines) com.tazzzo.app.ui.checkout.PurchaseCopy.RESOLVE_ITEMS else com.tazzzo.app.ui.checkout.PurchaseCopy.REVIEW_CHECKOUT
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("${summary.itemsLabel} · Subtotal", fontSize = TazType.bodySize, color = TazColors.TextSecondary, modifier = Modifier.weight(1f))
-                Text(summary.subtotalLabel, fontSize = TazType.titleSize, fontWeight = FontWeight.Bold, color = TazColors.TextPrimary)
+                Column(Modifier.weight(1f)) {
+                    Text(summary.subtotalLabel, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TazColors.TextPrimary, maxLines = 1)
+                    Text(summary.itemsLabel, fontSize = TazType.captionSize, color = TazColors.TextSecondary, maxLines = 1)
+                }
+                if (!summary.hasBlockedLines) {
+                    Spacer(Modifier.width(TazSpace.md))
+                    com.tazzzo.app.ui.common.TazzzoPrimaryButton(cta, onClick = actions.reviewCheckout, enabled = canCheckout, trailingArrow = false, modifier = Modifier.widthIn(min = 160.dp, max = 200.dp))
+                }
             }
-            Text(summary.subtotalCaption, fontSize = TazType.captionSize, color = TazColors.TextTertiary)
-            // Real checkout: a quote of the SERVER cart. Never the mock checkout, never a local bill.
-            val canCheckout = ServiceLocator.catalogCapabilities.checkoutIntegration && !summary.hasBlockedLines && !syncing && pending.isEmpty()
-            PillButton(
-                text = if (summary.hasBlockedLines) "Resolve items to continue" else "Review checkout",
-                onClick = {
-                    // An unresolved order attempt must be checked first: never open a new quote beside it.
-                    val os = ServiceLocator.orderStore.state.value
-                    if (os !is com.tazzzo.app.data.order.OrderState.Placing && os !is com.tazzzo.app.data.order.OrderState.Ambiguous) ServiceLocator.checkoutQuote.enter()
-                    app.navigate(Screen.Checkout)
-                },
-                enabled = canCheckout, disabledHint = null, modifier = Modifier.fillMaxWidth()
+            // A blocked cart's longer CTA takes its own full-width row so the label never wraps or clips at 320dp.
+            if (summary.hasBlockedLines) {
+                Spacer(Modifier.height(TazSpace.sm))
+                com.tazzzo.app.ui.common.TazzzoPrimaryButton(cta, onClick = actions.reviewCheckout, enabled = false, trailingArrow = false, modifier = Modifier.fillMaxWidth())
+            }
+            Text(
+                if (syncing) "Updating…" else summary.subtotalCaption,
+                fontSize = TazType.captionSize, color = TazColors.TextTertiary, modifier = Modifier.padding(top = TazSpace.xs)
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (confirmClear) "Tap again to clear your cart" else "Clear cart",
-                    fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Danger,
-                    modifier = Modifier.tazPressable(onClick = onClear, pressScale = TazPress.compact).padding(TazSpace.sm)
-                )
-                if (confirmClear) Text(
-                    "Cancel", fontSize = TazType.captionSize, color = TazColors.TextSecondary,
-                    modifier = Modifier.tazPressable(onClick = onCancelClear, pressScale = TazPress.compact).padding(TazSpace.sm)
-                )
-                if (syncing) Text("Updating…", fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+        }
+    }
+}
+
+/** One server line: photo well, title, issues, unit price + struck MRP, line total, and the stepper or the issue's recovery actions. */
+@Composable
+private fun CartLineCard(line: com.tazzzo.app.data.cart.CartItem, v: CartLineView, pending: PendingTarget?, onMinus: () -> Unit, onPlus: () -> Unit, onAction: (CartAction) -> Unit) {
+    val shown = when (pending) { is PendingTarget.Quantity -> pending.quantity; PendingTarget.Removing -> 0; null -> v.quantity }
+    Row(Modifier.fillMaxWidth().clip(TazRadius.tile).background(TazColors.Surface).padding(TazSpace.md), verticalAlignment = Alignment.Top) {
+        com.tazzzo.app.ui.common.CatalogProductImage(url = line.imageUrl, name = v.title, modifier = Modifier.width(72.dp).clip(TazRadius.card), contentPadding = 4.dp)
+        Spacer(Modifier.width(TazSpace.md))
+        Column(Modifier.weight(1f)) {
+            Text(v.title, fontSize = TazType.productNameSize, lineHeight = TazType.productNameLine, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            v.issues.forEach { Text(it, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Danger) }
+            Spacer(Modifier.height(TazSpace.xs))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
+                v.unitPriceLabel?.let { Text(it, fontSize = TazType.priceSize, fontWeight = TazType.priceWeight, color = TazColors.TextPrimary) }
+                v.mrpLabel?.let { Text(it, fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough) }
+            }
+            Spacer(Modifier.height(TazSpace.sm))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (v.blocked) {
+                    // Recovery depends on the issue: never "Remove" as the only way out of a recoverable one.
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(TazSpace.xs)) {
+                        v.actions.forEach { act ->
+                            val label = act.label()
+                            Box(
+                                Modifier.height(36.dp).clip(TazRadius.pill).background(if (act == CartAction.Remove) TazColors.DangerSoft else TazColors.GreenSoft)
+                                    .semantics { contentDescription = "$label ${v.title}" }
+                                    .tazPressable(onClick = { onAction(act) }, pressScale = TazPress.compact, role = Role.Button).padding(horizontal = TazSpace.md),
+                                contentAlignment = Alignment.Center
+                            ) { Text(label, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = if (act == CartAction.Remove) TazColors.Danger else TazColors.BrandEditorial, maxLines = 1) }
+                        }
+                    }
+                } else {
+                    CartStepper(v.title, shown, pending != null, v.canIncrease, onMinus, onPlus)
+                    Spacer(Modifier.weight(1f))
+                }
+                v.lineTotalLabel?.let { Text(it, fontSize = TazType.titleSize, fontWeight = FontWeight.Bold, color = TazColors.TextPrimary, maxLines = 1) }
             }
         }
     }
 }
 
+/** The cart's stepper: the compact deep-green pill (same callbacks as before; 44dp hit areas on − and +). */
 @Composable
-private fun CartLineRow(v: CartLineView, pending: PendingTarget?, onMinus: () -> Unit, onPlus: () -> Unit, onAction: (CartAction) -> Unit) {
-    val shown = when (pending) { is PendingTarget.Quantity -> pending.quantity; PendingTarget.Removing -> 0; null -> v.quantity }
-    Column(
-        Modifier.fillMaxWidth().clip(TazRadius.card).background(TazColors.Surface).padding(TazSpace.md),
-        verticalArrangement = Arrangement.spacedBy(TazSpace.xs)
-    ) {
-        Text(v.title, fontSize = TazType.productNameSize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        v.issues.forEach { Text(it, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.Danger) }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
-            v.unitPriceLabel?.let { Text(it, fontSize = TazType.priceSize, fontWeight = TazType.priceWeight, color = TazColors.TextPrimary) }
-            v.mrpLabel?.let { Text(it, fontSize = TazType.mrpSize, color = TazColors.TextTertiary, textDecoration = TextDecoration.LineThrough) }
-            Spacer(Modifier.weight(1f))
-            v.lineTotalLabel?.let { Text(it, fontSize = TazType.bodySize, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary) }
+private fun CartStepper(name: String, quantity: Int, busy: Boolean, canIncrease: Boolean, onMinus: () -> Unit, onPlus: () -> Unit) {
+    Row(Modifier.height(COMPACT_ADD).clip(TazRadius.pill).background(TazColors.BrandEditorial), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        CompactStepperTarget("Decrease quantity of $name", onMinus) { TazIcon(TazIcons.Minus, null, size = TazSize.iconXs, tint = TazColors.White) }
+        Text("$quantity", color = TazColors.White.copy(alpha = if (busy) 0.7f else 1f), fontSize = TazType.bodySize, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1, modifier = Modifier.widthIn(min = 22.dp))
+        CompactStepperTarget(if (canIncrease) "Increase quantity of $name" else "Maximum quantity of $name reached", { if (canIncrease) onPlus() }) {
+            TazIcon(TazIcons.Plus, null, size = TazSize.iconXs, tint = TazColors.White.copy(alpha = if (canIncrease) 1f else 0.4f))
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (v.blocked) {
-                // Recovery depends on the issue: never "Remove" as the only way out of a recoverable one.
-                Row(horizontalArrangement = Arrangement.spacedBy(TazSpace.sm)) {
-                    v.actions.forEach { act ->
-                        val label = act.label()
-                        Text(
-                            label, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold,
-                            color = if (act == CartAction.Remove) TazColors.Danger else TazColors.Success,
-                            modifier = Modifier.semantics { contentDescription = "$label ${v.title}" }
-                                .tazPressable(onClick = { onAction(act) }, pressScale = TazPress.compact, role = Role.Button)
-                                .padding(TazSpace.sm)
-                        )
-                    }
-                }
-            } else {
-                QuantityPill(v.title, shown, pending != null, v.canIncrease, onMinus, onPlus)
+    }
+}
+
+@Composable
+private fun CartSkeleton() {
+    Column(Modifier.fillMaxSize().padding(horizontal = TazSpace.lg).testTag("cartSkeleton"), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
+        repeat(3) {
+            Row(Modifier.fillMaxWidth().clip(TazRadius.tile).background(TazColors.Surface).padding(TazSpace.md)) {
+                Box(Modifier.size(72.dp).clip(TazRadius.card).background(TazColors.SurfaceSunken))
+                Spacer(Modifier.width(TazSpace.md))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(TazSpace.sm)) { SkeletonBlock(height = 14.dp); SkeletonBlock(width = 90.dp, height = 12.dp); SkeletonBlock(width = 110.dp, height = 36.dp, corner = 18.dp) }
             }
         }
     }
@@ -473,7 +533,7 @@ private fun CartAction.label(): String = when (this) {
 @Composable
 private fun CartFailurePanel(failure: CartFailure, onRetry: () -> Unit, onLogin: () -> Unit) {
     if (failure is CartFailure.Unauthenticated) {
-        EmptyState("🛒", "Log in to see your cart", "Your session ended.", "Log in", onAction = onLogin)
+        com.tazzzo.app.ui.common.EditorialEmptyState(TazIcons.Profile, com.tazzzo.app.ui.checkout.PurchaseCopy.CART_SIGNED_OUT_TITLE, "Your session ended.", "Log in", onAction = onLogin)
         return
     }
     val (title, hint) = when (failure) {
@@ -481,5 +541,7 @@ private fun CartFailurePanel(failure: CartFailure, onRetry: () -> Unit, onLogin:
         CartFailure.Unavailable -> "Cart is temporarily unavailable" to "Please try again shortly."
         else -> "Couldn't load your cart" to "Please try again."
     }
-    EmptyState("🛒", title, hint, "Try again", onAction = onRetry)
+    com.tazzzo.app.ui.common.EditorialEmptyState(TazIcons.Offline, title, hint, "Try again", onAction = onRetry)
 }
+
+private val CART_BAR_CLEARANCE = 120.dp

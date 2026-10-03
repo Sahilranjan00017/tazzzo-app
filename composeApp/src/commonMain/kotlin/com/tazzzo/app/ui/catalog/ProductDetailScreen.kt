@@ -283,7 +283,7 @@ private fun FloatingBack(onBack: () -> Unit, modifier: Modifier) {
 @Composable
 private fun PurchaseBar(product: CatalogProduct, f: PdpFacts, modifier: Modifier) {
     Row(
-        modifier.fillMaxWidth().padding(horizontal = TazSpace.lg).navigationBarsPadding().padding(bottom = TazSpace.md)
+        modifier.fillMaxWidth().background(TazColors.Cream).padding(horizontal = TazSpace.lg).navigationBarsPadding().padding(bottom = TazSpace.md, top = TazSpace.sm)
             .shadow(16.dp, TazRadius.sheetAll, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.16f))
             .clip(TazRadius.sheetAll).background(TazColors.Surface).padding(horizontal = TazSpace.lg, vertical = TazSpace.md).testTag("purchaseBar"),
         verticalAlignment = Alignment.CenterVertically
