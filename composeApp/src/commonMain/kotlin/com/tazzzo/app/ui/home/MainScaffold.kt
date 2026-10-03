@@ -76,7 +76,7 @@ fun MainScaffold() {
                 HomeTab.DEALS -> DealsTabContent()
                 HomeTab.ORDERS -> if (remote) com.tazzzo.app.ui.order.RemoteOrdersContent(inTab = true) else OrdersScreen()
                 HomeTab.ORDER_AGAIN -> OrderAgainTabContent()
-                HomeTab.PROFILE -> AccountTabContent()
+                HomeTab.PROFILE -> if (remote) com.tazzzo.app.ui.profile.RemoteProfileContent() else AccountTabContent()
             }
         }
         FloatingNavBar(Modifier.align(Alignment.BottomCenter))
