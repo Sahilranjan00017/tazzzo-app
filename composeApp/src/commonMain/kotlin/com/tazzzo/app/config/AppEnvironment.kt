@@ -48,7 +48,11 @@ object AppEnvironment {
         }
 
     val current: BuildEnvironment
-        get() = if (isDebug) (debugOverride ?: BuildEnvironment.DEV) else BuildEnvironment.PROD
+        get() = resolve(isDebug, debugOverride)
+
+    /** Pure form of [current]: a release build is always PROD, whatever override is offered. */
+    fun resolve(isDebug: Boolean, override: BuildEnvironment?): BuildEnvironment =
+        if (isDebug) (override ?: BuildEnvironment.DEV) else BuildEnvironment.PROD
 
     /** Base URL for the API gateway in this environment. */
     val gatewayBaseUrl: String get() = current.gatewayBaseUrl

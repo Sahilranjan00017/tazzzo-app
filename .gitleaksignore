@@ -1,0 +1,4 @@
+# Reviewed false positives: SharedPreferences key NAMES (not values) in PersistentStore.kt, matched by the generic-api-key entropy rule.
+068fb1340f39c78c76430a8467d66311a9afc00a:composeApp/src/commonMain/kotlin/com/tazzzo/app/data/local/PersistentStore.kt:generic-api-key:262
+c8f3d9540e1dac0da8291e1317a8100835f9e673:composeApp/src/commonMain/kotlin/com/tazzzo/app/data/local/PersistentStore.kt:generic-api-key:175
+cbffdf4b99c0acb3dcdf4cea8a8c4fc9db4ba2cb:composeApp/src/commonMain/kotlin/com/tazzzo/app/data/local/PersistentStore.kt:generic-api-key:138

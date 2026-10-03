@@ -1,5 +1,7 @@
 package com.tazzzo.app.analytics
 
+import com.tazzzo.app.config.AppEnvironment
+
 /**
  * Vendor-neutral analytics boundary.
  *
@@ -62,17 +64,43 @@ object NoopSink : AnalyticsSink {
     override fun track(name: String, props: Map<String, String>) {}
 }
 
-/** Development sink — visible in the device log for verification. */
-object DevLogSink : AnalyticsSink {
+/** Development sink: visible in the device log for verification. Prints nothing unless developer logging is allowed (debug builds). */
+class DevLogSink(
+    private val allowed: () -> Boolean = { AppEnvironment.allowsDeveloperLogging },
+    private val out: (String) -> Unit = { println(it) }
+) : AnalyticsSink {
     override fun track(name: String, props: Map<String, String>) {
-        println("TAZZZO-ANALYTICS $name ${props.entries.joinToString { "${it.key}=${it.value}" }}")
+        if (!allowed()) return
+        out("TAZZZO-ANALYTICS $name ${props.entries.joinToString { "${it.key}=${it.value}" }}")
     }
 }
 
+/** The sink a process starts with: the developer log in debug builds, silence in release. */
+fun defaultAnalyticsSink(developerLogging: Boolean): AnalyticsSink = if (developerLogging) DevLogSink() else NoopSink
+
+/**
+ * What may leave the analytics boundary in a RELEASE build. Customer and activity identifiers (order ids, raw search text,
+ * product ids, quote ids) and anything contact- or money-shaped are dropped before any sink sees them, so neither the
+ * device log nor a future vendor adapter receives them by accident. Debug builds keep the full payload for developers.
+ */
+object AnalyticsPolicy {
+    private val sensitiveKeys = setOf(
+        "query", "q", "order_id", "quote_id", "product_id", "sku_id", "customer_id", "session_id",
+        "phone", "email", "name", "address", "pin", "token", "otp", "items", "cart", "amount", "total", "price", "money", "transcript"
+    )
+
+    fun releaseSafe(props: Map<String, String>): Map<String, String> =
+        props.filterKeys { it.lowercase() !in sensitiveKeys }
+
+    fun apply(props: Map<String, String>, developerLogging: Boolean): Map<String, String> =
+        if (developerLogging) props else releaseSafe(props)
+}
+
 object Analytics {
-    var sink: AnalyticsSink = DevLogSink   // swap for the vendor adapter at launch
+    /** Release starts silent; debug starts with the developer log sink. A vendor adapter replaces it at launch. */
+    var sink: AnalyticsSink = defaultAnalyticsSink(AppEnvironment.allowsDeveloperLogging)
 
     fun track(name: String, props: Map<String, String> = emptyMap()) {
-        sink.track(name, props)
+        sink.track(name, AnalyticsPolicy.apply(props, AppEnvironment.allowsDeveloperLogging))
     }
 }

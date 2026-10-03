@@ -33,10 +33,20 @@ expect fun isMockCatalogRequested(): Boolean
  */
 expect fun demoStartSurface(): String?
 
+
+/**
+ * The single release gate for every demo / QA entry point (launch intents, environment variables, harness hooks).
+ * Platform actuals route their reads through here, so a release binary returns [default] whatever an external app,
+ * an intent extra or a process environment says. [allowed] is a parameter only so release behaviour is unit-testable.
+ */
+internal inline fun <T> devToolingOr(default: T, allowed: Boolean = com.tazzzo.app.config.AppEnvironment.allowsDevTooling, value: () -> T): T =
+    if (allowed) value() else default
+
 @Composable
 fun DemoTourRunner() {
     val app = LocalAppState.current
     LaunchedEffect(Unit) {
+        if (!com.tazzzo.app.config.AppEnvironment.allowsDevTooling) return@LaunchedEffect   // release: nothing below can run
         if (isDemoHomeEnabled()) { app.enterDemoHome(); return@LaunchedEffect }
         demoStartSurface()?.let { surface ->
             delay(3_000)                                    // Splash auto-routes at 1.8s

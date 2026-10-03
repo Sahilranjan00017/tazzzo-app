@@ -50,6 +50,7 @@ fun App() {
             enabled = appState.canHandleSystemBack,
             onBack = { appState.handleSystemBack() }
         )
+        com.tazzzo.app.theme.SystemReduceMotionEffect()
         PersistenceRunner()
         AuthSessionRunner(appState)
         CatalogRunner()
