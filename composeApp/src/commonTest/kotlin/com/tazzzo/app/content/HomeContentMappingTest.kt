@@ -63,7 +63,7 @@ class HomeContentMappingTest {
     }
 
     @Test fun theGridCapAndTheTitleBoundsApply() {
-        val grid = HomeContentDto(listOf(HomeBlockDto("G1", "CATEGORY_GRID", "  Aisles  ", ids = (1..15).map { "TZV-%06d".format(it) }))).toDomain().blocks.single() as HomeBlock.CategoryGrid
+        val grid = HomeContentDto(listOf(HomeBlockDto("G1", "CATEGORY_GRID", "  Aisles  ", ids = (1..15).map { "TZV-" + it.toString().padStart(6, '0') }))).toDomain().blocks.single() as HomeBlock.CategoryGrid
         assertEquals(12, grid.nodeIds.size); assertEquals("Aisles", grid.title)
         val long = HomeContentDto(listOf(banner().copy(title = "x".repeat(500)))).toDomain().blocks.single()
         assertEquals(80, long.title.length)
