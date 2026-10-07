@@ -38,17 +38,32 @@ class HomeContentHolderTest {
         now += 31_000; h.ensure(); runCurrent(); assertEquals(2, loads)
     }
 
-    @Test fun aFailureIsRecordedNotMaskedAndRefreshRetries() = runTest {
-        var fail = true
+    @Test fun aFailureIsRecordedNotMaskedAndIsNotRetriedOnEveryVisitWithinTheFreshnessWindow() = runTest {
+        var fail = true; var loads = 0
         val h = HomeContentHolder(backgroundScope, {
-            if (fail) throw ApiException(ApiError.Http(400, "INVALID_REQUEST", null, false, null)) else HomeContent.EMPTY
+            loads++; if (fail) throw ApiException(ApiError.Http(400, "INVALID_REQUEST", null, false, null)) else HomeContent.EMPTY
         }, { _, _ -> null }, pin, { now })
         h.ensure(); runCurrent()
         assertEquals(HomeContentState.Failed(CatalogFailure.InvalidRequest), h.state.value)
-        h.ensure(); runCurrent()
-        assertIs<HomeContentState.Failed>(h.state.value, "ensure does not hammer a failed endpoint")
+        repeat(5) { h.ensure(); runCurrent() }
+        assertEquals(1, loads, "a backend that cannot serve the Home is not asked again on every visit to the tab")
+        now += 61_000; h.ensure(); runCurrent()
+        assertEquals(2, loads, "after the window it is asked once more")
         fail = false; h.refresh(); runCurrent()
+        assertEquals(3, loads); assertIs<HomeContentState.Content>(h.state.value)
+    }
+
+    @Test fun aStaleCopyStaysOnScreenWhileItIsReReadAndSurvivesAFailedReRead() = runTest {
+        var fail = false
+        val h = HomeContentHolder(backgroundScope, { if (fail) throw ApiException(ApiError.Network) else rail }, { id, _ -> detail(id) }, pin, { now })
+        h.ensure(); runCurrent()
         assertIs<HomeContentState.Content>(h.state.value)
+        now += 61_000; fail = true
+        h.ensure()
+        assertIs<HomeContentState.Content>(h.state.value, "the blocks do not blank out while the re-read is in flight")
+        runCurrent()
+        assertIs<HomeContentState.Content>(h.state.value, "a failed re-read keeps the published copy")
+        assertIs<PagedState.Content<CatalogProduct>>(h.rails.value["R1"], "and its rails")
     }
 
     @Test fun railCardsComeFromThePerProductReadAndAMissingProductIsSimplyAbsent() = runTest {

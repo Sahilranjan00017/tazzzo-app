@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 class HomeContentMappingTest {
 
     private fun banner(id: String = "B1", image: String? = "https://cdn.example.test/b.jpg", link: String? = "product:TZP-1") =
-        HomeBlockDto(blockId = id, type = "BANNER", title = "Festive", imageUrl = image, link = link)
+        HomeBlockDto(blockId = id, type = "BANNER", title = "Festive", imageUrl = image, link = link, ids = null)
 
     @Test fun theLinkGrammarIsClosed() {
         assertEquals(ContentLink.Product("TZP-1"), ContentLink.parse("product:TZP-1"))
@@ -55,9 +55,28 @@ class HomeContentMappingTest {
     }
 
     @Test fun duplicateBlockIdsBlankIdsAndMoreThanTheCapAreIgnored() {
-        val many = (1..30).map { banner(id = "B$it") } + banner(id = "B1") + banner(id = " ")
-        val c = HomeContentDto(many).toDomain()
-        assertEquals(HomeBlock.MAX_BLOCKS, c.blocks.size)
-        assertEquals(c.blocks.size, c.blocks.map { it.blockId }.toSet().size)
+        val dup = HomeContentDto(listOf(banner(id = "B1"), banner(id = "B2"), banner(id = "B1"), banner(id = " "), banner(id = " B2 "))).toDomain()
+        assertEquals(listOf("B1", "B2"), dup.blocks.map { it.blockId }, "a repeated id (even padded) keeps its first block; a blank id is skipped")
+        val many = HomeContentDto((1..30).map { banner(id = "B$it") }).toDomain()
+        assertEquals(20, many.blocks.size)
+        assertEquals((1..20).map { "B$it" }, many.blocks.map { it.blockId })
+    }
+
+    @Test fun theGridCapAndTheTitleBoundsApply() {
+        val grid = HomeContentDto(listOf(HomeBlockDto("G1", "CATEGORY_GRID", "  Aisles  ", ids = (1..15).map { "TZV-%06d".format(it) }))).toDomain().blocks.single() as HomeBlock.CategoryGrid
+        assertEquals(12, grid.nodeIds.size); assertEquals("Aisles", grid.title)
+        val long = HomeContentDto(listOf(banner().copy(title = "x".repeat(500)))).toDomain().blocks.single()
+        assertEquals(80, long.title.length)
+    }
+
+    @Test fun explicitNullsFromTheWireAreTreatedAsAbsent() {
+        val c = HomeContentDto(listOf(
+            HomeBlockDto(blockId = "R1", type = "PRODUCT_RAIL", title = null, ids = listOf("TZP-1")),
+            HomeBlockDto(blockId = "R2", type = "PRODUCT_RAIL", title = "x", ids = null),
+            HomeBlockDto(blockId = null, type = "BANNER", title = "x", imageUrl = "https://cdn.example.test/b.jpg"),
+            HomeBlockDto(blockId = "B3", type = null, title = "x", imageUrl = "https://cdn.example.test/b.jpg")
+        )).toDomain()
+        assertEquals(listOf("R1"), c.blocks.map { it.blockId })
+        assertEquals("", c.blocks[0].title)
     }
 }

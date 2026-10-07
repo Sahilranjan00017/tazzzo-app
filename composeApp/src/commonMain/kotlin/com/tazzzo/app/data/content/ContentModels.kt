@@ -14,12 +14,12 @@ import kotlinx.serialization.Serializable
 @Serializable internal data class HomeContentDto(val blocks: List<HomeBlockDto> = emptyList(), val requestId: String? = null)
 
 @Serializable internal data class HomeBlockDto(
-    val blockId: String,
-    val type: String,
-    val title: String = "",
+    val blockId: String? = null,
+    val type: String? = null,
+    val title: String? = null,
     val imageUrl: String? = null,
     val link: String? = null,
-    val ids: List<String> = emptyList()
+    val ids: List<String>? = null
 )
 
 /** Where a banner leads. The grammar is closed on the backend too; anything else is "nowhere" (the banner is not tappable). */
@@ -80,20 +80,25 @@ internal fun HomeContentDto.toDomain(): HomeContent {
     val seen = HashSet<String>()
     for (b in blocks) {
         if (out.size >= HomeBlock.MAX_BLOCKS) break
-        if (b.blockId.isBlank() || !seen.add(b.blockId)) continue
-        val title = b.title.trim()
+        val blockId = b.blockId?.trim().orEmpty()
+        if (blockId.isEmpty() || !seen.add(blockId)) continue
+        val title = b.title?.trim().orEmpty().take(MAX_TITLE)
+        val ids = b.ids.orEmpty()
         val block: HomeBlock? = when (b.type) {
-            "BANNER" -> safeImageUrl(b.imageUrl)?.let { HomeBlock.Banner(b.blockId, title, it, ContentLink.parse(b.link)) }
-            "PRODUCT_RAIL" -> ids(b.ids, Regex("^TZP-[0-9]+$"), HomeBlock.MAX_RAIL_IDS).takeIf { it.isNotEmpty() }
-                ?.let { HomeBlock.ProductRail(b.blockId, title, it) }
-            "CATEGORY_GRID" -> ids(b.ids, Regex("^TZ[SCGV]-[0-9]{6}$"), HomeBlock.MAX_GRID_IDS).takeIf { it.isNotEmpty() }
-                ?.let { HomeBlock.CategoryGrid(b.blockId, title, it) }
+            "BANNER" -> safeImageUrl(b.imageUrl)?.let { HomeBlock.Banner(blockId, title, it, ContentLink.parse(b.link)) }
+            "PRODUCT_RAIL" -> ids(ids, Regex("^TZP-[0-9]+$"), HomeBlock.MAX_RAIL_IDS).takeIf { it.isNotEmpty() }
+                ?.let { HomeBlock.ProductRail(blockId, title, it) }
+            "CATEGORY_GRID" -> ids(ids, Regex("^TZ[SCGV]-[0-9]{6}$"), HomeBlock.MAX_GRID_IDS).takeIf { it.isNotEmpty() }
+                ?.let { HomeBlock.CategoryGrid(blockId, title, it) }
             else -> null
         }
         if (block != null) out += block
     }
     return HomeContent(out)
 }
+
+/** The backend caps a block title at 80 characters; the app never lays out more than that from server text. */
+private const val MAX_TITLE = 80
 
 private fun ids(raw: List<String>, shape: Regex, max: Int): List<String> =
     raw.asSequence().map { it.trim() }.filter { shape.matches(it) }.distinct().take(max).toList()

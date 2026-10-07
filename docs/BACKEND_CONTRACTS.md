@@ -57,7 +57,10 @@ Every product payload must include:
   grammar `product:<id>` | `category:<node id>` | `search:<text>` and anything else leaves the banner untappable
   (`search:` is untappable today — the Search screen cannot open on a query); rails load their cards through
   `GET /v1/products/{id}` for the current PIN (a 404 is simply absent, at most 12 ids); grids show only ids that are
-  loaded root nodes. A failed or empty read shows nothing — the catalogue sections stand on their own.
+  loaded root nodes (a `category:` link to a non-root node opens its listing titled "Products"). A failed or empty read
+  shows nothing — the catalogue sections stand on their own; a failure is not retried for 60 s; a stale copy stays on
+  screen while re-read. Backend-side bounds (title ≤ 80, rail ≤ 20 ids, `TZP-[A-Za-z0-9-]{1,40}`) are tighter or
+  looser than the app's (80 / 12 / numeric ids) — the app renders at most what it validates.
 - Backend dependency: the `channel` parameter exists from backend PR #96 (multichannel content). An older backend
   answers 400 to it; the app then shows no published blocks (no error surface), which is the documented degraded state.
 

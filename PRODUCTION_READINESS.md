@@ -45,16 +45,25 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
   a query; rails load at most 12 cards through the PIN-aware product read
   (404 = absent, bounded parallelism 4); grids show only loaded root nodes; a
   failed or empty read shows NOTHING (no error surface, the catalogue sections
-  stand alone). Verified: Android JVM unit tests 1,061 / 0 failures (15 new in
-  `HomeContentMappingTest`, `RemoteContentDataSourceTest`,
-  `HomeContentHolderTest`: link grammar, order, caps/dedup, request shape,
-  400/429/503 mapping, single-flight + 60 s freshness, rail 404 handling,
-  bounded parallelism, PIN change reload, anonymous even with a session);
+  stand alone). A copy OR a failure younger than 60 s is not re-requested
+  (visiting the Home tab repeatedly against a backend that cannot serve it
+  sends nothing more); a stale copy stays on screen while re-read and survives
+  a failed re-read; rail loading is serialised (a PIN change and a content
+  load never run two loaders). Verified: Android JVM unit tests 1,065 / 0
+  failures (19 new in `HomeContentMappingTest`, `RemoteContentDataSourceTest`,
+  `HomeContentHolderTest`: link grammar, order, block dedupe within the cap,
+  20-block / 12-id / 80-char title bounds, wire nulls treated as absent,
+  request shape, 400/429/503 mapping, single-flight + 60 s freshness for
+  copies and failures, stale copy kept, rail 404 handling, bounded
+  parallelism, PIN change reload, anonymous even with a session);
   `assembleDebug` built (24.7 MB debug APK); iOS simulator tests 1,061 / 0 and
-  `linkDebugFrameworkIosSimulatorArm64` linked (Xcode 26.4.1); 8 mutation
-  probes (http image allowed, open link grammar, rail cap dropped, channel=web,
-  authenticated read, no freshness window, rail failure fails Home, unbounded
-  parallelism) all killed by the new tests. Backend dependency:
+  `linkDebugFrameworkIosSimulatorArm64` linked (Xcode 26.4.1) at the first
+  head; 14 mutation probes (http image allowed, open link grammar, rail cap
+  dropped, channel=web, authenticated read, no freshness window, rail failure
+  fails Home, unbounded parallelism, no block dedupe, grid cap, block cap,
+  title trim, re-fetch after failure, stale copy blanked) all killed by the
+  tests. Independent review of the first head (PASS, 2 MEDIUM) led to the
+  failure-window, stale-copy and rail-serialisation changes above. Backend dependency:
   `channel` exists from backend PR #96; an older backend answers 400 and the
   app shows no published blocks (the documented degraded state). Not done:
   banner desktop/mobile variants (backend D4), `search:` deep link, click

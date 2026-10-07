@@ -29,7 +29,8 @@ class RemoteContentDataSourceTest {
         {"blockId":"B1","type":"BANNER","title":"Festive staples","imageUrl":"https://cdn.example.test/festive.jpg","link":"category:TZV-000037"},
         {"blockId":"R1","type":"PRODUCT_RAIL","title":"Weekly picks","ids":["TZP-1","TZP-2"]},
         {"blockId":"G1","type":"CATEGORY_GRID","title":"Aisles","ids":["TZS-000001"]},
-        {"blockId":"F1","type":"FAQ","title":"ignored"}],"requestId":"req_c"}"""
+        {"blockId":"F1","type":"FAQ","title":"ignored"},
+        {"blockId":"N1","type":"PRODUCT_RAIL","title":null,"ids":null}],"requestId":"req_c"}"""
 
     private fun source(seen: MutableList<HttpRequestData> = mutableListOf(), body: String = home, status: HttpStatusCode = HttpStatusCode.OK) =
         RemoteContentDataSource(mockApi { req -> seen += req; respond(body, status, JSON) }) { installationId() } to seen
