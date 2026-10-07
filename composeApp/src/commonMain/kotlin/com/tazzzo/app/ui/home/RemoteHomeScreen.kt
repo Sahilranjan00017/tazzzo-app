@@ -57,6 +57,10 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.address.BookState
 import com.tazzzo.app.data.catalog.CatalogNode
+import com.tazzzo.app.data.content.ContentLink
+import com.tazzzo.app.data.content.HomeBlock
+import com.tazzzo.app.data.content.HomeContentState
+import com.tazzzo.app.ui.common.CatalogProductImage
 import com.tazzzo.app.data.catalog.CatalogProduct
 import com.tazzzo.app.data.catalog.NodesState
 import com.tazzzo.app.data.catalog.PagedState
@@ -111,9 +115,16 @@ fun RemoteHomeContent() {
     LaunchedEffect(firstRoot?.id) { firstRoot?.let { rail.open(it.id) } }
     val railState by rail.state.collectAsState()
 
+    // The CMS-published Home: fetched once per minute at most, re-read for the PIN (cards are PIN-aware); a failure shows nothing.
+    val published = ServiceLocator.homeContent
+    LaunchedEffect(Unit) { published.ensure() }
+    val contentState by published.state.collectAsState()
+    val contentRails by published.rails.collectAsState()
+
     val selectedId by ServiceLocator.deliveryLocation.selectedAddressId.collectAsState()
     val book by ServiceLocator.addressBook.state.collectAsState()
     val pin by ServiceLocator.launchContext.pin.collectAsState()
+    LaunchedEffect(pin) { published.onPinChanged() }
     val serviceability by ServiceLocator.launchContext.state.collectAsState()
     val cartState by ServiceLocator.cart.state.collectAsState()
     val selected = (book as? BookState.Loaded)?.addresses?.firstOrNull { it.addressId == selectedId }
@@ -125,8 +136,16 @@ fun RemoteHomeContent() {
         actions = HomeActions(
             openLocation = { app.navigate(Screen.Addresses) }, openCart = { app.navigate(Screen.Cart) }, openSearch = { app.navigate(Screen.Search) },
             openShop = { app.homeTab = HomeTab.SHOP }, openCategory = { app.navigate(Screen.CategoryDetail(it.id)) },
-            openProduct = { app.navigate(Screen.ProductDetail(it.productId)) }, retryCategories = { browser.retryRoot() }
-        )
+            openProduct = { app.navigate(Screen.ProductDetail(it.productId)) }, retryCategories = { browser.retryRoot() },
+            openLink = { link ->
+                when (link) {
+                    is ContentLink.Product -> app.navigate(Screen.ProductDetail(link.productId))
+                    is ContentLink.Category -> app.navigate(Screen.CategoryDetail(link.nodeId))
+                    is ContentLink.Search -> app.navigate(Screen.Search)   // the search screen has no pre-filled query yet (see linkIsTappable)
+                }
+            }
+        ),
+        content = HomeContentUi(contentState, contentRails)
     )
 }
 
@@ -135,20 +154,46 @@ data class HomeHeaderData(val locationLabel: String, val statusLine: String?, va
 
 class HomeActions(
     val openLocation: () -> Unit, val openCart: () -> Unit, val openSearch: () -> Unit, val openShop: () -> Unit,
-    val openCategory: (CatalogNode) -> Unit, val openProduct: (CatalogProduct) -> Unit, val retryCategories: () -> Unit
+    val openCategory: (CatalogNode) -> Unit, val openProduct: (CatalogProduct) -> Unit, val retryCategories: () -> Unit,
+    val openLink: (ContentLink) -> Unit = {}
 )
+
+/** The published Home as the layout sees it: the blocks, and each product rail's cards by block id. */
+data class HomeContentUi(val state: HomeContentState, val rails: Map<String, PagedState<CatalogProduct>>) {
+    companion object { val NONE = HomeContentUi(HomeContentState.Idle, emptyMap()) }
+}
+
+/**
+ * A banner is tappable only when its link leads somewhere this app can actually open with the link's own meaning.
+ * `search:<text>` is published for the website's search page; the app's Search screen cannot yet open on a query, so
+ * sending the customer to an empty search would misrepresent the banner — it stays a picture until that exists.
+ */
+fun linkIsTappable(link: ContentLink?): Boolean = link is ContentLink.Product || link is ContentLink.Category
 
 /** The reference layout, independent of where its data comes from (so evidence/tests can render it with sample state). */
 @Composable
-fun HomeScreenLayout(header: HomeHeaderData, root: NodesState, rail: PagedState<CatalogProduct>, actions: HomeActions, banners: @Composable () -> Unit = {}) {
+fun HomeScreenLayout(
+    header: HomeHeaderData, root: NodesState, rail: PagedState<CatalogProduct>, actions: HomeActions, banners: @Composable () -> Unit = {},
+    content: HomeContentUi = HomeContentUi.NONE
+) {
+    val blocks = (content.state as? HomeContentState.Content)?.content?.blocks.orEmpty()
     LazyColumn(Modifier.fillMaxSize().background(TazColors.Cream)) {
         item { HomeHeader(header, actions.openLocation, actions.openCart) }
         item { banners() }
         item { HomeSearchShell(onClick = actions.openSearch) }
+        // The CMS-published blocks, in the backend's display order, before the editorial plates. Nothing published = nothing here.
+        items(blocks, key = { "cms:" + it.blockId }) { block ->
+            when (block) {
+                is HomeBlock.Banner -> HomeCmsBanner(block, onOpen = actions.openLink)
+                is HomeBlock.ProductRail -> HomeProductRail(content.rails[block.blockId] ?: PagedState.LoadingFirst, title = block.title,
+                    onSeeAll = null, onOpen = actions.openProduct)
+                is HomeBlock.CategoryGrid -> HomeCmsCategoryGrid(block, root, onOpen = actions.openCategory)
+            }
+        }
         item { HomeHero(onShop = actions.openShop) }
         item { HomeCategoryRow(root, onOpen = actions.openCategory, onRetry = actions.retryCategories) }
         item { HomeQualityBanner(onShop = actions.openShop) }
-        item { HomeProductRail(rail, onSeeAll = actions.openShop, onOpen = actions.openProduct) }
+        item { HomeProductRail(rail, title = HomeCopy.RAIL_TITLE, onSeeAll = actions.openShop, onOpen = actions.openProduct) }
         item { HomeBulkBand(onShop = actions.openShop) }
         item { Spacer(Modifier.height(TazSize.floatingNavClearance)) }
     }
@@ -280,13 +325,13 @@ private fun HomeQualityBanner(onShop: () -> Unit) {
 // ---- product rail ---------------------------------------------------------------------------------------------------
 
 @Composable
-private fun HomeProductRail(state: PagedState<CatalogProduct>, onSeeAll: () -> Unit, onOpen: (CatalogProduct) -> Unit) {
+private fun HomeProductRail(state: PagedState<CatalogProduct>, title: String, onSeeAll: (() -> Unit)?, onOpen: (CatalogProduct) -> Unit) {
     val items = (state as? PagedState.Content)?.items.orEmpty()
     if (state !is PagedState.LoadingFirst && items.isEmpty()) return      // nothing truthful to show: no rail, no filler
     Column(Modifier.fillMaxWidth().padding(top = TazSpace.md)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = TazSpace.lg), verticalAlignment = Alignment.CenterVertically) {
-            EditorialText(listOf(plain(HomeCopy.RAIL_TITLE)), size = TazType.editorialSectionSize, lineHeight = TazType.editorialSectionLine, color = TazColors.TextPrimary, textAlign = TextAlign.Start, modifier = Modifier.weight(1f))
-            Row(Modifier.clip(TazRadius.chip).tazPressable(onClick = onSeeAll, pressScale = TazPress.compact).padding(TazSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            EditorialText(listOf(plain(title)), size = TazType.editorialSectionSize, lineHeight = TazType.editorialSectionLine, color = TazColors.TextPrimary, textAlign = TextAlign.Start, modifier = Modifier.weight(1f))
+            if (onSeeAll != null) Row(Modifier.clip(TazRadius.chip).tazPressable(onClick = onSeeAll, pressScale = TazPress.compact).padding(TazSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                 Text(HomeCopy.RAIL_SEE_ALL, fontFamily = tazEditorialFamily(), fontSize = 14.sp, color = TazColors.TextPrimary)
                 Spacer(Modifier.width(TazSpace.xs))
                 Icon(TazIcons.Forward, contentDescription = null, tint = TazColors.TextPrimary, modifier = Modifier.size(12.dp))
@@ -300,6 +345,45 @@ private fun HomeProductRail(state: PagedState<CatalogProduct>, onSeeAll: () -> U
                 // The canonical card (ui/catalog/ProductCard.kt) with the reference's round well: photos arrive through the shared pipeline.
                 items(items, key = { it.skuId }) { p -> TazProductCard(p, onClick = { onOpen(p) }, width = CARD_W, wellShape = CircleShape) }
             }
+        }
+    }
+}
+
+// ---- CMS-published blocks -------------------------------------------------------------------------------------------
+
+/** A published banner: the CMS image at the quality banner's ratio, its title as the only overlay, tappable when its link is one this app can open. */
+@Composable
+private fun HomeCmsBanner(block: HomeBlock.Banner, onOpen: (ContentLink) -> Unit) {
+    val link = block.link?.takeIf { linkIsTappable(it) }
+    val base = Modifier.padding(horizontal = TazSpace.lg, vertical = TazSpace.sm).fillMaxWidth().clip(TazRadius.tile)
+    val m = if (link != null) base.tazPressable(onClick = { onOpen(link) }, pressScale = TazPress.card).semantics { contentDescription = block.title.ifBlank { "Banner" } }
+            else base.semantics { contentDescription = block.title.ifBlank { "Banner" } }
+    Box(m) {
+        CatalogProductImage(block.imageUrl, block.title, modifier = Modifier.fillMaxWidth(), aspectRatio = 528f / 178f, contentPadding = 0.dp,
+            contentScale = ContentScale.Crop, background = TazColors.SurfaceSunken)
+        if (block.title.isNotBlank()) Box(
+            Modifier.matchParentSize().padding(TazSpace.lg), contentAlignment = Alignment.BottomStart
+        ) {
+            Text(block.title, fontFamily = tazEditorialFamily(), fontSize = 20.sp, color = TazColors.White, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.background(TazColors.TextPrimary.copy(alpha = 0.55f), TazRadius.chip).padding(horizontal = TazSpace.sm, vertical = TazSpace.xs))
+        }
+    }
+}
+
+/**
+ * A published category grid, rendered from the REAL taxonomy already loaded for the category row: a published id that is
+ * not a loaded root node is skipped rather than shown without a name. Nothing to show = no section.
+ */
+@Composable
+private fun HomeCmsCategoryGrid(block: HomeBlock.CategoryGrid, root: NodesState, onOpen: (CatalogNode) -> Unit) {
+    val loaded = (root as? NodesState.Loaded)?.items.orEmpty().associateBy { it.id }
+    val nodes = block.nodeIds.mapNotNull { loaded[it] }
+    if (nodes.isEmpty()) return
+    Column(Modifier.fillMaxWidth().padding(top = TazSpace.sm)) {
+        if (block.title.isNotBlank()) EditorialText(listOf(plain(block.title)), size = TazType.editorialSectionSize, lineHeight = TazType.editorialSectionLine,
+            color = TazColors.TextPrimary, textAlign = TextAlign.Start, modifier = Modifier.padding(horizontal = TazSpace.lg))
+        LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = TazSpace.lg, vertical = TazSpace.md), horizontalArrangement = Arrangement.spacedBy(TazSpace.lg)) {
+            items(nodes, key = { it.id }) { node -> CategoryCircle(node, onClick = { onOpen(node) }) }
         }
     }
 }

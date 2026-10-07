@@ -34,6 +34,32 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-07 PUBLISHED HOME CONTENT (backend P6 / app-integration). Home now
+  renders the CMS-published blocks of `GET /v1/content/home?channel=app`
+  (`data/content/`: DTO → `HomeContent` mapping, `RemoteContentDataSource`,
+  `HomeContentHolder`; `RemoteHomeScreen` renders banners, product rails and
+  category grids in the backend's order before the editorial plates). Truthful
+  by construction: a banner without an https image is not shown; a link outside
+  the closed grammar (`product:` | `category:` | `search:`) leaves the banner
+  untappable, and `search:` is untappable until the Search screen can open on
+  a query; rails load at most 12 cards through the PIN-aware product read
+  (404 = absent, bounded parallelism 4); grids show only loaded root nodes; a
+  failed or empty read shows NOTHING (no error surface, the catalogue sections
+  stand alone). Verified: Android JVM unit tests 1,061 / 0 failures (15 new in
+  `HomeContentMappingTest`, `RemoteContentDataSourceTest`,
+  `HomeContentHolderTest`: link grammar, order, caps/dedup, request shape,
+  400/429/503 mapping, single-flight + 60 s freshness, rail 404 handling,
+  bounded parallelism, PIN change reload, anonymous even with a session);
+  `assembleDebug` built (24.7 MB debug APK); iOS simulator tests 1,061 / 0 and
+  `linkDebugFrameworkIosSimulatorArm64` linked (Xcode 26.4.1); 8 mutation
+  probes (http image allowed, open link grammar, rail cap dropped, channel=web,
+  authenticated read, no freshness window, rail failure fails Home, unbounded
+  parallelism) all killed by the new tests. Backend dependency:
+  `channel` exists from backend PR #96; an older backend answers 400 and the
+  app shows no published blocks (the documented degraded state). Not done:
+  banner desktop/mobile variants (backend D4), `search:` deep link, click
+  analytics.
+
 - 2026-09-01 PRE-BACKEND PREPARATION — Wave 0. Project placed under git for the
   first time; baseline commit "PRE-BACKEND BASELINE" records the verified state
   (56 Kotlin files, 11,767 lines, 41 tests / 0 failures) as the rollback point.

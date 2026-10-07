@@ -260,6 +260,11 @@ object ServiceLocator {
         val source = com.tazzzo.app.data.catalog.RemoteCatalogDataSource(catalogClient, installationId)
         com.tazzzo.app.data.catalog.CatalogReader(source, com.tazzzo.app.data.catalog.TaxonomyCache(source))
     }
+    /** The CMS-published Home (`GET /v1/content/home?channel=app`): banners, product rails and category grids. */
+    val homeContent: com.tazzzo.app.data.content.HomeContentHolder by lazy {
+        val source = com.tazzzo.app.data.content.RemoteContentDataSource(catalogClient, installationId)
+        com.tazzzo.app.data.content.HomeContentHolder(authScope, source::home, remoteCatalog::product, launchContext.pin)
+    }
     val launchContext: com.tazzzo.app.data.catalog.LaunchContext by lazy {
         com.tazzzo.app.data.catalog.LaunchContext(
             com.tazzzo.app.data.catalog.PersistentPinStore(persistentStoreForCatalog),

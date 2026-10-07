@@ -46,6 +46,21 @@ Every product payload must include:
 - Consumer: `AppConfig.coins` (`CoinRules`). Current values are development
   configuration, not approved financial policy.
 
+## Consumed from the running backend (not faked)
+
+### 7. Published Home content — `GET /v1/content/home?channel=app`
+`{ blocks: [ { blockId, type: "BANNER|PRODUCT_RAIL|CATEGORY_GRID", title, imageUrl?, link?, ids? } ], requestId }`
+- Consumer: `data/content/RemoteContentDataSource` → `HomeContentHolder` → `RemoteHomeScreen` (the blocks render in the
+  backend's order, before the editorial plates). Anonymous, carries the installation id, names the platform `app`;
+  the backend decides what the app sees (APP_ONLY or BOTH), never the app.
+- Rendering is as published and nothing more: a banner needs an `https` image or it is not shown; `link` is the closed
+  grammar `product:<id>` | `category:<node id>` | `search:<text>` and anything else leaves the banner untappable
+  (`search:` is untappable today — the Search screen cannot open on a query); rails load their cards through
+  `GET /v1/products/{id}` for the current PIN (a 404 is simply absent, at most 12 ids); grids show only ids that are
+  loaded root nodes. A failed or empty read shows nothing — the catalogue sections stand on their own.
+- Backend dependency: the `channel` parameter exists from backend PR #96 (multichannel content). An older backend
+  answers 400 to it; the app then shows no published blocks (no error surface), which is the documented degraded state.
+
 ## Model change log
 
 ### 2026-08-30 — `Order.payment`
