@@ -6,6 +6,7 @@ import com.tazzzo.app.data.catalog.CatalogProduct
 import com.tazzzo.app.data.catalog.CatalogProductDetail
 import com.tazzzo.app.data.catalog.PagedState
 import com.tazzzo.app.data.catalog.Pincode
+import com.tazzzo.app.data.catalog.RetryPolicy
 import com.tazzzo.app.data.catalog.toCatalogFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -13,7 +14,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -39,8 +42,10 @@ sealed interface HomeContentState {
  * **When it re-reads.** One fetch at a time. [ensure] (Home shown, app back in the foreground) reads when nothing was
  * read yet, when the last success is older than [freshMs] (the backend advertises `max-age=60`), or after a failure once
  * its backoff has passed: [retryBaseMs], doubling per consecutive failure, capped at [freshMs], and never sooner than a
- * 429's `Retry-After`. [refresh] (pull-to-refresh) reads now whatever the age — except inside a 429 window — and also
- * re-reads every rail card. A stale copy stays on screen while it is re-read and survives a failed re-read.
+ * 429's `Retry-After` (itself capped at [RetryPolicy.MAX_RATE_LIMIT_WAIT_SECONDS], as everywhere in the app).
+ * [refresh] (pull-to-refresh) reads now whatever the age — except inside a 429 window, which is announced on
+ * [pullRefused] — and re-reads every rail card older than [pullCardMinAgeMs], so repeated pulls cost at most one full
+ * card sweep per [pullCardMinAgeMs]. A stale copy stays on screen while it is re-read and survives a failed re-read.
  *
  * **Rails.** Cards come from the same per-product read the PDP uses (`GET /v1/products/{id}`, PIN-aware, 404 = not
  * shown) with bounded parallelism, through a per-PIN card cache: a re-read keeps every rail on screen, renders ids it
@@ -64,7 +69,8 @@ class HomeContentHolder(
     private val parallelism: Int = 4,
     private val resolveNodes: suspend (Collection<String>) -> Map<String, CatalogNode> = { emptyMap() },
     private val retryBaseMs: Long = 10_000L,
-    private val cardFreshMs: Long = 300_000L
+    private val cardFreshMs: Long = 300_000L,
+    private val pullCardMinAgeMs: Long = 30_000L
 ) {
     private val _state = MutableStateFlow<HomeContentState>(HomeContentState.Idle)
     val state: StateFlow<HomeContentState> = _state
@@ -80,6 +86,10 @@ class HomeContentHolder(
     private val _refreshing = MutableStateFlow(false)
     /** True while a customer's [refresh] is being answered (drives the pull-to-refresh indicator, nothing else). */
     val refreshing: StateFlow<Boolean> = _refreshing
+
+    private val _pullRefused = MutableSharedFlow<CatalogFailure>(extraBufferCapacity = 1)
+    /** A pull that sent nothing because the backend asked us to wait (429): the screen tells the customer so. */
+    val pullRefused: SharedFlow<CatalogFailure> = _pullRefused
 
     // ---- confined to [scope] ----
     private var loading = false
@@ -102,7 +112,7 @@ class HomeContentHolder(
 
     /** Pull-to-refresh: read now and re-read every card; joins a read already in flight; nothing inside a 429 window. */
     fun refresh() = command {
-        if (nowMs() < rateLimitedUntilMs) return@command
+        if (nowMs() < rateLimitedUntilMs) { _pullRefused.tryEmit(CatalogFailure.RateLimited(null)); return@command }
         customerWaiting = true
         _refreshing.value = true
         if (!loading) start()
@@ -150,7 +160,9 @@ class HomeContentHolder(
                 val failure = e.toCatalogFailure()
                 failures++
                 val backoff = minOf(retryBaseMs shl minOf(failures - 1, 16), freshMs)
-                val retryAfterMs = (failure as? CatalogFailure.RateLimited)?.retryAfterSeconds?.let { it * 1000 } ?: 0L
+                // bounded like RetryPolicy: a hostile or broken Retry-After can neither park the Home for hours nor overflow
+                val retryAfterMs = (failure as? CatalogFailure.RateLimited)?.retryAfterSeconds
+                    ?.coerceIn(0L, RetryPolicy.MAX_RATE_LIMIT_WAIT_SECONDS.toLong())?.times(1000) ?: 0L
                 rateLimitedUntilMs = if (failure is CatalogFailure.RateLimited) now + maxOf(retryAfterMs, retryBaseMs) else 0L
                 retryNotBeforeMs = now + maxOf(backoff, retryAfterMs)
                 // a stale copy is kept over a failed re-read; a first load records the failure (and shows nothing)
@@ -160,8 +172,9 @@ class HomeContentHolder(
     }
 
     /**
-     * Shows every rail of [content] at once from what is already known, then reads what is not. [refetchAll] re-reads
-     * every card (a customer's pull); otherwise only unknown ids and cards older than [cardFreshMs] are read.
+     * Shows every rail of [content] at once from what is already known, then reads what is not: unknown ids, and cards
+     * older than [cardFreshMs] — or older than [pullCardMinAgeMs] for a customer's pull ([refetchAll]). Each card is kept
+     * as it arrives, so a pull that supersedes a sweep in flight does not read the finished cards again.
      */
     private fun loadRails(content: HomeContent, refetchAll: Boolean) {
         railJob?.cancel()
@@ -172,7 +185,8 @@ class HomeContentHolder(
         val rails = content.blocks.filterIsInstance<HomeBlock.ProductRail>()
         cards.keys.retainAll(rails.flatMapTo(HashSet()) { it.productIds })
         val startedAt = nowMs()
-        fun needsRead(id: String): Boolean = refetchAll || cards[id].let { it == null || startedAt - it.atMs >= cardFreshMs }
+        val maxAge = if (refetchAll) pullCardMinAgeMs else cardFreshMs
+        fun needsRead(id: String): Boolean = cards[id].let { it == null || startedAt - it.atMs >= maxAge }
 
         val previous = _rails.value
         _rails.value = rails.associate { r ->
@@ -190,7 +204,15 @@ class HomeContentHolder(
                 val ids = rail.productIds.filter { it !in read && needsRead(it) }
                 val got: List<Pair<String, CatalogProduct?>>? = if (ids.isEmpty()) emptyList() else try {
                     coroutineScope {
-                        ids.map { id -> async { gate.withPermit { id to product(id, currentPin)?.product } } }.awaitAll()
+                        ids.map { id ->
+                            async {
+                                gate.withPermit {
+                                    val p = product(id, currentPin)?.product
+                                    if (gen == railGen) cards[id] = Card(p, nowMs())    // a superseded loader never writes
+                                    id to p
+                                }
+                            }
+                        }.awaitAll()
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -203,8 +225,6 @@ class HomeContentHolder(
                     // a failed re-read keeps the rail already on screen; with nothing on screen the rail fails (not the Home)
                     if (shown is PagedState.Content) shown else PagedState.FirstPageFailed(CatalogFailure.Unknown)
                 } else {
-                    val at = nowMs()
-                    got.forEach { (id, p) -> cards[id] = Card(p, at) }
                     read += ids
                     verdict(rail)
                 }

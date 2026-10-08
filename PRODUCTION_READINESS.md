@@ -34,6 +34,16 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-08 PUBLISHED HOME CONTENT — re-review follow-ups (PR #24). A pull
+  re-reads only cards older than 30 s (≤ one card sweep per 30 s; a superseded
+  sweep keeps the cards it finished); the grid walk stops at the first failed
+  read (429 included) and does not retry an unnamed id for 5 min (1 min after a
+  failure); `Retry-After` is capped at 120 s like `RetryPolicy`; a pull refused
+  by a 429 window shows the transient toast. Numeric-only `TZP-` ids restored
+  in BACKEND_CONTRACTS §7. Verified: Android JVM unit tests 1,096 / 0 (7 new),
+  iOS simulator tests 1,096 / 0 and the framework linked;
+  7 mutation probes all killed.
+
 - 2026-10-08 PUBLISHED HOME CONTENT — review remediation (PR #24). Grids name
   node ids at any level (TZS/TZC/TZG/TZV) by a bounded, sequential walk of the
   existing taxonomy reads (≤ 12 children reads, cached 300 s); an unnamed id

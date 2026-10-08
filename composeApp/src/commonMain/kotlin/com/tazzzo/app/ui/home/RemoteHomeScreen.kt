@@ -72,6 +72,7 @@ import com.tazzzo.app.data.catalog.CatalogProduct
 import com.tazzzo.app.data.catalog.NodesState
 import com.tazzzo.app.data.catalog.PagedState
 import com.tazzzo.app.data.catalog.discountPercentLabel
+import com.tazzzo.app.data.catalog.hint
 import com.tazzzo.app.data.catalog.mrpLabel
 import com.tazzzo.app.data.catalog.priceLabel
 import com.tazzzo.app.data.catalog.productListHolder
@@ -131,6 +132,8 @@ fun RemoteHomeContent() {
     val contentRails by published.rails.collectAsState()
     val contentGrids by published.grids.collectAsState()
     val refreshing by published.refreshing.collectAsState()
+    // A pull inside a 429 window sends nothing; say so with the app's transient toast instead of failing silently.
+    LaunchedEffect(published) { published.pullRefused.collect { app.transientMessage = it.hint } }
 
     val selectedId by ServiceLocator.deliveryLocation.selectedAddressId.collectAsState()
     val book by ServiceLocator.addressBook.state.collectAsState()

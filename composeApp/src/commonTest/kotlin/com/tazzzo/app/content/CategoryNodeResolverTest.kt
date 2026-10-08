@@ -26,11 +26,13 @@ class CategoryNodeResolverTest {
     private val asked = mutableListOf<String>()
     private val failing = mutableSetOf<String>()
     private var rootFails = false
+    private var failure: ApiError = ApiError.Network
+    private var now = 1_000_000L
 
     private fun resolver(max: Int = CategoryNodeResolver.DEFAULT_MAX_REQUESTS) = CategoryNodeResolver(
-        root = { if (rootFails) throw ApiException(ApiError.Network) else page(listOf("TZS-000001", "TZS-000002")) },
-        children = { id -> asked += id; if (id in failing) throw ApiException(ApiError.Network) else page(tree.getValue(id)) },
-        maxRequests = max
+        root = { if (rootFails) throw ApiException(failure) else page(listOf("TZS-000001", "TZS-000002")) },
+        children = { id -> asked += id; if (id in failing) throw ApiException(failure) else page(tree.getValue(id)) },
+        maxRequests = max, nowMs = { now }
     )
 
     @Test fun rootIdsNeedNoChildrenRead() = runTest {
@@ -57,12 +59,39 @@ class CategoryNodeResolverTest {
         assertEquals(setOf("TZC-000021"), r.keys, "TZC found within the budget; the vertical is skipped, not guessed")
     }
 
-    @Test fun aFailedBranchSkipsOnlyItsIdsAndAFailedRootResolvesNothing() = runTest {
+    @Test fun aFailedReadEndsTheWalkAtOnceAndAFailedRootResolvesNothing() = runTest {
         failing += "TZS-000001"
         val r = resolver().resolve(listOf("TZC-000011", "TZC-000021"))
-        assertEquals(setOf("TZC-000021"), r.keys)
+        assertTrue(r.isEmpty()); assertEquals(listOf("TZS-000001"), asked, "the rest of the budget is not spent after a failure")
         rootFails = true
         assertTrue(resolver().resolve(listOf("TZS-000001")).isEmpty())
+    }
+
+    @Test fun aRateLimitedReadEndsTheWalkKeepingWhatWasAlreadyFound() = runTest {
+        failure = ApiError.Http(429, "RATE_LIMITED", null, true, 30)
+        failing += "TZS-000002"
+        val r = resolver().resolve(listOf("TZC-000012", "TZC-000021", "TZV-001211"))
+        assertEquals(setOf("TZC-000012"), r.keys)
+        assertEquals(listOf("TZS-000001", "TZS-000002"), asked, "no read after the 429")
+    }
+
+    @Test fun anUnresolvedIdIsNotWalkedForAgainForFiveMinutes() = runTest {
+        val res = resolver(max = 2)
+        assertTrue(res.resolve(listOf("TZV-001211")).isEmpty()); assertEquals(2, asked.size); asked.clear()
+        now += 299_000
+        assertTrue(res.resolve(listOf("TZV-001211")).isEmpty()); assertTrue(asked.isEmpty(), "a futile walk is not repeated on every Home re-read")
+        assertEquals(setOf("TZS-000002"), res.resolve(listOf("TZV-001211", "TZS-000002")).keys, "other ids still resolve")
+        now += 1_000; asked.clear()
+        res.resolve(listOf("TZV-001211")); assertEquals(2, asked.size, "after five minutes it is tried again")
+    }
+
+    @Test fun anIdLeftByAFailedWalkIsRetriedAfterAMinute() = runTest {
+        failing += "TZS-000001"
+        val res = resolver()
+        res.resolve(listOf("TZC-000011")); asked.clear()
+        now += 59_000; res.resolve(listOf("TZC-000011")); assertTrue(asked.isEmpty())
+        failing.clear(); now += 1_000
+        assertEquals(setOf("TZC-000011"), res.resolve(listOf("TZC-000011")).keys)
     }
 
     @Test fun anUnknownOrMalformedIdCostsNoWalk() = runTest {

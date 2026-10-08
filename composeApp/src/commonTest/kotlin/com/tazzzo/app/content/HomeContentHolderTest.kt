@@ -91,6 +91,58 @@ class HomeContentHolderTest {
         assertEquals(2, loads); assertIs<HomeContentState.Content>(h.state.value)
     }
 
+    @Test fun aHugeRetryAfterIsCappedAtTwoMinutes() = runTest {
+        var loads = 0; var limited = true
+        val h = HomeContentHolder(backgroundScope, {
+            loads++; if (limited) throw ApiException(ApiError.Http(429, "RATE_LIMITED", null, true, Long.MAX_VALUE)) else HomeContent.EMPTY
+        }, { _, _ -> null }, pin, { now })
+        h.ensure(); runCurrent(); assertEquals(1, loads)
+        now += 119_999; h.ensure(); h.refresh(); runCurrent(); assertEquals(1, loads, "inside the capped window")
+        limited = false; now += 1; h.ensure(); runCurrent()
+        assertEquals(2, loads, "120 s later, not never (and no overflow into the past)"); assertIs<HomeContentState.Content>(h.state.value)
+    }
+
+    @Test fun aPullRefusedByA429WindowIsAnnounced() = runTest {
+        val h = HomeContentHolder(backgroundScope, { throw ApiException(ApiError.Http(429, "RATE_LIMITED", null, true, 30)) }, { _, _ -> null }, pin, { now })
+        val refused = mutableListOf<CatalogFailure>()
+        backgroundScope.launch { h.pullRefused.collect { refused += it } }
+        h.ensure(); runCurrent()
+        h.refresh(); runCurrent()
+        assertEquals(1, refused.size); assertIs<CatalogFailure.RateLimited>(refused.single()); assertEquals(false, h.refreshing.value)
+    }
+
+    @Test fun repeatedPullsCostAtMostOneCardSweepPerThirtySeconds() = runTest {
+        val ids = (1..20).map { "TZP-$it" }
+        val asked = mutableListOf<String>()
+        val h = HomeContentHolder(backgroundScope, { HomeContent(listOf(HomeBlock.ProductRail("R1", "x", ids), HomeBlock.ProductRail("R2", "y", ids.reversed()))) },
+            { id, _ -> asked += id; detail(id) }, pin, { now })
+        h.ensure(); runCurrent(); assertEquals(20, asked.size, "first load reads each id once across both rails"); asked.clear()
+        now += 40_000
+        repeat(5) { h.refresh(); runCurrent(); now += 2_000 }          // five pulls in ten seconds
+        assertEquals(ids.sorted(), asked.sorted(), "one sweep, not five"); asked.clear()
+        repeat(5) { h.refresh() }; runCurrent()                       // pulls racing each other
+        assertTrue(asked.isEmpty(), "cards younger than 30 s are not read again")
+        now += 30_000; h.refresh(); runCurrent()
+        assertEquals(20, asked.size, "after 30 s a pull sweeps again")
+    }
+
+    @Test fun aPullThatSupersedesASweepInFlightDoesNotReReadFinishedCards() = runTest {
+        val ids = (1..8).map { "TZP-$it" }
+        val asked = mutableListOf<String>()
+        val gates = HashMap<String, CompletableDeferred<Unit>>()
+        var gated = false
+        val h = HomeContentHolder(backgroundScope, { HomeContent(listOf(HomeBlock.ProductRail("R1", "x", ids))) },
+            { id, _ -> asked += id; if (gated) gates.getOrPut(id) { CompletableDeferred() }.await(); detail(id) }, pin, { now }, parallelism = 2)
+        h.ensure(); runCurrent(); asked.clear()
+        gated = true; now += 40_000; h.refresh(); runCurrent()
+        gates.getValue("TZP-1").complete(Unit); gates.getValue("TZP-2").complete(Unit); runCurrent()
+        h.refresh(); runCurrent()                                       // supersedes the sweep half-way
+        gates.values.forEach { it.complete(Unit) }; (1..8).forEach { gates.getOrPut("TZP-$it") { CompletableDeferred() }.complete(Unit) }; runCurrent()
+        assertTrue(asked.count { it == "TZP-1" } == 1 && asked.count { it == "TZP-2" } == 1, "finished cards are kept: $asked")
+        assertTrue(asked.size <= ids.size + 2, "at most the in-flight reads are repeated: $asked")
+        assertEquals(ids, (h.rails.value["R1"] as PagedState.Content).items.map { it.skuId })
+    }
+
     @Test fun aPullShowsTheIndicatorUntilTheReadAnswersAndJoinsAReadInFlight() = runTest {
         val gate = CompletableDeferred<Unit>(); var loads = 0
         val h = HomeContentHolder(backgroundScope, { loads++; gate.await(); HomeContent.EMPTY }, { _, _ -> null }, pin, { now })
@@ -205,7 +257,7 @@ class HomeContentHolderTest {
         val seen = mutableListOf<PagedState<CatalogProduct>?>()
         backgroundScope.launch { h.rails.collect { seen += it["R1"] } }
         now += 120_000; h.refresh(); runCurrent()
-        assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), asked.sorted(), "a pull re-reads every card"); asked.clear()
+        assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), asked.sorted(), "a pull re-reads every card older than 30 s"); asked.clear()
         now += 299_000; h.ensure(); runCurrent(); assertTrue(asked.isEmpty(), "cards re-read by the pull are still fresh")
         now += 61_000; h.ensure(); runCurrent()
         assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), asked.sorted(), "the next re-read after the cards' freshness reads them again")
