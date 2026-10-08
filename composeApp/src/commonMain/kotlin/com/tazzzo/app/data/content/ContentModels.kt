@@ -34,7 +34,7 @@ sealed interface ContentLink {
     data class Search(val query: String) : ContentLink
 
     companion object {
-        private val PRODUCT_ID = Regex("^TZP-[0-9]+$")
+        private val PRODUCT_ID = Regex("^TZP-[A-Za-z0-9-]{1,40}$")
         private val NODE_ID = Regex("^TZ[SCGV]-[0-9]{6}$")
         const val MAX_SEARCH = 100
 
@@ -108,7 +108,7 @@ internal fun HomeContentDto.toDomain(): HomeContent {
                 HomeBlock.Banner(blockId, title, it, ContentLink.parse(b.link), subtitle = text(b.subtitle, MAX_SUBTITLE),
                     altText = text(b.altText, MAX_ALT) ?: title)
             }
-            "PRODUCT_RAIL" -> ids(ids, Regex("^TZP-[0-9]+$"), HomeBlock.MAX_RAIL_IDS).takeIf { it.isNotEmpty() }
+            "PRODUCT_RAIL" -> ids(ids, Regex("^TZP-[A-Za-z0-9-]{1,40}$"), HomeBlock.MAX_RAIL_IDS).takeIf { it.isNotEmpty() }
                 ?.let { HomeBlock.ProductRail(blockId, title, it) }
             "CATEGORY_GRID" -> ids(ids, Regex("^TZ[SCGV]-[0-9]{6}$"), HomeBlock.MAX_GRID_IDS).takeIf { it.isNotEmpty() }
                 ?.let { HomeBlock.CategoryGrid(blockId, title, it) }

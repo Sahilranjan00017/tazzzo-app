@@ -102,6 +102,24 @@ class HomeContentMappingTest {
         assertTrue(!linkIsTappable(null))
     }
 
+    /** The platform's product-id grammar `TZP-[A-Za-z0-9-]{1,40}` (backend `ContentBlock.PRODUCT_ID`), numeric ids included. */
+    @Test fun productIdsFollowThePlatformGrammar() {
+        val good = listOf("TZP-1", "TZP-000123", "TZP-MED-3", "TZP-med-3", "TZP-" + "A".repeat(40))
+        val bad = listOf("", "TZP-", "TZP-" + "A".repeat(41), "TZP-../x", "TZP-..", "TZP-a/b", "TZP-a b", "TZP-a_b", "TZP-1;drop",
+            "TZP-1%2F", "tzp-1", "TZP-é")
+        val rail = HomeContentDto(listOf(HomeBlockDto("R1", "PRODUCT_RAIL", "x", ids = good + bad))).toDomain().blocks.single() as HomeBlock.ProductRail
+        assertEquals(good, rail.productIds)
+        assertTrue(HomeContentDto(listOf(HomeBlockDto("R2", "PRODUCT_RAIL", "x", ids = bad))).toDomain().blocks.isEmpty())
+        for (id in good) {
+            val link = (HomeContentDto(listOf(banner(link = "product:$id"))).toDomain().blocks.single() as HomeBlock.Banner).link
+            assertEquals(ContentLink.Product(id), link); assertTrue(linkIsTappable(link), "product:$id is tappable")
+        }
+        for (id in bad) {
+            val link = (HomeContentDto(listOf(banner(link = "product:$id"))).toDomain().blocks.single() as HomeBlock.Banner).link
+            assertNull(link, "must refuse <product:$id>"); assertTrue(!linkIsTappable(link))
+        }
+    }
+
     @Test fun explicitNullsFromTheWireAreTreatedAsAbsent() {
         val c = HomeContentDto(listOf(
             HomeBlockDto(blockId = "R1", type = "PRODUCT_RAIL", title = null, ids = listOf("TZP-1")),

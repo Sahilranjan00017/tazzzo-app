@@ -94,6 +94,16 @@ class CatalogContractTest {
         assertEquals(listOf("weight", "veg"), d.attributes.map { it.key }); assertEquals("g", d.attributes[0].unit)
     }
 
+    /** The platform's product-id grammar `TZP-[A-Za-z0-9-]{1,40}`: alphanumeric ids reach the path as ONE segment, unescaped. */
+    @Test fun alphanumericProductIdsReachThePathAsOneSegment() = runTest {
+        for (id in listOf("TZP-MED-3", "TZP-" + "A".repeat(40))) {
+            var seen: HttpRequestData? = null
+            val d = dataSource { seen = it; respond(detailJson(id), HttpStatusCode.OK, JSON) }.product(id, pin)
+            assertEquals("/v1/products/$id", seen!!.url.encodedPath); seen!!.assertPublicShape()
+            assertEquals(id, d.product.productId)
+        }
+    }
+
     @Test fun serviceabilityTrue() = runTest {
         var seen: HttpRequestData? = null
         val r = serviceabilitySource { seen = it; respond(serviceabilityJson(true), HttpStatusCode.OK, JSON) }.check(pin)
@@ -120,6 +130,9 @@ class CatalogContractTest {
         assertFailsWith<IllegalArgumentException> { ds.children("../auth") }
         assertFailsWith<IllegalArgumentException> { ds.products("TZC-1", pin) }
         assertFailsWith<IllegalArgumentException> { ds.product("TZP-1/../x", pin) }
+        for (bad in listOf("", "TZP-", "TZP-" + "A".repeat(41), "TZP-../x", "TZP-a b", "TZP-1\n", "TZP-1?pin=1", "TZP-1%2F")) {
+            assertFailsWith<IllegalArgumentException>("must refuse <$bad>") { ds.product(bad, pin) }
+        }
         assertFailsWith<IllegalArgumentException> { ds.products("TZC-000010", pin, pageSize = 0) }
         assertFailsWith<IllegalArgumentException> { ds.products("TZC-000010", pin, pageSize = 51) }
     }
