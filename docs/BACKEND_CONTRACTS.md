@@ -49,20 +49,39 @@ Every product payload must include:
 ## Consumed from the running backend (not faked)
 
 ### 7. Published Home content — `GET /v1/content/home?channel=app`
-`{ blocks: [ { blockId, type: "BANNER|PRODUCT_RAIL|CATEGORY_GRID", title, imageUrl?, link?, ids? } ], requestId }`
+`{ blocks: [ { blockId, type: "BANNER|PRODUCT_RAIL|CATEGORY_GRID", title, subtitle?, altText?, imageUrl?, desktopImageUrl?, link?, ids? } ], requestId }`
+(backend PR #96 for `channel`; banner fields `subtitle` / `altText` / `desktopImageUrl` from backend PR #102)
 - Consumer: `data/content/RemoteContentDataSource` → `HomeContentHolder` → `RemoteHomeScreen` (the blocks render in the
   backend's order, before the editorial plates). Anonymous, carries the installation id, names the platform `app`;
-  the backend decides what the app sees (APP_ONLY or BOTH), never the app.
-- Rendering is as published and nothing more: a banner needs an `https` image or it is not shown; `link` is the closed
-  grammar `product:<id>` | `category:<node id>` | `search:<text>` and anything else leaves the banner untappable
-  (`search:` is untappable today — the Search screen cannot open on a query); rails load their cards through
-  `GET /v1/products/{id}` for the current PIN (a 404 is simply absent, at most 12 ids); grids show only ids that are
-  loaded root nodes (a `category:` link to a non-root node opens its listing titled "Products"). A failed or empty read
-  shows nothing — the catalogue sections stand on their own; a failure is not retried for 60 s; a stale copy stays on
-  screen while re-read. Backend-side bounds (title ≤ 80, rail ≤ 20 ids, `TZP-[A-Za-z0-9-]{1,40}`) are tighter or
-  looser than the app's (80 / 12 / numeric ids) — the app renders at most what it validates.
+  the backend decides what the app sees (APP_ONLY or BOTH), never the app. An unknown block type is skipped.
+- Banners: need an `https` `imageUrl` or are not shown; `desktopImageUrl` is the website's and is ignored (the app always
+  renders `imageUrl`). `subtitle` (≤ 120) renders under the title when published. `altText` (≤ 300; the backend sends the
+  title when the editor gave none, and the app falls back to the title for an older backend) describes the image. A
+  banner is ONE accessibility node read once: title, subtitle, then the alt text only when it differs from the title;
+  the image and overlay text are hidden from the tree; a tappable banner has the button role. `link` is the closed
+  grammar `product:<id>` | `category:<node id>` | `search:<text>`; anything else leaves the banner untappable, and
+  `search:` is untappable too — the app's Search screen cannot open on a query (in REMOTE mode it has no search
+  contract at all), so it stays a picture rather than an empty search.
+- Rails: up to 20 ids (the backend's own bound), cards through `GET /v1/products/{id}` for the current PIN (404 =
+  absent, parallelism 4), in a horizontal lazy row. A per-PIN card cache keeps rails on screen across re-reads: only ids
+  the app has not got, or cards older than 5 min, are read again; a pull re-reads every card; a PIN change reloads the
+  rails (old cards would describe the wrong PIN).
+- Grids: up to 12 node ids at ANY level (`TZS` / `TZC` / `TZG` / `TZV`). The public API has no "node by id" read, so a
+  name is found by walking down from `GET /v1/categories` through `GET /v1/categories/{id}/children`, level by level,
+  only as deep as needed, sequentially, at most 12 children reads per resolution (served from the 300 s taxonomy cache
+  when fresh). Today's taxonomy (7 TZS, ~50 TZC, ~108 TZG) means TZS and TZC ids always resolve; a TZG/TZV id resolves
+  only if found within the budget. An id that cannot be named is a skipped tile, never a skipped grid. **Backend ask:**
+  names in the grid block (or a node-by-id read) would remove this walk and its admission cost.
+- Block cap: the app renders the first **20** blocks in display order and ignores the rest. The backend serves up to
+  200 live blocks per placement; the tighter app cap keeps a CMS mistake from turning Home into hundreds of sections.
+- Refresh: re-read when Home is shown or the app returns to the foreground once the last success is older than 60 s
+  (`max-age=60`), on pull-to-refresh at any age, and after a failure with backoff 10 s → 20 s → 40 s → 60 s (cap),
+  never sooner than a 429's `Retry-After` (a pull inside that window sends nothing). A failed or empty read shows
+  nothing — the catalogue sections stand on their own, no replacement banner; a stale copy stays on screen while
+  re-read and survives a failed re-read.
 - Backend dependency: the `channel` parameter exists from backend PR #96 (multichannel content). An older backend
-  answers 400 to it; the app then shows no published blocks (no error surface), which is the documented degraded state.
+  answers 400 to any query parameter on this route; the app then shows no published blocks (no error surface). **The
+  app must not ship before #96 is deployed.**
 
 ## Model change log
 

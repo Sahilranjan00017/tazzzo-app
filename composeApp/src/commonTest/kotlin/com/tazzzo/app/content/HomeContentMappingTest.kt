@@ -5,6 +5,8 @@ import com.tazzzo.app.data.content.HomeBlock
 import com.tazzzo.app.data.content.HomeBlockDto
 import com.tazzzo.app.data.content.HomeContentDto
 import com.tazzzo.app.data.content.toDomain
+import com.tazzzo.app.ui.home.bannerLabel
+import com.tazzzo.app.ui.home.linkIsTappable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -47,8 +49,9 @@ class HomeContentMappingTest {
 
     @Test fun idsAreValidatedDedupedAndCappedAndAnEmptyRailIsDropped() {
         val rail = HomeContentDto(listOf(HomeBlockDto("R1", "PRODUCT_RAIL", "x",
-            ids = (1..20).map { "TZP-$it" } + listOf("TZP-1", "bogus", "TZS-000001")))).toDomain().blocks.single() as HomeBlock.ProductRail
-        assertEquals((1..HomeBlock.MAX_RAIL_IDS).map { "TZP-$it" }, rail.productIds)
+            ids = listOf("TZP-1", "bogus", "TZS-000001") + (1..25).map { "TZP-$it" }))).toDomain().blocks.single() as HomeBlock.ProductRail
+        assertEquals(20, HomeBlock.MAX_RAIL_IDS, "the backend's own rail bound: every published id renders")
+        assertEquals((1..20).map { "TZP-$it" }, rail.productIds)
         assertTrue(HomeContentDto(listOf(HomeBlockDto("R2", "PRODUCT_RAIL", "x", ids = listOf("bogus")))).toDomain().blocks.isEmpty())
         val grid = HomeContentDto(listOf(HomeBlockDto("G1", "CATEGORY_GRID", "x", ids = listOf("TZV-000037", "TZV-000037", "TZP-1")))).toDomain().blocks.single() as HomeBlock.CategoryGrid
         assertEquals(listOf("TZV-000037"), grid.nodeIds)
@@ -67,6 +70,36 @@ class HomeContentMappingTest {
         assertEquals(12, grid.nodeIds.size); assertEquals("Aisles", grid.title)
         val long = HomeContentDto(listOf(banner().copy(title = "x".repeat(500)))).toDomain().blocks.single()
         assertEquals(80, long.title.length)
+    }
+
+    @Test fun aBannerCarriesItsSubtitleAndAltTextTrimmedBoundedAndAbsentWhenBlank() {
+        val b = HomeContentDto(listOf(banner().copy(subtitle = "  Up to 20% off  ", altText = " Basket of staples "))).toDomain().blocks.single() as HomeBlock.Banner
+        assertEquals("Up to 20% off", b.subtitle); assertEquals("Basket of staples", b.altText)
+        val blank = HomeContentDto(listOf(banner().copy(subtitle = "   ", altText = " "))).toDomain().blocks.single() as HomeBlock.Banner
+        assertNull(blank.subtitle); assertEquals("Festive", blank.altText, "blank alt text falls back to the title, as the backend does")
+        val old = HomeContentDto(listOf(banner())).toDomain().blocks.single() as HomeBlock.Banner
+        assertNull(old.subtitle); assertEquals("Festive", old.altText, "an older backend without the fields still maps")
+        val long = HomeContentDto(listOf(banner().copy(subtitle = "s".repeat(500), altText = "a".repeat(900)))).toDomain().blocks.single() as HomeBlock.Banner
+        assertEquals(120, long.subtitle?.length); assertEquals(300, long.altText.length)
+    }
+
+    @Test fun nonBannerBlocksIgnoreBannerText() {
+        val r = HomeContentDto(listOf(HomeBlockDto("R1", "PRODUCT_RAIL", "x", subtitle = "s", altText = "a", ids = listOf("TZP-1")))).toDomain().blocks.single()
+        assertIs<HomeBlock.ProductRail>(r)
+    }
+
+    @Test fun theBannerIsAnnouncedOnceWithoutRepeatingTheTitle() {
+        val b = HomeBlock.Banner("B1", "Festive", "https://cdn.example.test/b.jpg", null)
+        assertEquals("Festive", bannerLabel(b), "alt text defaulted to the title is not read twice")
+        assertEquals("Festive. Up to 20% off. Basket of staples", bannerLabel(b.copy(subtitle = "Up to 20% off", altText = "Basket of staples")))
+        assertEquals("Festive", bannerLabel(b.copy(altText = "festive")), "case-only repeats are dropped too")
+        assertEquals("Banner", bannerLabel(b.copy(title = "", altText = "")))
+    }
+
+    @Test fun onlyProductAndCategoryLinksMakeABannerTappable() {
+        assertTrue(linkIsTappable(ContentLink.Product("TZP-1"))); assertTrue(linkIsTappable(ContentLink.Category("TZG-000001")))
+        assertTrue(!linkIsTappable(ContentLink.Search("atta")), "the Search screen cannot open on a query")
+        assertTrue(!linkIsTappable(null))
     }
 
     @Test fun explicitNullsFromTheWireAreTreatedAsAbsent() {

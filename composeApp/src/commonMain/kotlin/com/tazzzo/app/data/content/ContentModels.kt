@@ -7,7 +7,8 @@ import kotlinx.serialization.Serializable
  * `GET /v1/content/home`: the CMS-published Home blocks for the APP channel, in the backend's display order. The app
  * renders exactly what the backend publishes and nothing it does not: a banner without an https image is not shown, a
  * link outside the closed grammar makes the banner untappable, an unknown block type is skipped, and ids are capped so a
- * CMS mistake cannot fan out into hundreds of product requests.
+ * CMS mistake cannot fan out into hundreds of product requests. A banner's optional `desktopImageUrl` is for the desktop
+ * website only: the app ignores it (the shared Json drops unknown fields) and always renders `imageUrl`.
  */
 
 /** Wire shape of the running backend (`content/PublicContentController`). Unknown fields are ignored by the shared Json. */
@@ -17,6 +18,10 @@ import kotlinx.serialization.Serializable
     val blockId: String? = null,
     val type: String? = null,
     val title: String? = null,
+    /** BANNER only, optional (backend ≤ 120 chars). */
+    val subtitle: String? = null,
+    /** BANNER only; the backend always sends it (the editor's alt text, else the title). Absent from an older backend. */
+    val altText: String? = null,
     val imageUrl: String? = null,
     val link: String? = null,
     val ids: List<String>? = null
@@ -52,8 +57,15 @@ sealed interface HomeBlock {
     val blockId: String
     val title: String
 
-    /** Always has an https image (a banner with nothing to show is dropped at mapping time). */
-    data class Banner(override val blockId: String, override val title: String, val imageUrl: String, val link: ContentLink?) : HomeBlock
+    /**
+     * Always has an https image (a banner with nothing to show is dropped at mapping time). [subtitle] is null when not
+     * published; [altText] describes the image for a screen reader and is never blank when [title] is not (it falls back
+     * to the title, as the backend itself does).
+     */
+    data class Banner(
+        override val blockId: String, override val title: String, val imageUrl: String, val link: ContentLink?,
+        val subtitle: String? = null, val altText: String = title
+    ) : HomeBlock
 
     /** Product ids the client renders with `GET /v1/products/{id}`; unique, at most [MAX_RAIL_IDS]. */
     data class ProductRail(override val blockId: String, override val title: String, val productIds: List<String>) : HomeBlock
@@ -62,8 +74,15 @@ sealed interface HomeBlock {
     data class CategoryGrid(override val blockId: String, override val title: String, val nodeIds: List<String>) : HomeBlock
 
     companion object {
-        const val MAX_RAIL_IDS = 12
+        /** The backend's own rail bound (`ContentBlock.MAX_RAIL`): every published id can be rendered. */
+        const val MAX_RAIL_IDS = 20
+        /** The backend's own grid bound (`ContentBlock.MAX_GRID`). */
         const val MAX_GRID_IDS = 12
+        /**
+         * App-side cap, deliberately TIGHTER than the backend (which serves up to 200 live blocks per placement): the
+         * first 20 in display order are rendered and the rest are ignored, so a CMS mistake cannot turn the Home into
+         * hundreds of sections and thousands of product reads. Documented in `docs/BACKEND_CONTRACTS.md` §7.
+         */
         const val MAX_BLOCKS = 20
     }
 }
@@ -85,7 +104,10 @@ internal fun HomeContentDto.toDomain(): HomeContent {
         val title = b.title?.trim().orEmpty().take(MAX_TITLE)
         val ids = b.ids.orEmpty()
         val block: HomeBlock? = when (b.type) {
-            "BANNER" -> safeImageUrl(b.imageUrl)?.let { HomeBlock.Banner(blockId, title, it, ContentLink.parse(b.link)) }
+            "BANNER" -> safeImageUrl(b.imageUrl)?.let {
+                HomeBlock.Banner(blockId, title, it, ContentLink.parse(b.link), subtitle = text(b.subtitle, MAX_SUBTITLE),
+                    altText = text(b.altText, MAX_ALT) ?: title)
+            }
             "PRODUCT_RAIL" -> ids(ids, Regex("^TZP-[0-9]+$"), HomeBlock.MAX_RAIL_IDS).takeIf { it.isNotEmpty() }
                 ?.let { HomeBlock.ProductRail(blockId, title, it) }
             "CATEGORY_GRID" -> ids(ids, Regex("^TZ[SCGV]-[0-9]{6}$"), HomeBlock.MAX_GRID_IDS).takeIf { it.isNotEmpty() }
@@ -99,6 +121,12 @@ internal fun HomeContentDto.toDomain(): HomeContent {
 
 /** The backend caps a block title at 80 characters; the app never lays out more than that from server text. */
 private const val MAX_TITLE = 80
+/** Backend bounds for a banner's subtitle and alt text (`ContentBlock.MAX_SUBTITLE` / `MAX_ALT`). */
+private const val MAX_SUBTITLE = 120
+private const val MAX_ALT = 300
+
+/** Optional server text: trimmed, bounded, and absent when blank. */
+private fun text(raw: String?, max: Int): String? = raw?.trim()?.take(max)?.takeIf { it.isNotEmpty() }
 
 private fun ids(raw: List<String>, shape: Regex, max: Int): List<String> =
     raw.asSequence().map { it.trim() }.filter { shape.matches(it) }.distinct().take(max).toList()

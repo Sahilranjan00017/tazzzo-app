@@ -1,6 +1,7 @@
 package com.tazzzo.app.data.content
 
 import com.tazzzo.app.data.catalog.CatalogFailure
+import com.tazzzo.app.data.catalog.CatalogNode
 import com.tazzzo.app.data.catalog.CatalogProduct
 import com.tazzzo.app.data.catalog.CatalogProductDetail
 import com.tazzzo.app.data.catalog.PagedState
@@ -15,9 +16,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -31,13 +30,28 @@ sealed interface HomeContentState {
 }
 
 /**
- * Owns the published Home for the process: one fetch at a time; a copy younger than [freshMs] (the backend advertises
- * `max-age=60`) is reused without a request, and so is a FAILURE younger than [freshMs] — a backend that cannot serve
- * the Home is not asked again on every visit to the tab. A stale copy stays on screen while it is re-read, and survives
- * a failed re-read (it was published content; the server's own cache would serve it for as long). Every PRODUCT_RAIL's
- * cards are loaded through the same per-product read the PDP uses (`GET /v1/products/{id}`, PIN-aware, 404 = not
- * shown) with bounded parallelism; a rail whose products are all missing is simply absent; nothing is filled in.
- * Rail loading is serialised ([railLock]) so a PIN change and a content load can never run two loaders at once.
+ * Owns the published Home for the process.
+ *
+ * **Threading.** Every mutable field is confined to [scope], which MUST be single-threaded (the app gives it
+ * `Dispatchers.Default.limitedParallelism(1)`, like the cart store; tests give it a test dispatcher). The public entry
+ * points never touch that state on the caller's thread: they post a command into [scope].
+ *
+ * **When it re-reads.** One fetch at a time. [ensure] (Home shown, app back in the foreground) reads when nothing was
+ * read yet, when the last success is older than [freshMs] (the backend advertises `max-age=60`), or after a failure once
+ * its backoff has passed: [retryBaseMs], doubling per consecutive failure, capped at [freshMs], and never sooner than a
+ * 429's `Retry-After`. [refresh] (pull-to-refresh) reads now whatever the age — except inside a 429 window — and also
+ * re-reads every rail card. A stale copy stays on screen while it is re-read and survives a failed re-read.
+ *
+ * **Rails.** Cards come from the same per-product read the PDP uses (`GET /v1/products/{id}`, PIN-aware, 404 = not
+ * shown) with bounded parallelism, through a per-PIN card cache: a re-read keeps every rail on screen, renders ids it
+ * already knows at once and fetches only ids it has not got, or whose card is older than [cardFreshMs] (so a price
+ * cannot stay stale for the life of the process). A PIN change drops the cache (prices and serviceability are
+ * PIN-aware) and shows the rails loading again — old cards would describe the wrong PIN. A rail whose products are all
+ * missing is simply absent; nothing is filled in.
+ *
+ * **Grids.** Published node ids are named through [resolveNodes] (see [CategoryNodeResolver]); an id that cannot be
+ * named is a skipped tile, never a skipped grid. Grids on screen stay while a re-read resolves again, and a node named
+ * before keeps its name if a later resolution could not read its branch.
  */
 @OptIn(ExperimentalTime::class)
 class HomeContentHolder(
@@ -47,7 +61,10 @@ class HomeContentHolder(
     private val pin: StateFlow<Pincode>,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val freshMs: Long = 60_000L,
-    private val parallelism: Int = 4
+    private val parallelism: Int = 4,
+    private val resolveNodes: suspend (Collection<String>) -> Map<String, CatalogNode> = { emptyMap() },
+    private val retryBaseMs: Long = 10_000L,
+    private val cardFreshMs: Long = 300_000L
 ) {
     private val _state = MutableStateFlow<HomeContentState>(HomeContentState.Idle)
     val state: StateFlow<HomeContentState> = _state
@@ -56,93 +73,167 @@ class HomeContentHolder(
     /** By rail block id. Absent = not requested yet. */
     val rails: StateFlow<Map<String, PagedState<CatalogProduct>>> = _rails
 
-    /** When the last attempt (success or failure) finished; 0 = never. */
-    private var attemptedAtMs = 0L
-    private var loading = false
-    private var job: Job? = null
-    private val railLock = Mutex()
-    private var railJob: Job? = null
-    private var railPin: Pincode? = null
-    private var railContent: HomeContent? = null
+    private val _grids = MutableStateFlow<Map<String, List<CatalogNode>>>(emptyMap())
+    /** By grid block id: the published nodes that could be named, in published order. Absent = not resolved yet. */
+    val grids: StateFlow<Map<String, List<CatalogNode>>> = _grids
 
-    /** Load once; a no-op while loading or while the last attempt — a copy OR a failure — is younger than [freshMs]. */
-    fun ensure() {
-        if (loading) return
-        if (attemptedAtMs != 0L && nowMs() - attemptedAtMs < freshMs) return
-        start()
+    private val _refreshing = MutableStateFlow(false)
+    /** True while a customer's [refresh] is being answered (drives the pull-to-refresh indicator, nothing else). */
+    val refreshing: StateFlow<Boolean> = _refreshing
+
+    // ---- confined to [scope] ----
+    private var loading = false
+    private var customerWaiting = false
+    private var succeededAtMs = 0L          // 0 = never
+    private var failures = 0                // consecutive
+    private var retryNotBeforeMs = 0L
+    private var rateLimitedUntilMs = 0L
+
+    private class Card(val product: CatalogProduct?, val atMs: Long)
+    private val cards = HashMap<String, Card>()
+    private var cardsPin: Pincode? = null
+    private var railJob: Job? = null
+    private var railGen = 0
+    private val nodeNames = HashMap<String, CatalogNode>()
+    private var gridJob: Job? = null
+
+    /** Read if due (see the class comment); a no-op while loading, while fresh, or inside a failure's backoff. */
+    fun ensure() = command { if (!loading && due(nowMs())) start() }
+
+    /** Pull-to-refresh: read now and re-read every card; joins a read already in flight; nothing inside a 429 window. */
+    fun refresh() = command {
+        if (nowMs() < rateLimitedUntilMs) return@command
+        customerWaiting = true
+        _refreshing.value = true
+        if (!loading) start()
     }
 
-    /** Try again now, whatever the age of the last attempt; never cancels a load in flight. */
-    fun refresh() {
-        if (!loading) start()
+    /** The PIN changed: cards are PIN-aware (price, serviceability), so the rails are reloaded for the current content. */
+    fun onPinChanged() = command {
+        val s = _state.value as? HomeContentState.Content ?: return@command
+        if (pin.value != cardsPin) loadRails(s.content, refetchAll = false)
+    }
+
+    private fun command(block: () -> Unit) { scope.launch { block() } }
+
+    private fun due(now: Long): Boolean = when {
+        failures > 0 -> now >= retryNotBeforeMs
+        succeededAtMs == 0L -> true
+        else -> now - succeededAtMs >= freshMs
     }
 
     private fun start() {
         loading = true
         // a good copy stays on screen while it is re-read; only a first load shows Loading
         if (_state.value !is HomeContentState.Content) _state.value = HomeContentState.Loading
-        job = scope.launch {
-            try {
-                val content = load()
-                attemptedAtMs = nowMs()
-                loading = false
-                _state.value = HomeContentState.Content(content)
-                loadRails(content)
+        scope.launch {
+            val result: Result<HomeContent> = try {
+                Result.success(load())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                attemptedAtMs = nowMs()
-                loading = false
+                Result.failure(e)
+            }
+            val now = nowMs()
+            val forCustomer = customerWaiting
+            loading = false
+            customerWaiting = false
+            _refreshing.value = false
+            result.onSuccess { content ->
+                succeededAtMs = now
+                failures = 0
+                rateLimitedUntilMs = 0L
+                _state.value = HomeContentState.Content(content)
+                loadRails(content, refetchAll = forCustomer)
+                resolveGrids(content)
+            }.onFailure { e ->
+                val failure = e.toCatalogFailure()
+                failures++
+                val backoff = minOf(retryBaseMs shl minOf(failures - 1, 16), freshMs)
+                val retryAfterMs = (failure as? CatalogFailure.RateLimited)?.retryAfterSeconds?.let { it * 1000 } ?: 0L
+                rateLimitedUntilMs = if (failure is CatalogFailure.RateLimited) now + maxOf(retryAfterMs, retryBaseMs) else 0L
+                retryNotBeforeMs = now + maxOf(backoff, retryAfterMs)
                 // a stale copy is kept over a failed re-read; a first load records the failure (and shows nothing)
-                if (_state.value !is HomeContentState.Content) _state.value = HomeContentState.Failed(e.toCatalogFailure())
+                if (_state.value !is HomeContentState.Content) _state.value = HomeContentState.Failed(failure)
             }
         }
     }
 
-    /** (Re)load every rail of [content] for the current PIN. Serialised: the lock holds while the previous loader is replaced. */
-    private fun loadRails(content: HomeContent) {
-        scope.launch {
-            railLock.withLock {
-                railJob?.cancel()
-                val rails = content.blocks.filterIsInstance<HomeBlock.ProductRail>()
-                val currentPin = pin.value
-                railPin = currentPin
-                railContent = content
-                _rails.value = rails.associate { it.blockId to PagedState.LoadingFirst }
-                if (rails.isEmpty()) return@withLock
-                railJob = scope.launch {
-                    val gate = Semaphore(parallelism)
-                    for (rail in rails) {
-                        val items: List<CatalogProduct>? = try {
-                            coroutineScope {
-                                rail.productIds.map { id -> async { gate.withPermit { runCatchingProduct(id, currentPin) } } }.awaitAll()
-                            }.mapNotNull { it }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Throwable) {
-                            null
-                        }
-                        val verdict = when {
-                            items == null -> PagedState.FirstPageFailed(CatalogFailure.Unknown)
-                            items.isEmpty() -> PagedState.Empty
-                            else -> PagedState.Content(items, hasMore = false)
-                        }
-                        railLock.withLock {
-                            // only the current loader writes: a superseded one (PIN changed meanwhile) is cancelled, but never races
-                            if (railPin == currentPin && railContent === content) _rails.value = _rails.value + (rail.blockId to verdict)
-                        }
+    /**
+     * Shows every rail of [content] at once from what is already known, then reads what is not. [refetchAll] re-reads
+     * every card (a customer's pull); otherwise only unknown ids and cards older than [cardFreshMs] are read.
+     */
+    private fun loadRails(content: HomeContent, refetchAll: Boolean) {
+        railJob?.cancel()
+        val gen = ++railGen
+        val currentPin = pin.value
+        val pinChanged = cardsPin != currentPin
+        if (pinChanged) { cards.clear(); cardsPin = currentPin }
+        val rails = content.blocks.filterIsInstance<HomeBlock.ProductRail>()
+        cards.keys.retainAll(rails.flatMapTo(HashSet()) { it.productIds })
+        val startedAt = nowMs()
+        fun needsRead(id: String): Boolean = refetchAll || cards[id].let { it == null || startedAt - it.atMs >= cardFreshMs }
+
+        val previous = _rails.value
+        _rails.value = rails.associate { r ->
+            r.blockId to when {
+                r.productIds.all { it in cards } -> verdict(r)                                            // known: show now
+                !pinChanged && previous[r.blockId] is PagedState.Content -> previous.getValue(r.blockId)   // keep while reading
+                else -> PagedState.LoadingFirst
+            }
+        }
+        if (rails.none { r -> r.productIds.any(::needsRead) }) return
+        railJob = scope.launch {
+            val gate = Semaphore(parallelism)
+            val read = HashSet<String>()
+            for (rail in rails) {
+                val ids = rail.productIds.filter { it !in read && needsRead(it) }
+                val got: List<Pair<String, CatalogProduct?>>? = if (ids.isEmpty()) emptyList() else try {
+                    coroutineScope {
+                        ids.map { id -> async { gate.withPermit { id to product(id, currentPin)?.product } } }.awaitAll()
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    null
                 }
+                if (gen != railGen) return@launch          // superseded (PIN change or a newer content load)
+                val shown = _rails.value[rail.blockId]
+                val v = if (got == null) {
+                    // a failed re-read keeps the rail already on screen; with nothing on screen the rail fails (not the Home)
+                    if (shown is PagedState.Content) shown else PagedState.FirstPageFailed(CatalogFailure.Unknown)
+                } else {
+                    val at = nowMs()
+                    got.forEach { (id, p) -> cards[id] = Card(p, at) }
+                    read += ids
+                    verdict(rail)
+                }
+                _rails.value = _rails.value + (rail.blockId to v)
             }
         }
     }
 
-    /** One card, or null when the product is unknown/not visible (404). Any other failure propagates and fails the rail. */
-    private suspend fun runCatchingProduct(id: String, pin: Pincode?): CatalogProduct? = product(id, pin)?.product
+    private fun verdict(rail: HomeBlock.ProductRail): PagedState<CatalogProduct> {
+        val items = rail.productIds.mapNotNull { cards[it]?.product }
+        return if (items.isEmpty()) PagedState.Empty else PagedState.Content(items, hasMore = false)
+    }
 
-    /** The PIN changed: cards are PIN-aware (price, serviceability), so the rails are reloaded for the current content. */
-    fun onPinChanged() {
-        val s = _state.value as? HomeContentState.Content ?: return
-        if (pin.value != railPin) loadRails(s.content)
+    private fun resolveGrids(content: HomeContent) {
+        gridJob?.cancel()
+        val grids = content.blocks.filterIsInstance<HomeBlock.CategoryGrid>()
+        val wanted = grids.flatMap { it.nodeIds }.distinct()
+        nodeNames.keys.retainAll(wanted.toSet())
+        if (grids.isEmpty()) { _grids.value = emptyMap(); return }
+        gridJob = scope.launch {
+            val named = try {
+                resolveNodes(wanted)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                emptyMap()
+            }
+            nodeNames.putAll(named)
+            _grids.value = grids.associate { g -> g.blockId to g.nodeIds.mapNotNull { nodeNames[it] } }
+        }
     }
 }

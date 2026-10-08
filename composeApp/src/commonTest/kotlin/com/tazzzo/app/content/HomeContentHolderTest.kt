@@ -1,6 +1,7 @@
 package com.tazzzo.app.content
 
 import com.tazzzo.app.data.catalog.CatalogFailure
+import com.tazzzo.app.data.catalog.CatalogNode
 import com.tazzzo.app.data.catalog.CatalogProduct
 import com.tazzzo.app.data.catalog.CatalogProductDetail
 import com.tazzzo.app.data.catalog.PagedState
@@ -14,6 +15,7 @@ import com.tazzzo.app.data.remote.ApiError
 import com.tazzzo.app.data.remote.ApiException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -21,6 +23,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HomeContentHolderTest {
     private val pin = MutableStateFlow(Pincode.parse("560047")!!)
     private var now = 1_000_000L
@@ -38,7 +41,7 @@ class HomeContentHolderTest {
         now += 31_000; h.ensure(); runCurrent(); assertEquals(2, loads)
     }
 
-    @Test fun aFailureIsRecordedNotMaskedAndIsNotRetriedOnEveryVisitWithinTheFreshnessWindow() = runTest {
+    @Test fun aFailureIsRecordedNotMaskedAndIsNotRetriedOnEveryVisitWithinItsBackoff() = runTest {
         var fail = true; var loads = 0
         val h = HomeContentHolder(backgroundScope, {
             loads++; if (fail) throw ApiException(ApiError.Http(400, "INVALID_REQUEST", null, false, null)) else HomeContent.EMPTY
@@ -48,9 +51,87 @@ class HomeContentHolderTest {
         repeat(5) { h.ensure(); runCurrent() }
         assertEquals(1, loads, "a backend that cannot serve the Home is not asked again on every visit to the tab")
         now += 61_000; h.ensure(); runCurrent()
-        assertEquals(2, loads, "after the window it is asked once more")
+        assertEquals(2, loads, "after the backoff it is asked once more")
         fail = false; h.refresh(); runCurrent()
-        assertEquals(3, loads); assertIs<HomeContentState.Content>(h.state.value)
+        assertEquals(3, loads, "a pull asks now, whatever the backoff"); assertIs<HomeContentState.Content>(h.state.value)
+    }
+
+    @Test fun aFailureBacksOffFromTenSecondsDoublingAndCappedAtTheFreshnessWindow() = runTest {
+        var loads = 0
+        val h = HomeContentHolder(backgroundScope, { loads++; throw ApiException(ApiError.Network) }, { _, _ -> null }, pin, { now })
+        h.ensure(); runCurrent(); assertEquals(1, loads)
+        for ((i, wait) in listOf(10_000L, 20_000L, 40_000L, 60_000L, 60_000L).withIndex()) {
+            now += wait - 1; h.ensure(); runCurrent()
+            assertEquals(i + 1, loads, "not before ${wait} ms after failure ${i + 1}")
+            now += 1; h.ensure(); runCurrent()
+            assertEquals(i + 2, loads, "exactly ${wait} ms after failure ${i + 1}")
+        }
+    }
+
+    @Test fun aSuccessResetsTheBackoff() = runTest {
+        var fail = true; var loads = 0
+        val h = HomeContentHolder(backgroundScope, { loads++; if (fail) throw ApiException(ApiError.Network) else HomeContent.EMPTY }, { _, _ -> null }, pin, { now })
+        h.ensure(); runCurrent(); now += 10_000; h.ensure(); runCurrent(); now += 20_000; h.ensure(); runCurrent()
+        assertEquals(3, loads)
+        fail = false; now += 40_000; h.ensure(); runCurrent(); assertEquals(4, loads); assertIs<HomeContentState.Content>(h.state.value)
+        fail = true; now += 60_000; h.ensure(); runCurrent(); assertEquals(5, loads)
+        now += 10_000; h.ensure(); runCurrent(); assertEquals(6, loads, "the first failure after a success waits 10 s again, not 80")
+    }
+
+    @Test fun aRateLimitIsHonouredByTheBackoffAndByAPull() = runTest {
+        var loads = 0; var limited = true
+        val h = HomeContentHolder(backgroundScope, {
+            loads++; if (limited) throw ApiException(ApiError.Http(429, "RATE_LIMITED", null, true, 30)) else HomeContent.EMPTY
+        }, { _, _ -> null }, pin, { now })
+        h.ensure(); runCurrent()
+        assertEquals(HomeContentState.Failed(CatalogFailure.RateLimited(30)), h.state.value)
+        now += 29_000; h.ensure(); h.refresh(); runCurrent()
+        assertEquals(1, loads, "neither a visit nor a pull asks again inside Retry-After"); assertEquals(false, h.refreshing.value)
+        limited = false; now += 1_000; h.refresh(); runCurrent()
+        assertEquals(2, loads); assertIs<HomeContentState.Content>(h.state.value)
+    }
+
+    @Test fun aPullShowsTheIndicatorUntilTheReadAnswersAndJoinsAReadInFlight() = runTest {
+        val gate = CompletableDeferred<Unit>(); var loads = 0
+        val h = HomeContentHolder(backgroundScope, { loads++; gate.await(); HomeContent.EMPTY }, { _, _ -> null }, pin, { now })
+        h.ensure(); runCurrent()
+        assertEquals(false, h.refreshing.value, "a background read never shows the pull indicator")
+        h.refresh(); runCurrent()
+        assertEquals(true, h.refreshing.value); assertEquals(1, loads, "the pull joins the read already in flight")
+        gate.complete(Unit); runCurrent()
+        assertEquals(false, h.refreshing.value); assertIs<HomeContentState.Content>(h.state.value)
+    }
+
+    @Test fun callsArePostedToTheHolderScopeNeverRunOnTheCallersThread() = runTest {
+        var loads = 0
+        val h = HomeContentHolder(backgroundScope, { loads++; HomeContent.EMPTY }, { _, _ -> null }, pin, { now })
+        h.ensure(); h.refresh(); h.onPinChanged()
+        assertEquals(0, loads); assertEquals(HomeContentState.Idle, h.state.value, "nothing ran on the caller's thread")
+        runCurrent()
+        assertEquals(1, loads)
+    }
+
+    @Test fun concurrentCallersFromManyThreadsNeverOverlapTwoReads() = runTest {
+        val errors = mutableListOf<Throwable>()
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        val confined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() +
+            kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1) +
+            kotlinx.coroutines.CoroutineExceptionHandler { _, e -> errors += e })
+        var inFlight = 0; var peak = 0; var loads = 0
+        val content = HomeContent(listOf(HomeBlock.ProductRail("R1", "x", (1..20).map { "TZP-$it" })))
+        val h = HomeContentHolder(confined, {
+            inFlight++; loads++; peak = maxOf(peak, inFlight); kotlinx.coroutines.yield(); inFlight--; content
+        }, { id, _ -> kotlinx.coroutines.yield(); detail(id) }, pin, freshMs = 0L, retryBaseMs = 0L)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            (1..8).map { t ->
+                launch { repeat(200) { i -> when ((t + i) % 3) { 0 -> h.ensure(); 1 -> h.refresh(); else -> h.onPinChanged() } } }
+            }.forEach { it.join() }
+            kotlinx.coroutines.withTimeout(10_000) {
+                while (h.refreshing.value || (h.rails.value["R1"] as? PagedState.Content)?.items?.size != 20) kotlinx.coroutines.delay(5)
+            }
+        }
+        confined.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        assertEquals(1, peak, "reads never overlap"); assertTrue(loads >= 1); assertTrue(errors.isEmpty(), "no failure inside the holder: $errors")
     }
 
     @Test fun aStaleCopyStaysOnScreenWhileItIsReReadAndSurvivesAFailedReRead() = runTest {
@@ -100,13 +181,83 @@ class HomeContentHolderTest {
         assertEquals(8, (h.rails.value["R1"] as PagedState.Content).items.size)
     }
 
+    @Test fun aReReadKeepsEveryRailOnScreenAndReadsOnlyTheIdsThatChanged() = runTest {
+        var content = rail
+        val asked = mutableListOf<String>()
+        val h = HomeContentHolder(backgroundScope, { content }, { id, _ -> asked += id; detail(id) }, pin, { now })
+        h.ensure(); runCurrent()
+        val seen = mutableListOf<PagedState<CatalogProduct>?>()
+        backgroundScope.launch { h.rails.collect { seen += it["R1"] } }
+        runCurrent(); asked.clear()
+        content = HomeContent(listOf(HomeBlock.ProductRail("R1", "Picks", listOf("TZP-1", "TZP-4", "TZP-3"))))
+        now += 61_000; h.ensure(); runCurrent()
+        assertEquals(listOf("TZP-4"), asked, "only the new id is read")
+        assertTrue(seen.none { it !is PagedState.Content<*> }, "the rail never went back to loading: $seen")
+        assertEquals(listOf("TZP-1", "TZP-4", "TZP-3"), (h.rails.value["R1"] as PagedState.Content).items.map { it.skuId })
+        asked.clear(); now += 61_000; h.ensure(); runCurrent()
+        assertTrue(asked.isEmpty(), "unchanged ids with fresh cards cost no product read")
+    }
+
+    @Test fun cardsOlderThanTheirFreshnessAreReReadSilentlyAndAPullReReadsThemAll() = runTest {
+        val asked = mutableListOf<String>()
+        val h = HomeContentHolder(backgroundScope, { rail }, { id, _ -> asked += id; detail(id) }, pin, { now }, cardFreshMs = 300_000L)
+        h.ensure(); runCurrent(); asked.clear()
+        val seen = mutableListOf<PagedState<CatalogProduct>?>()
+        backgroundScope.launch { h.rails.collect { seen += it["R1"] } }
+        now += 120_000; h.refresh(); runCurrent()
+        assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), asked.sorted(), "a pull re-reads every card"); asked.clear()
+        now += 299_000; h.ensure(); runCurrent(); assertTrue(asked.isEmpty(), "cards re-read by the pull are still fresh")
+        now += 61_000; h.ensure(); runCurrent()
+        assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), asked.sorted(), "the next re-read after the cards' freshness reads them again")
+        assertTrue(seen.all { it is PagedState.Content<*> }, "and the rail never flashed: $seen")
+    }
+
+    @Test fun aFailedRevalidationKeepsTheRailOnScreen() = runTest {
+        var content = rail; var broken = false
+        val h = HomeContentHolder(backgroundScope, { content }, { id, _ -> if (broken) throw ApiException(ApiError.Network) else detail(id) }, pin, { now })
+        h.ensure(); runCurrent()
+        content = HomeContent(listOf(HomeBlock.ProductRail("R1", "Picks", listOf("TZP-1", "TZP-9")))); broken = true
+        now += 61_000; h.ensure(); runCurrent()
+        assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), (h.rails.value["R1"] as PagedState.Content).items.map { it.skuId })
+    }
+
+    @Test fun aRailRendersAllTwentyPublishedProducts() = runTest {
+        val ids = (1..20).map { "TZP-$it" }
+        val h = HomeContentHolder(backgroundScope, { HomeContent(listOf(HomeBlock.ProductRail("R1", "x", ids))) }, { id, _ -> detail(id) }, pin, { now })
+        h.ensure(); runCurrent()
+        assertEquals(ids, (h.rails.value["R1"] as PagedState.Content).items.map { it.skuId })
+    }
+
+    @Test fun gridsAreNamedAtAnyLevelSkipUnknownTilesAndKeepNamesOverAFailedResolution() = runTest {
+        val grid = HomeContent(listOf(HomeBlock.CategoryGrid("G1", "Aisles", listOf("TZV-000037", "TZC-000002", "TZS-000001"))))
+        var known = mapOf("TZV-000037" to CatalogNode("TZV-000037", "Basmati"), "TZS-000001" to CatalogNode("TZS-000001", "Staples"))
+        val asked = mutableListOf<Collection<String>>()
+        val h = HomeContentHolder(backgroundScope, { grid }, { _, _ -> null }, pin, { now }, resolveNodes = { ids -> asked += ids; known.filterKeys { it in ids } })
+        h.ensure(); runCurrent()
+        assertEquals(listOf("Basmati", "Staples"), h.grids.value["G1"]?.map { it.name }, "published order; the unnamed tile is skipped, not the grid")
+        assertEquals(listOf(listOf("TZV-000037", "TZC-000002", "TZS-000001")), asked.map { it.toList() }, "one resolution for all grid ids")
+        known = emptyMap(); now += 61_000; h.ensure(); runCurrent()
+        assertEquals(listOf("Basmati", "Staples"), h.grids.value["G1"]?.map { it.name }, "a failed re-resolution keeps the names on screen")
+    }
+
     @Test fun aPinChangeReloadsTheRailsForTheNewPin() = runTest {
         val asked = mutableListOf<Pincode?>()
         val h = HomeContentHolder(backgroundScope, { rail }, { id, p -> asked += p; detail(id) }, pin, { now })
         h.ensure(); runCurrent()
         h.onPinChanged(); runCurrent()
         assertEquals(3, asked.size, "same PIN: no reload")
-        pin.value = Pincode.parse("560001")!!; h.onPinChanged(); runCurrent()
+        pin.value = Pincode.parse("560001")!!; h.onPinChanged()
+        runCurrent()
         assertEquals(6, asked.size); assertEquals(pin.value, asked.last())
+    }
+
+    @Test fun aPinChangeShowsTheRailLoadingRatherThanCardsPricedForTheOldPin() = runTest {
+        val gate = CompletableDeferred<Unit>(); var gated = false
+        val h = HomeContentHolder(backgroundScope, { rail }, { id, _ -> if (gated) gate.await(); detail(id) }, pin, { now })
+        h.ensure(); runCurrent()
+        gated = true; pin.value = Pincode.parse("560001")!!; h.onPinChanged(); runCurrent()
+        assertEquals(PagedState.LoadingFirst, h.rails.value["R1"])
+        gate.complete(Unit); runCurrent()
+        assertIs<PagedState.Content<CatalogProduct>>(h.rails.value["R1"])
     }
 }

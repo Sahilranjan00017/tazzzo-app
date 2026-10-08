@@ -56,6 +56,17 @@ class RemoteContentDataSourceTest {
         assertNull(seen.single().headers[HttpHeaders.Authorization])
     }
 
+    @Test fun theAppRendersTheMobileImageAndReadsSubtitleAndAltTextFromTheBannerModel() = runTest {
+        val (s, _) = source(body = """{"blocks":[{"blockId":"B1","type":"BANNER","title":"Festive","subtitle":"Up to 20% off",
+            "altText":"A basket of rice and dal","imageUrl":"https://cdn.example.test/mobile.jpg",
+            "desktopImageUrl":"https://cdn.example.test/desktop.jpg","link":"search:atta"},
+            {"blockId":"Z1","type":"CAROUSEL","title":"later"}],"requestId":"req_c"}""")
+        val b = s.home().blocks.single() as HomeBlock.Banner
+        assertEquals("https://cdn.example.test/mobile.jpg", b.imageUrl, "desktopImageUrl is the website's; the app keeps imageUrl")
+        assertEquals("Up to 20% off", b.subtitle); assertEquals("A basket of rice and dal", b.altText)
+        assertEquals(ContentLink.Search("atta"), b.link)
+    }
+
     @Test fun anEmptyHomeIsEmptyNotAnError() = runTest {
         val (s, _) = source(body = """{"blocks":[],"requestId":"req_c"}""")
         assertTrue(s.home().blocks.isEmpty())

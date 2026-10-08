@@ -34,6 +34,25 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-08 PUBLISHED HOME CONTENT — review remediation (PR #24). Grids name
+  node ids at any level (TZS/TZC/TZG/TZV) by a bounded, sequential walk of the
+  existing taxonomy reads (≤ 12 children reads, cached 300 s); an unnamed id
+  skips its tile, not the grid. Pull-to-refresh on Home and a re-read on return
+  to the foreground once the last success is > 60 s old; failures back off
+  10 → 20 → 40 → 60 s and honour 429 `Retry-After`. Rails no longer flash on a
+  re-read: per-PIN card cache, only new ids or cards > 5 min old are read, a
+  failed re-read keeps the rail; a PIN change still reloads. Holder state is
+  confined to a single-threaded scope (as the cart store). Rails render all 20
+  ids the backend allows; the 20-block cap is documented. Banners render
+  `subtitle`, describe the image with `altText`, are one accessibility node
+  (button role when tappable). `search:` stays untappable (no query-capable
+  Search screen). Verified: Android JVM unit tests 1,089 / 0 failures (24 new),
+  iOS simulator tests 1,089 / 0, `linkDebugFrameworkIosSimulatorArm64` and
+  `assembleDebug` built; 16 mutation probes, 15 killed (the survivor removes
+  one of two equivalent no-flash branches; removing both is killed). Not verified on a
+  device: pull gesture, foreground re-read and TalkBack/VoiceOver reading
+  (no reachable non-prod backend; emulator run abandoned for disk space).
+
 - 2026-10-07 PUBLISHED HOME CONTENT (backend P6 / app-integration). Home now
   renders the CMS-published blocks of `GET /v1/content/home?channel=app`
   (`data/content/`: DTO → `HomeContent` mapping, `RemoteContentDataSource`,
