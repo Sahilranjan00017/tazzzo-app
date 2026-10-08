@@ -68,10 +68,11 @@ Every product payload must include:
   rails (old cards would describe the wrong PIN). A pull re-reads only cards older than 30 s, so repeated pulls cost at
   most one card sweep per 30 s; a pull that supersedes a sweep in flight keeps the cards already read.
 - Product ids: the platform grammar `TZP-[A-Za-z0-9-]{1,40}` (backend `ContentBlock.PRODUCT_ID`, CMS, storefront),
-  numeric ids included. The app validates rail ids, `product:` links and the `GET /v1/products/{id}` path with exactly
-  this grammar; an id outside it is dropped from a rail, leaves the banner untappable, and never reaches the wire. The
-  grammar admits no `/`, `.`, `%`, `?` or whitespace, so an id is always ONE unescaped path segment. (Cart SKUs are a
-  separate grammar, `TZP-[0-9]{1,18}`, matching the backend cart.)
+  numeric ids included. The app validates rail ids, `product:` links, the `GET /v1/products/{id}` path and the cart
+  `skuId` (`PUT` / `DELETE /v1/customer/cart/items/{skuId}`, backend `CartController` since tazzzo-backend #110) with
+  exactly this grammar, from ONE shared constant (`data/catalog/CatalogModels.kt` `PRODUCT_ID`); an id outside it is
+  dropped from a rail, leaves the banner untappable, cannot be carted, and never reaches the wire. The grammar admits
+  no `/`, `.`, `%`, `?` or whitespace, so an id is always ONE unescaped path segment.
 - Grids: up to 12 node ids at ANY level (`TZS` / `TZC` / `TZG` / `TZV`). The public API has no "node by id" read, so a
   name is found by walking down from `GET /v1/categories` through `GET /v1/categories/{id}/children`, level by level,
   only as deep as needed, sequentially, at most 12 children reads per resolution (served from the 300 s taxonomy cache

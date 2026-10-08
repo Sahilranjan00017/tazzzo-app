@@ -91,10 +91,32 @@ class RemoteCartDataSourceTest {
 
     @Test fun aSkuThatIsNotATzpIdNeverReachesAPath() = runTest {
         val (s, seen) = source({ cartJson() })
-        for (bad in listOf("TZP-", "tzp-1", "TZP-1/..", "TZP-1?x=1", "TZP-1 2", "", "TZP-1234567890123456789")) {
+        val tooLong = "TZP-" + "A".repeat(41)
+        for (bad in listOf("TZP-", "tzp-1", "TZP-1/..", "TZP-1?x=1", "TZP-1 2", "", "TZP-../x", "TZP-a b", "TZP-a/b", "TZP-1.2", "TZP-1%2F", tooLong)) {
             assertFailsWith<IllegalArgumentException>(bad) { s.removeItem(bad, 1, null) }
+            assertFailsWith<IllegalArgumentException>(bad) { s.setQuantity(bad, 1, 1, null) }
+            assertFalse(RemoteCartDataSource.isValidSku(bad), bad)
         }
         assertTrue(seen.isEmpty())
+    }
+
+    /** The platform product-id grammar `TZP-[A-Za-z0-9-]{1,40}` (backend cart `skuId` since #110), numeric ids included. */
+    @Test fun aPlatformProductIdIsOneUnescapedPathSegmentForAddAndRemove() = runTest {
+        val (s, seen) = source({ cartJson() })
+        val max = "TZP-" + "A".repeat(40)
+        val ok = listOf("TZP-MED-3", "TZP-1234567890123456789", "TZP-7", max)
+        for (id in ok) {
+            assertTrue(RemoteCartDataSource.isValidSku(id), id)
+            s.setQuantity(id, 1, 1, null); s.removeItem(id, 2, null)
+        }
+        assertEquals(ok.size * 2, seen.size)
+        for ((i, id) in ok.withIndex()) {
+            assertEquals(HttpMethod.Put, seen[2 * i].method); assertEquals(HttpMethod.Delete, seen[2 * i + 1].method)
+            for (r in seen.subList(2 * i, 2 * i + 2)) {
+                assertEquals("/v1/customer/cart/items/$id", r.url.encodedPath)
+                assertEquals(listOf("v1", "customer", "cart", "items", id), r.url.segments)
+            }
+        }
     }
 
     @Test fun theResponseMapsToTheDomainInPaiseWithNoProductId() = runTest {

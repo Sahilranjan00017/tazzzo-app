@@ -15,6 +15,13 @@ import kotlinx.serialization.json.JsonElement
  * size, unit, rating, badges, description, ETA, ... so none of them exist here.
  */
 
+/**
+ * The platform product-id grammar (backend `ContentBlock.PRODUCT_ID`, cart `skuId`, OpenAPI), numeric ids included. The
+ * ONE copy in the app: rail ids, `product:` links, `GET /v1/products/{id}` and the cart all validate with it. It admits
+ * no `/`, `.`, `%`, `?` or whitespace, so an id is always ONE unescaped path segment.
+ */
+internal val PRODUCT_ID = Regex("^TZP-[A-Za-z0-9-]{1,40}$")
+
 /** A taxonomy node as the backend gives it: an id and a name, nothing else. */
 data class CatalogNode(val id: String, val name: String)
 

@@ -76,7 +76,6 @@ class RemoteCatalogDataSource(
         const val DEFAULT_PAGE_SIZE = 20
         const val MAX_PAGE_SIZE = 50
         private val NODE_ID = Regex("^TZ[SCGV]-[0-9]{6}$")
-        private val PRODUCT_ID = Regex("^TZP-[A-Za-z0-9-]{1,40}$")
 
         private fun requireNodeId(id: String) = require(NODE_ID.matches(id)) { "invalid category id" }
     }
