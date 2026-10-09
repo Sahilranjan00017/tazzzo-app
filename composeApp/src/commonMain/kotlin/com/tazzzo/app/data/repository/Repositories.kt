@@ -268,7 +268,7 @@ object ServiceLocator {
     /** The CMS-published Home (`GET /v1/content/home?channel=app`): banners, product rails and category grids. */
     val homeContent: com.tazzzo.app.data.content.HomeContentHolder by lazy {
         val source = com.tazzzo.app.data.content.RemoteContentDataSource(catalogClient, installationId)
-        val nodes = com.tazzzo.app.data.content.CategoryNodeResolver(remoteCatalog::categories, remoteCatalog::children)
+        val nodes = com.tazzzo.app.data.content.CategoryNodeResolver(remoteCatalog::node)
         com.tazzzo.app.data.content.HomeContentHolder(
             contentScope, source::home, remoteCatalog::product, launchContext.pin, resolveNodes = nodes::resolve
         )

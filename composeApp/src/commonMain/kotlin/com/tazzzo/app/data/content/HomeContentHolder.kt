@@ -55,8 +55,8 @@ sealed interface HomeContentState {
  * missing is simply absent; nothing is filled in.
  *
  * **Grids.** Published node ids are named through [resolveNodes] (see [CategoryNodeResolver]); an id that cannot be
- * named is a skipped tile, never a skipped grid. Grids on screen stay while a re-read resolves again, and a node named
- * before keeps its name if a later resolution could not read its branch.
+ * named is a skipped tile, never a skipped grid. Grids on screen stay while a re-read resolves again; a node named
+ * before keeps its name if a later resolution could not read it, and loses its tile once the backend answers 404 for it.
  */
 @OptIn(ExperimentalTime::class)
 class HomeContentHolder(
@@ -67,7 +67,7 @@ class HomeContentHolder(
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val freshMs: Long = 60_000L,
     private val parallelism: Int = 4,
-    private val resolveNodes: suspend (Collection<String>) -> Map<String, CatalogNode> = { emptyMap() },
+    private val resolveNodes: suspend (Collection<String>) -> Map<String, CatalogNode?> = { emptyMap() },
     private val retryBaseMs: Long = 10_000L,
     private val cardFreshMs: Long = 300_000L,
     private val pullCardMinAgeMs: Long = 30_000L
@@ -252,7 +252,7 @@ class HomeContentHolder(
             } catch (e: Throwable) {
                 emptyMap()
             }
-            nodeNames.putAll(named)
+            for ((id, node) in named) if (node == null) nodeNames.remove(id) else nodeNames[id] = node   // null = 404: gone
             _grids.value = grids.associate { g -> g.blockId to g.nodeIds.mapNotNull { nodeNames[it] } }
         }
     }

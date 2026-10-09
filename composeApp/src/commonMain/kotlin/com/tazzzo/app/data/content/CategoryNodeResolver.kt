@@ -1,7 +1,9 @@
 package com.tazzzo.app.data.content
 
+import com.tazzzo.app.data.catalog.CatalogFailure
 import com.tazzzo.app.data.catalog.CatalogNode
-import com.tazzzo.app.data.catalog.TaxonomyPage
+import com.tazzzo.app.data.catalog.RetryPolicy
+import com.tazzzo.app.data.catalog.toCatalogFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -9,90 +11,90 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 /**
- * Names the taxonomy nodes a published CATEGORY_GRID lists. The public API has no "node by id" read: a node's name is only
- * in its parent's list (`GET /v1/categories` for the TZS sections, `GET /v1/categories/{id}/children` below them). So a
- * grid id is resolved by walking DOWN from the root, level by level, only as deep as the deepest id still unresolved
- * (TZS → TZC → TZG → TZV, the backend's fixed four levels), stopping as soon as every id is named.
+ * Names the taxonomy nodes a published CATEGORY_GRID lists, at any level (TZS / TZC / TZG / TZV), with ONE read per id:
+ * `GET /v1/categories/{id}` (backend PR #109) through [node], which answers the node or `null` for a 404 (unknown, hidden
+ * or consumer-empty — the backend does not tell them apart, and the app does not need to).
  *
- * Cost is the reason for the bounds. Each children read is admission-charged by the size of its subtree, so the walk is
- * sequential (never a fan-out) and makes at most [maxRequests] children reads per call. With the reads going through the
- * process taxonomy cache (fresh for 300 s), a repeated resolution of FOUND ids costs nothing. The first failed read
- * (a 429 above all) ends the walk at once: the rest of the budget is not spent against a backend that is refusing or
- * failing. Ids the walk could not name are remembered as unresolved — for [missTtlMs] after a complete walk or an
- * exhausted budget, for [failureTtlMs] after a failed read — and are not walked for again until then, so re-reading the
- * Home does not repeat an expensive, futile walk. The grid simply skips their tiles. Today's taxonomy (7 TZS, ~50 TZC,
- * ~108 TZG) means TZS and TZC ids always resolve; TZG/TZV ids resolve only when found within the budget.
+ * Bounds, because every read is admission-charged:
+ *  - **Cache.** A named node is served from memory for [hitTtlMs] (the route's `max-age=300`); a 404 is remembered for
+ *    [missTtlMs]. A Home re-read inside those windows costs nothing.
+ *  - **Sequential, budgeted.** At most [maxRequests] reads per call, one at a time, in published order (never a fan-out).
+ *    Ids beyond the budget are not penalised: the next resolution reads them.
+ *  - **Failure.** The first failed read ends the call: the failed id and every id not yet read are not read again for
+ *    [failureTtlMs]. A 429 additionally stops EVERY read for its `Retry-After` (capped at
+ *    [RetryPolicy.MAX_RATE_LIMIT_WAIT_SECONDS], as everywhere in the app), never less than [failureTtlMs].
+ *
+ * The answer maps an id to its node, or to `null` when the backend said 404 (the holder then drops a tile it showed
+ * before). An id absent from the answer is simply not known right now — the holder keeps whatever it showed.
  */
 @OptIn(ExperimentalTime::class)
 class CategoryNodeResolver(
-    private val root: suspend () -> TaxonomyPage,
-    private val children: suspend (nodeId: String) -> TaxonomyPage,
+    private val node: suspend (nodeId: String) -> CatalogNode?,
     private val maxRequests: Int = DEFAULT_MAX_REQUESTS,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    private val hitTtlMs: Long = 300_000L,
     private val missTtlMs: Long = 300_000L,
     private val failureTtlMs: Long = 60_000L
 ) {
+    private class Hit(val node: CatalogNode, val untilMs: Long)
+
+    // ---- guarded by [lock] ----
     private val lock = Mutex()
-    /** Id → time until which it is not walked for again. Guarded by [lock]. */
-    private val unresolvedUntil = HashMap<String, Long>()
+    private val hits = HashMap<String, Hit>()
+    /** 404: not visible; not read again until then. */
+    private val goneUntil = HashMap<String, Long>()
+    /** A failed read (or an id left unread after one): not read again until then. */
+    private val failedUntil = HashMap<String, Long>()
+    /** A 429: no read at all until then. */
+    private var blockedUntilMs = 0L
 
-    /** The nodes found for [ids], by id. Never throws for a failed read (the affected ids stay unresolved). */
-    suspend fun resolve(ids: Collection<String>): Map<String, CatalogNode> = lock.withLock {
+    /** Never throws for a failed read; see the class comment for what the answer means. */
+    suspend fun resolve(ids: Collection<String>): Map<String, CatalogNode?> = lock.withLock {
         val now = nowMs()
-        unresolvedUntil.entries.removeAll { it.value <= now }
-        val wanted = ids.filter { levelOf(it) > 0 && it !in unresolvedUntil }.toSet()
-        val walk = walk(wanted)
-        val left = wanted - walk.found.keys
-        val until = nowMs() + if (walk.failed) failureTtlMs else missTtlMs
-        for (id in left) unresolvedUntil[id] = until
-        walk.found
-    }
+        hits.entries.removeAll { it.value.untilMs <= now }
+        goneUntil.entries.removeAll { it.value <= now }
+        failedUntil.entries.removeAll { it.value <= now }
 
-    private class Walk(val found: Map<String, CatalogNode>, val failed: Boolean)
-
-    private suspend fun walk(ids: Set<String>): Walk {
-        val remaining = ids.toMutableSet()
-        val found = LinkedHashMap<String, CatalogNode>()
-        if (remaining.isEmpty()) return Walk(found, failed = false)
-        var frontier = readOrNull { root() }?.items ?: return Walk(found, failed = true)
-        var level = 1
-        var requests = 0
-        while (true) {
-            for (n in frontier) if (remaining.remove(n.id)) found[n.id] = n
-            if (remaining.isEmpty() || remaining.none { levelOf(it) > level }) return Walk(found, failed = false)
-            val next = ArrayList<CatalogNode>()
-            for (n in frontier) {
-                if (levelOf(n.id) != level) continue          // only a node of this level has children of the next one
-                if (requests >= maxRequests) return Walk(found, failed = false)
-                requests++
-                // a failed read (429, outage, network) ends the walk: the remaining budget is not spent on a refusing backend
-                val page = readOrNull { children(n.id) } ?: return Walk(found, failed = true)
-                for (c in page.items) if (remaining.remove(c.id)) found[c.id] = c
-                if (remaining.isEmpty()) return Walk(found, failed = false)
-                next += page.items
+        val out = LinkedHashMap<String, CatalogNode?>()
+        val toRead = ArrayList<String>()
+        for (id in ids.distinct()) {
+            if (!NODE_ID.matches(id)) continue
+            val hit = hits[id]
+            when {
+                hit != null -> out[id] = hit.node
+                id in goneUntil -> out[id] = null
+                id in failedUntil -> Unit
+                else -> toRead += id
             }
-            if (next.isEmpty()) return Walk(found, failed = false)
-            frontier = next
-            level++
         }
-    }
+        if (now < blockedUntilMs) return@withLock out
 
-    private suspend fun readOrNull(read: suspend () -> TaxonomyPage): TaxonomyPage? = try {
-        read()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Throwable) {
-        null
+        for ((i, id) in toRead.withIndex()) {
+            if (i >= maxRequests) break
+            val read: CatalogNode? = try {
+                node(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                val t = nowMs()
+                val failure = e.toCatalogFailure()
+                val waitMs = if (failure is CatalogFailure.RateLimited) RetryPolicy.waitSeconds(failure, 1) * 1000L else 0L
+                val until = t + maxOf(failureTtlMs, waitMs)
+                if (failure is CatalogFailure.RateLimited) blockedUntilMs = until
+                // the rest of the budget is not spent against a backend that is refusing or failing
+                for (left in toRead.subList(i, toRead.size)) failedUntil[left] = until
+                break
+            }
+            val t = nowMs()
+            if (read == null) goneUntil[id] = t + missTtlMs else hits[id] = Hit(read, t + hitTtlMs)
+            out[id] = read
+        }
+        out
     }
 
     companion object {
-        /** Enough for every TZS section's children (7 today) plus a few TZC expansions. */
-        const val DEFAULT_MAX_REQUESTS = 12
-
-        /** 1 = TZS section, 2 = TZC category, 3 = TZG sub-category, 4 = TZV vertical; 0 = not a node id. */
-        fun levelOf(id: String): Int = if (!NODE_ID.matches(id)) 0 else when (id[2]) {
-            'S' -> 1; 'C' -> 2; 'G' -> 3; 'V' -> 4; else -> 0
-        }
+        /** One full grid ([HomeBlock.MAX_GRID_IDS]) per resolution. */
+        const val DEFAULT_MAX_REQUESTS = HomeBlock.MAX_GRID_IDS
 
         private val NODE_ID = Regex("^TZ[SCGV]-[0-9]{6}$")
     }

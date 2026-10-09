@@ -9,7 +9,7 @@ import com.tazzzo.app.data.model.Product
  * Design constraints:
  *  - The repository interface stays `suspend fun search(query): List<Product>`,
  *    so this whole class can be replaced by a call to the backend search
- *    service (GET /catalog/v1/search?q=) without any UI change.
+ *    service (GET /v1/search?q=) without any UI change.
  *  - Customers type fast, in two languages, with typos. `aata` must find atta,
  *    `doodh` must find milk, `mag` must find Maggi.
  *

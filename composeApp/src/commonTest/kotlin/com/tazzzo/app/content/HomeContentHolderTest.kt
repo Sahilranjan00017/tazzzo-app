@@ -292,6 +292,16 @@ class HomeContentHolderTest {
         assertEquals(listOf("Basmati", "Staples"), h.grids.value["G1"]?.map { it.name }, "a failed re-resolution keeps the names on screen")
     }
 
+    @Test fun aNodeTheBackendNowAnswers404ForLosesItsTile() = runTest {
+        val grid = HomeContent(listOf(HomeBlock.CategoryGrid("G1", "Aisles", listOf("TZC-000002", "TZS-000001"))))
+        var answer: Map<String, CatalogNode?> = mapOf("TZC-000002" to CatalogNode("TZC-000002", "Rice"), "TZS-000001" to CatalogNode("TZS-000001", "Staples"))
+        val h = HomeContentHolder(backgroundScope, { grid }, { _, _ -> null }, pin, { now }, resolveNodes = { answer })
+        h.ensure(); runCurrent()
+        assertEquals(listOf("Rice", "Staples"), h.grids.value["G1"]?.map { it.name })
+        answer = mapOf("TZC-000002" to null); now += 61_000; h.ensure(); runCurrent()
+        assertEquals(listOf("Staples"), h.grids.value["G1"]?.map { it.name }, "404 drops the tile; an unanswered id keeps its name")
+    }
+
     @Test fun aPinChangeReloadsTheRailsForTheNewPin() = runTest {
         val asked = mutableListOf<Pincode?>()
         val h = HomeContentHolder(backgroundScope, { rail }, { id, p -> asked += p; detail(id) }, pin, { now })

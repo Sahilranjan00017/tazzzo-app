@@ -73,14 +73,15 @@ Every product payload must include:
   exactly this grammar, from ONE shared constant (`data/catalog/CatalogModels.kt` `PRODUCT_ID`); an id outside it is
   dropped from a rail, leaves the banner untappable, cannot be carted, and never reaches the wire. The grammar admits
   no `/`, `.`, `%`, `?` or whitespace, so an id is always ONE unescaped path segment.
-- Grids: up to 12 node ids at ANY level (`TZS` / `TZC` / `TZG` / `TZV`). The public API has no "node by id" read, so a
-  name is found by walking down from `GET /v1/categories` through `GET /v1/categories/{id}/children`, level by level,
-  only as deep as needed, sequentially, at most 12 children reads per resolution (served from the 300 s taxonomy cache
-  when fresh). Today's taxonomy (7 TZS, ~50 TZC, ~108 TZG) means TZS and TZC ids always resolve; a TZG/TZV id resolves
-  only if found within the budget. The first failed read (a 429 above all) ends the walk without spending the rest of
-  the budget; an id left unnamed is not walked for again for 5 min (1 min when a read failed), so Home re-reads do not
-  repeat a futile walk. An id that cannot be named is a skipped tile, never a skipped grid. **Backend ask:**
-  names in the grid block (or a node-by-id read) would remove this walk and its admission cost.
+- Grids: up to 12 node ids at ANY level (`TZS` / `TZC` / `TZG` / `TZV`), each named with ONE
+  `GET /v1/categories/{id}` (backend PR #109: `{id, name, resolvedReleaseId, requestId}`; 404 = unknown, hidden or
+  consumer-empty). `data/content/CategoryNodeResolver`: sequential, in published order, at most 12 reads per
+  resolution (ids beyond that are read by the next one, not penalised); a named node is cached 300 s (the route's
+  `max-age`), a 404 is remembered 300 s and drops the tile (also one shown before). The first failed read ends the
+  resolution, and the failed and unread ids wait 60 s; a 429 stops EVERY node read for its `Retry-After`, capped at
+  120 s (`RetryPolicy`) and never under 60 s. No `If-None-Match`: the backend charges a 304 like a 200. A failed
+  re-read keeps a name already on screen. An id that cannot be named is a skipped tile, never a skipped grid. No
+  taxonomy-walk fallback is kept: the route is on backend main, and an older backend answers 404, i.e. no tiles.
 - Block cap: the app renders the first **20** blocks in display order and ignores the rest. The backend serves up to
   200 live blocks per placement; the tighter app cap keeps a CMS mistake from turning Home into hundreds of sections.
 - Refresh: re-read when Home is shown or the app returns to the foreground once the last success is older than 60 s
