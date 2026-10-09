@@ -34,6 +34,20 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-09 PUBLISHED HOME CONTENT — grid tiles named by id (PR #24). The
+  taxonomy walk (up to 13 admission-charged reads per resolution) is replaced
+  by ONE `GET /v1/categories/{id}` per grid id (backend #109): sequential, ≤ 12
+  per resolution, names cached 300 s, 404 remembered 300 s and drops the tile,
+  first failure ends the resolution (60 s backoff), a 429 stops every node read
+  for `Retry-After` capped at 120 s. No walk fallback. Verified: Android JVM
+  unit tests 1,104 / 0 and iOS simulator tests 1,104 / 0 (new: 10 resolver,
+  4 contract, 1 holder). NOT verified on an emulator/simulator: pull gesture,
+  foreground re-read, banner navigation, image fallback, TalkBack/VoiceOver
+  semantics — the run was stopped by the < 4 GB free-disk guardrail before
+  the local backend or emulator started (the app also has no local-backend
+  override yet; the debug-only override was written but not committed
+  because it could not be run).
+
 - 2026-10-08 PUBLISHED HOME CONTENT — re-review follow-ups (PR #24). A pull
   re-reads only cards older than 30 s (≤ one card sweep per 30 s; a superseded
   sweep keeps the cards it finished); the grid walk stops at the first failed
