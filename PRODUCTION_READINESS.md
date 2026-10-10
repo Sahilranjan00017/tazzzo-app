@@ -134,7 +134,7 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
   once; a replayed placement credits zero more; failure-then-retry credits
   exactly once and leaves the cart untouched; five repeated placements yield one
   order id and one credit; an in-flight attempt never reaches the repository.
-  D-2 RESOLVED: data/remote/ApiConfig.kt carried its own endpoint sketch that
+  D-2 RESOLVED (file since deleted in hardening PR-2): data/remote/ApiConfig.kt carried its own endpoint sketch that
   contradicted both contract documents and named a VOICE_SERVICE for a feature
   with no implementation. Verified unreferenced by any source file, so no
   functionality depended on it. Sketch removed; the file now points at

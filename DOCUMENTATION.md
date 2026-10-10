@@ -130,7 +130,7 @@ tazzzo/
 │       │   │   │   ├── model/Models.kt        Data shapes
 │       │   │   │   ├── MockCatalog.kt         Demo catalogue
 │       │   │   │   ├── repository/            Contracts + mock impls
-│       │   │   │   └── remote/ApiConfig.kt    Microservice URLs
+│       │   │   │   └── remote/ (ApiConfig removed; hosts: config/AppEnvironment.kt)
 │       │   │   └── ui/
 │       │   │       ├── common/Components.kt   Shared UI pieces
 │       │   │       ├── splash/                Splash screen

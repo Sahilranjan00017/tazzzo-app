@@ -104,6 +104,70 @@ jobs:
           path: composeApp/build/test-results/testDebugUnitTest/
           if-no-files-found: ignore
 
+  # iOS RELEASE verification, unsigned. The Kotlin/Native release link runs whole-program optimisation and needs far more heap
+  # than the debug link (it ran out of memory on an 8 GB laptop at the project default of 1.5 GB). The larger heap is set for
+  # this job only, through the runner's user-level Gradle properties, so local developers keep the small defaults and the Xcode
+  # script's own Gradle invocation sees the same values. No certificates, profiles or keys are used or created.
+  ios-release:
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version-file: .java-version
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Kotlin/Native cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-release-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: konan-release-${{ runner.os }}-
+      - name: Runner and toolchain
+        run: |
+          xcodebuild -version
+          echo "memory_gb=$(( $(sysctl -n hw.memsize) / 1073741824 )) cpus=$(sysctl -n hw.ncpu)"
+      - name: Release heap (CI only)
+        run: |
+          mkdir -p ~/.gradle
+          # The Kotlin/Native compiler runs inside the Gradle daemon, so org.gradle.jvmargs is the heap that matters here (7 GB runner).
+          printf 'org.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8\nkotlin.daemon.jvmargs=-Xmx1g\n' >> ~/.gradle/gradle.properties
+      - name: iOS Release framework link
+        run: |
+          start=$(date +%s)
+          ./gradlew :composeApp:linkReleaseFrameworkIosArm64 --console=plain
+          echo "link_seconds=$(( $(date +%s) - start ))"
+          ./gradlew --stop   # free the daemon's heap before the Xcode archive starts its own Gradle run
+      - name: Unsigned iOS Release archive
+        run: |
+          start=$(date +%s)
+          xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Tazzzo.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          echo "archive_seconds=$(( $(date +%s) - start ))"
+      - name: Release asset inspection
+        run: |
+          app=$(find "$RUNNER_TEMP/Tazzzo.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)
+          echo "app=$app"; du -sh "$app"
+          res="$app/compose-resources"
+          mock=$(find "$res" -type f \( -name 'prod_p*.jpg' -o -name 'cat_*.jpg' -o -name 'hero_basket.jpg' -o -name 'banner_coins.jpg' \) | wc -l | tr -d ' ')
+          kept=$(find "$res" -type f -path '*drawable*' | wc -l | tr -d ' ')
+          echo "mock_only_assets=$mock production_drawables=$kept"
+          test "$mock" = 0
+          test -f "$res/composeResources/tazzzo.resources/drawable/bg_home_hero.webp"
+          test -f "$res/composeResources/tazzzo.resources/drawable/bg_pdp_fallback.webp"
+          find "$res" -type f -path '*drawable*' | sed 's|.*/||' | sort > "$RUNNER_TEMP/ios-drawables.txt"
+          cat "$RUNNER_TEMP/ios-drawables.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-release-assets
+          path: ${{ runner.temp }}/ios-drawables.txt
+          if-no-files-found: ignore
+
   # iOS simulator unit tests and the shared framework link. Needs macOS because
   # Kotlin/Native links against Apple SDKs. The full iosApp Xcode build is not
   # part of this job.

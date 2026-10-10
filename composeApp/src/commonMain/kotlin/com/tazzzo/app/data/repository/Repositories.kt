@@ -8,7 +8,7 @@ import kotlinx.coroutines.delay
 /**
  * Repository contracts. UI only talks to these interfaces, so switching from
  * the Mock* implementations to real microservice-backed ones (see
- * data/remote/ApiConfig.kt) is a one-line change in ServiceLocator.
+ * config/AppEnvironment.kt for the gateway host) is a one-line change in ServiceLocator.
  */
 interface CatalogRepository {
     suspend fun getCategories(): List<Category>

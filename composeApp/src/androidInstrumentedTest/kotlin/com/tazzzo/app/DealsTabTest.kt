@@ -7,6 +7,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onFirst
@@ -74,7 +75,7 @@ class DealsTabTest {
 
     @Test fun deals_is_a_destination_showing_only_verifiable_savings() {
         waitFor(hasContentDescription("Home"))
-        waitFor(hasContentDescription("Vegetables & Fruits") and hasClickAction())
+        waitFor(hasTestTag("homeFeed"))   // Home no longer lists the aisle tiles (they moved to Shop in UI-02)
 
         // ---- Reachable as its own tab, not a filter buried in a list ----
         waitFor(hasContentDescription("Deals"))
