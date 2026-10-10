@@ -39,6 +39,7 @@ import com.tazzzo.app.ui.onboarding.LoginScreen
 import com.tazzzo.app.ui.onboarding.ShowcaseScreen
 import com.tazzzo.app.ui.splash.SplashScreen
 import com.tazzzo.app.ui.home.MasterListScreen
+import com.tazzzo.app.ui.common.TransientMessageToast
 
 @Composable
 fun App() {
@@ -130,7 +131,7 @@ fun App() {
                 }
                 // The transient notice ("Only 3 left", cart refusals) is hosted HERE, above every screen, so a notice raised on
                 // the PDP, the cart or the address book shows at once (it used to render only while Home was on top).
-                com.tazzzo.app.ui.common.TransientMessageToast(aboveNav = appState.current is Screen.Home)
+                TransientMessageToast(aboveNav = appState.current is Screen.Home)
                 }
             }
         }
