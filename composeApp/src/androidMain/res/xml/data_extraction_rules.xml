@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+ (android:dataExtractionRules): same targeted exclusion for cloud
-     backup AND device-to-device transfer. -->
+<!-- Android 12+ (android:dataExtractionRules): same exclusions (secure session blob + default prefs
+     file `<applicationId>_preferences`) for cloud backup AND device-to-device transfer. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="tazzzo_secure_auth.xml" />
+        <exclude domain="sharedpref" path="com.tazzzo.app_preferences.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="tazzzo_secure_auth.xml" />
+        <exclude domain="sharedpref" path="com.tazzzo.app_preferences.xml" />
     </device-transfer>
 </data-extraction-rules>
