@@ -130,10 +130,32 @@ class RemoteOrderDataSourceTest {
         assertEquals(OrderFailure.Unknown, failureFor(429, "RATE_LIMITED"))
     }
 
+    @Test fun theOrderConflictCodesAndPayloadTooLargeAreDefiniteNeverUnknown() = runTest {
+        val table = listOf(
+            failureFor(409, "DELIVERY_SLOT_UNAVAILABLE") to OrderFailure.SlotUnavailable,
+            failureFor(409, "STALE_VERSION") to OrderFailure.StaleVersion,
+            failureFor(409, "INVALID_TRANSITION") to OrderFailure.InvalidTransition,
+            failureFor(409, "ORDER_NOT_CANCELLABLE") to OrderFailure.NotCancellable,
+            failureFor(409, "CANCELLATION_WINDOW_CLOSED") to OrderFailure.CancellationWindowClosed,
+            failureFor(413, "PAYLOAD_TOO_LARGE") to OrderFailure.ClientBug
+        )
+        for ((actual, expected) in table) {
+            assertEquals(expected, actual)
+            assertFalse(actual == OrderFailure.Unknown, expected.toString())
+            assertFalse(actual.isAmbiguous, expected.toString())
+        }
+    }
+
+    @Test fun anUnrecognisedConflictCodeStillMapsToUnknown() = runTest {
+        assertEquals(OrderFailure.Unknown, failureFor(409, "SOME_FUTURE_CODE"))
+        assertEquals(OrderFailure.Unknown, failureFor(409, "PAYLOAD_TOO_LARGE"))
+    }
+
     @Test fun ambiguityIsExactlyTheCasesWhereAnOrderMayExist() {
         for (f in listOf(OrderFailure.Unavailable, OrderFailure.Server, OrderFailure.Network, OrderFailure.Timeout, OrderFailure.Unknown)) assertTrue(f.isAmbiguous, f.toString())
         for (f in listOf(OrderFailure.QuoteExpired, OrderFailure.NotFound, OrderFailure.AddressChanged, OrderFailure.NotServiceable, OrderFailure.PriceChanged,
             OrderFailure.ProductUnavailable, OrderFailure.StockUnavailable, OrderFailure.ReservationExpired, OrderFailure.CartAlreadyPurchased, OrderFailure.ClientBug,
+            OrderFailure.SlotUnavailable, OrderFailure.StaleVersion, OrderFailure.InvalidTransition, OrderFailure.NotCancellable, OrderFailure.CancellationWindowClosed,
             OrderFailure.Unauthenticated, OrderFailure.NotLaunched, OrderFailure.QuoteNotReady)) assertFalse(f.isAmbiguous, f.toString())
     }
 
