@@ -38,6 +38,13 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-10 RELEASE ORDERING ON + ADVISORY MONEY (`feature/app-orders-checkout-release`). REMOTE places real COD orders
+  (`orderIntegration = true`, debug opt-in removed) and shows real order history. The backend quote `moneyPreview` is ADVISORY
+  (the order computes its own money, may differ, placed with 200; PAYABLE_CHANGED is never sent): checkout shows "Total" +
+  "Final amount is confirmed when you place your order.", and the confirmation/detail always display the order's money with
+  "Your total changed from ₹X to ₹Y" when it differs from what was reviewed (PayableDriftTest). Verified only in a scratch JVM
+  harness (non-Compose code + tests); Compose UI and platform builds are CI-only; NOT run on a device.
+
 - 2026-10-10 PRODUCT-CLOSURE RELEASE PATH (branches `feature/app-orders-checkout-release`, `feature/app-search-release`,
   `feature/app-account-help-legal-nav`). REMOTE (every release build) now: places real COD orders (capability on, debug
   opt-in removed, iOS included), lists real order history (paging, empty/failure/signed-out states) and order detail
@@ -47,7 +54,7 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
   no Coins/Genie rows; toast host at the App root; Android/iOS back on the OTP step returns to the phone step; iOS
   edge-swipe back wired through Compose Multiplatform's `BackHandler`. Verified LOCALLY (scratch JVM harness, Kotlin
   2.2.20 + kotlinx/ktor JVM jars, NOT the project build): the non-Compose commonMain subset type-checks and the
-  commonTest subset that compiles without Compose UI passes (1,113 tests). NOT verified locally: any Compose UI file,
+  commonTest subset that compiles without Compose UI passes (1,113 tests before the advisory-money fix; see the restack note in the PR). NOT verified locally: any Compose UI file,
   Android/iOS compilation, the Gradle build — CI is the gate. NOT run on any device, emulator or simulator; no
   screenshots. Needs on-device checks before launch: place order → confirmation → detail; history paging; search
   debounce/keyboard; tel:/mailto: launch; iOS swipe-back; OTP back; toast placement over pushed screens.

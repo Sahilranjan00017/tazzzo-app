@@ -89,7 +89,11 @@ class FakeOrderSource : OrderSource {
     fun failNext(e: Throwable, applied: Boolean = false) { failures.addLast(e to applied) }
     fun ordersCreated() = orders.size
 
-    private fun create(quoteId: String): CustomerOrder = orderOf("ORD_${++n}abcdef").also { orders[quoteId] = it }
+    /** The order's AUTHORITATIVE payable in paise (null = the default, equal to the ready quote's preview of ₹99). */
+    var orderPaise: Long? = null
+
+    private fun create(quoteId: String): CustomerOrder =
+        (orderPaise?.let { orderOf("ORD_${++n}abcdef", subtotal = it) } ?: orderOf("ORD_${++n}abcdef")).also { orders[quoteId] = it }
 
     override suspend fun placeCodOrder(quoteId: String): CustomerOrder {
         calls += quoteId

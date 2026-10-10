@@ -91,7 +91,7 @@ data class CheckoutSource(val cartVersion: Long, val address: AddressStamp) {
 
 enum class StaleReason {
     CartChanged, AddressChanged, AddressRemoved,
-    /** An order from this quote was refused with PAYABLE_CHANGED: its binding money is no longer the current money. */
+    /** An order from this quote was refused with PAYABLE_CHANGED (defensive: the running backend does not send that code). */
     PayableChanged
 }
 

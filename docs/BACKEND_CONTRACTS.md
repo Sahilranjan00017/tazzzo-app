@@ -108,7 +108,7 @@ before it is put in a path; every request sends only the documented fields/param
 
 | Endpoint | App client | Notes |
 |---|---|---|
-| `POST /v1/customer/orders` | `RemoteOrderDataSource.placeCodOrder` | `{quoteId, paymentMethod:"COD"}` only. `deliverySlotId` is NOT sent (optional unless `tazzzo.checkout.delivery-slot-required=true`, default false). Release ordering is ON (`CatalogCapabilities.REMOTE.orderIntegration = true`). |
+| `POST /v1/customer/orders` | `RemoteOrderDataSource.placeCodOrder` | `{quoteId, paymentMethod:"COD"}` only. `deliverySlotId` is NOT sent (optional unless `tazzzo.checkout.delivery-slot-required=true`, default false). Release ordering is ON (`CatalogCapabilities.REMOTE.orderIntegration = true`). The quote money is advisory: the order's `money` holds and a "Your total changed" notice shows when it differs (see "Order money"). |
 | `GET /v1/customer/orders?page_size&cursor` | `RemoteOrderDataSource.listOrders` | `CustomerOrderDto.Page{items:[Summary], nextCursor}`; Summary = `orderId,status,paymentMethod,itemCount,subtotalPaise,payablePaise?,createdAt,deliverySlot?,cancelledAt?`. page_size 1..50, cursor ≤ 128 chars (a longer `nextCursor` ends the list). |
 | `GET /v1/customer/orders/{id}` | `getOrder` | Statuses CONFIRMED / OUT_FOR_DELIVERY / DELIVERED / CANCELLED (+ unknown → "Received"); `paymentCondition` absent on CANCELLED; timeline from `confirmedAt/outForDeliveryAt/deliveredAt/cancelledAt`; optional `deliverySlot.label`. |
 | `POST /v1/customer/orders/{id}/cancel` | — not used | Customer cancel window defaults to 0 s (disabled) on the backend; no cancel UI ships day-1. |
@@ -130,6 +130,13 @@ so no existing call site breaks). `OrderRepository.placeOrder` accepts it and
 `MockCheckoutRepository` passes `OrderRequest.payment` straight through.
 **Backend impact:** `POST /orders/v1/orders` already receives `payment`; the
 order payload it returns must echo it back as `payment: "COD" | "UPI" | "CARD"`.
+
+## Order money (2026-10-10)
+
+Release ordering is ON for REMOTE. The quote's `moneyPreview` is ADVISORY (backend openapi: "not binding on Order placement … it may
+differ"); the order's `money` is AUTHORITATIVE. The app shows the preview as "Total" with "Final amount is confirmed when you place your
+order.", always displays the order's money after placement, and shows "Your total changed from ₹X to ₹Y" when they differ. The
+`PAYABLE_CHANGED` 409 mapping below is kept defensively only — the running backend does not send it.
 
 ## Order error contract (`/v1/customer/orders`)
 

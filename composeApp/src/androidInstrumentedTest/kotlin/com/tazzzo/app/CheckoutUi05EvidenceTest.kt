@@ -189,16 +189,16 @@ class CheckoutUi05EvidenceTest {
     }
 
     @Test fun checkout_review_payable_positive() {
-        content { CheckoutScreenLayout(ready, OrderState.Idle, delivery, cleanCart, PlaceOrderAvailability.LaunchGated, checkoutActions, "Expires in 4:32") }
-        rule.onNodeWithText("Item subtotal").performScrollTo().assertIsDisplayed(); rule.onNodeWithText("Benefit discount").performScrollTo().assertIsDisplayed(); rule.onNodeWithText("Amount due").performScrollTo().assertIsDisplayed()
-        rule.onAllNodesWithText("₹840 due on delivery").onFirst().assertIsDisplayed()   // payment card and review note
-        rule.onNodeWithText("Ordering isn't available yet.").assertIsDisplayed()
+        content { CheckoutScreenLayout(ready, OrderState.Idle, delivery, cleanCart, PlaceOrderAvailability.Available, checkoutActions, "Expires in 4:32") }
+        rule.onNodeWithText("Item subtotal").performScrollTo().assertIsDisplayed(); rule.onNodeWithText("Benefit discount").performScrollTo().assertIsDisplayed(); rule.onNodeWithText("Total").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Final amount is confirmed when you place your order.").performScrollTo().assertIsDisplayed()   // the advisory preview note
+        rule.onNodeWithText("Total for review").assertIsDisplayed()
         snapshot("ui05_checkout_review")
     }
 
     @Test fun checkout_review_payable_zero() {
         content { CheckoutScreenLayout(readyZero, OrderState.Idle, delivery, cleanCart, PlaceOrderAvailability.Available, checkoutActions) }
-        rule.onAllNodesWithText("Nothing due on delivery").onFirst().assertIsDisplayed()
+        rule.onNodeWithText("Total for review").assertIsDisplayed()
         rule.onAllNodesWithText("₹0").onLast().assertIsDisplayed()   // the sticky bar headline
         snapshot("ui05_checkout_zero")
     }

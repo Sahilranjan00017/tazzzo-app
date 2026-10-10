@@ -104,19 +104,20 @@ class CheckoutUiModelTest {
         assertEquals(listOf("Item subtotal"), moneyLines(null, Money.ofPaise(4_950)).map { it.label })   // legacy: subtotal alone, no amount due derived
     }
 
-    @Test fun zeroPayableReadsAsIntentionalNotAsAnError() {
+    @Test fun zeroPreviewReadsAsAnAmountNotAsAnError() {
         val zero = money(2_000, 2_000)
         val due = dueHeadline(zero)
-        assertEquals("₹0", due.amount); assertEquals(CheckoutCopy.NOTHING_DUE, due.caption)
-        assertEquals("Nothing due on delivery", paymentCard(zero).dueLine)
+        assertEquals("₹0", due.amount); assertEquals(CheckoutCopy.PREVIEW_CAPTION, due.caption)
+        assertEquals(CheckoutCopy.PREVIEW_PAYMENT, paymentCard(zero).dueLine)
         assertEquals("₹0", moneyLines(zero, Money.ofPaise(2_000)).last().value)
     }
 
-    @Test fun positivePayableSaysDueOnDeliveryAndNeverPaid() {
+    @Test fun theCheckoutBarShowsTheAdvisoryTotalForReviewNeverDueOrPaid() {
         val m = money(9_000)
-        assertEquals("₹90", dueHeadline(m).amount); assertEquals("due on delivery", dueHeadline(m).caption)
-        assertEquals("₹90 due on delivery", paymentCard(m).dueLine)
-        assertFalse("paid" in paymentCard(m).dueLine!!.lowercase())
+        assertEquals("₹90", dueHeadline(m).amount); assertEquals("Total for review", dueHeadline(m).caption)
+        for (t in listOf(dueHeadline(m).caption, paymentCard(m).dueLine!!)) {
+            assertFalse("due" in t.lowercase(), t); assertFalse("paid" in t.lowercase(), t)
+        }
     }
 
     @Test fun codIsTheOnlyPaymentMethodAndIsAFactNotAChoice() {

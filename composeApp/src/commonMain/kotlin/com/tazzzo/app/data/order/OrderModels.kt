@@ -8,7 +8,7 @@ import com.tazzzo.app.data.remote.ApiException
 /*
  * The REAL customer order (`/v1/customer/orders`). The backend order is the only truth: nothing here comes from the
  * mock `Order`, the local cart or `BillCalculator`. Its money is the AUTHORITATIVE `money` block committed at placement
- * (equal to the quote's binding money). No delivery/platform fee, tax, COD charge, coupon, Coins or wallet exists on the
+ * (computed independently at placement; it may differ from the quote's advisory preview). No delivery/platform fee, tax, COD charge, coupon, Coins or wallet exists on the
  * wire, so none exists here.
  */
 
@@ -122,8 +122,8 @@ sealed interface OrderFailure {
     data object StockUnavailable : OrderFailure
     data object ReservationExpired : OrderFailure
     /**
-     * 409 PAYABLE_CHANGED: the quote's binding money is no longer the current money (or the quote has none). NO order was
-     * created. Definitive: the pending attempt is deleted, the quote is invalidated, and only a NEW quote (new key) that the
+     * 409 PAYABLE_CHANGED — a defensive mapping only: the running backend does NOT send this code (the quote money is advisory
+     * and a differing order is placed with 200). If it ever arrived it would mean NO order was created. Definitive: the pending attempt is deleted, the quote is invalidated, and only a NEW quote (new key) that the
      * customer reviews and confirms may be ordered. Never Ambiguous, never "Check order", never re-sent.
      */
     data object PayableChanged : OrderFailure

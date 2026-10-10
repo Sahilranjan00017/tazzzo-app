@@ -85,7 +85,7 @@ import kotlinx.coroutines.delay
 /**
  * REMOTE checkout (UI-05 skin over the unchanged PR-07/08/09 machine). ONE review surface over the backend quote, arranged
  * as the approved Tazzzo cards: Delivery address → Payment (cash on delivery, the only launch method — a fact, not a
- * choice) → Review (the quote's lines and its BINDING money rows) → the sticky "Place order" bar. There is no slot step:
+ * choice) → Review (the quote's lines and its ADVISORY money preview rows + the review note) → the sticky "Place order" bar. There is no slot step:
  * the backend has no slot contract, so none is drawn. Every action dispatches to the same store methods as before;
  * nothing here reads the local cart, a local bill, or decides money.
  */
@@ -151,7 +151,7 @@ fun CheckoutScreenLayout(
                     CheckoutState.SignedOut -> EditorialEmptyState(TazIcons.Profile, "Log in to check out", PurchaseCopy.CART_SIGNED_OUT_BODY, "Log in", onAction = { actions.act(CheckoutAction.SignIn) })
                     CheckoutState.Idle -> EditorialEmptyState(TazIcons.Receipt, "Ready to review your order", null, PurchaseCopy.REVIEW_CHECKOUT, onAction = { actions.act(CheckoutAction.ReviewCheckout) })
                     CheckoutState.Creating -> CheckoutSkeleton()
-                    // A quote without binding money (legacy) is never shown as orderable: only "Refresh checkout" (a new quote).
+                    // A quote without a money preview (legacy) is never shown as orderable: only "Refresh checkout" (a new quote).
                     is CheckoutState.Ready -> if (checkout.quote.money == null) Recovery(NO_BINDING_MONEY_VIEW, null, cart, actions.act)
                         else ReadyContent(checkout.quote, delivery, cart, availability, remainingLabel, actions)
                     CheckoutState.Expired -> Recovery(EXPIRED_VIEW, null, cart, actions.act)
@@ -215,7 +215,7 @@ private fun ReadyContent(
                 Spacer(Modifier.height(TazSpace.md))
                 Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder))
                 Spacer(Modifier.height(TazSpace.md))
-                // The V1 binding rows: Item subtotal, Benefit discount (only when > 0), Amount due. Nothing else exists.
+                // The advisory preview rows: Item subtotal, Benefit discount (only when > 0), Total — then the review note.
                 summary.lines.forEach { line ->
                     Row(Modifier.fillMaxWidth().padding(vertical = TazSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
                         Text(line.label, fontSize = TazType.bodySize, fontWeight = if (line.emphasised) FontWeight.SemiBold else FontWeight.Normal,
@@ -223,7 +223,7 @@ private fun ReadyContent(
                         Text(line.value, fontSize = if (line.emphasised) 20.sp else TazType.bodySize, fontWeight = if (line.emphasised) FontWeight.Bold else FontWeight.Medium, color = TazColors.TextPrimary)
                     }
                 }
-                summary.dueNote?.let { Spacer(Modifier.height(TazSpace.xs)); Text(it, fontSize = TazType.captionSize, color = TazColors.TextSecondary) }
+                summary.reviewNote?.let { Spacer(Modifier.height(TazSpace.xs)); Text(it, fontSize = TazType.captionSize, color = TazColors.TextSecondary) }
                 remainingLabel?.let { Text(it, fontSize = TazType.captionSize, color = TazColors.TextTertiary) }
             }
             Spacer(Modifier.height(PLACE_BAR_CLEARANCE).navigationBarsPadding())

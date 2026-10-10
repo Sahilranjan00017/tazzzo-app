@@ -78,6 +78,12 @@ fun CustomerOrder.amountHeadline(): OrderAmount {
     return if (m.isNothingDue) OrderAmount("₹0", CheckoutCopy.NOTHING_DUE) else OrderAmount(m.payable.format(), "due on delivery")
 }
 
+/**
+ * Where a placed (or reconciled) order lands: the confirmation, except for an order that is already CANCELLED (e.g. "Check order"
+ * found the earlier attempt and it was cancelled since) — that goes to its detail, never to "Order placed".
+ */
+fun CustomerOrder.opensConfirmation(): Boolean = status != CustomerOrderStatus.CANCELLED
+
 /** The confirmation is shown ONLY for a confirmed real order held by the store — never for Placing, Ambiguous or Failed. */
 fun OrderState.confirmedOrder(): CustomerOrder? = (this as? OrderState.Placed)?.order
 

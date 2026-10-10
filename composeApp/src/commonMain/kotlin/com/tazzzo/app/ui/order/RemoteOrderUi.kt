@@ -39,7 +39,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +53,8 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.catalog.AppendState
 import com.tazzzo.app.data.catalog.PagedState
+import com.tazzzo.app.data.checkout.payableChangeNotice
+import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.order.CustomerOrder
 import com.tazzzo.app.data.order.CustomerOrderSummary
 import com.tazzzo.app.data.order.OrderView
@@ -110,7 +114,7 @@ fun RemoteOrderSuccessScreen(orderId: String) {
     var attempt by remember(orderId) { mutableStateOf(0) }
     val load = rememberOrder(orderId, attempt)
     OrderConfirmationLayout(
-        orderId = orderId, load = load,
+        orderId = orderId, load = load, reviewedPayable = store.reviewedPayable(orderId),
         actions = OrderActions(back = { app.goHome() }, continueShopping = { app.goHome() }, viewOrder = { app.navigate(Screen.OrderDetail(orderId)) }, retry = { attempt++ })
     )
 }
@@ -123,7 +127,7 @@ class OrderActions(val back: () -> Unit, val continueShopping: () -> Unit, val v
  * OrderStore holds a confirmed real order (the route is reached from `OrderState.Placed`), never from a local success model.
  */
 @Composable
-fun OrderConfirmationLayout(orderId: String, load: OrderLoad, actions: OrderActions) {
+fun OrderConfirmationLayout(orderId: String, load: OrderLoad, actions: OrderActions, reviewedPayable: Money? = null) {
     Box(Modifier.fillMaxSize().background(TazColors.Cream).testTag("orderConfirmation")) {
         when (load) {
             OrderLoad.Loading -> Column(Modifier.fillMaxSize()) { Spacer(Modifier.statusBarsPadding().height(TazSpace.xl)); SuccessMark(); OrderSkeleton() }
@@ -147,6 +151,7 @@ fun OrderConfirmationLayout(orderId: String, load: OrderLoad, actions: OrderActi
                     Text(OrderCopy.CONFIRMATION_SUPPORT, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = TazSpace.xxl))
                     Spacer(Modifier.height(TazSpace.xxl))
                     Column(Modifier.padding(horizontal = TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
+                        payableChangeNotice(reviewedPayable, load.order.money?.payable)?.let { TotalChangedNotice(it) }
                         OrderNumberCard(v, load.order)
                         PaymentCard(v, amount)
                         if (v.addressLines.isNotEmpty()) AddressCard(v)
@@ -190,12 +195,12 @@ fun RemoteOrderDetailScreen(orderId: String) {
         back = { app.back() }, continueShopping = { app.goHome() }, retry = { attempt++ },
         // "Contact us about this order": a support request linked to this order (signed-in only; the form says so otherwise).
         help = { app.navigate(Screen.SupportNew(orderId)) }
-    ))
+    ), reviewedPayable = ServiceLocator.orderStore.reviewedPayable(orderId))
 }
 
 /** Order detail: Checkout after placement — status, items, delivery address, payment, summary, order number. */
 @Composable
-fun OrderDetailLayout(orderId: String, load: OrderLoad, actions: OrderActions) {
+fun OrderDetailLayout(orderId: String, load: OrderLoad, actions: OrderActions, reviewedPayable: Money? = null) {
     Column(Modifier.fillMaxSize().background(TazColors.Cream).testTag("orderDetail")) {
         Header(OrderCopy.ORDER_TITLE, onBack = actions.back)
         when (load) {
@@ -206,6 +211,7 @@ fun OrderDetailLayout(orderId: String, load: OrderLoad, actions: OrderActions) {
                 val amount = load.order.amountHeadline()
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
                     StatusCard(load.order, v)
+                    payableChangeNotice(reviewedPayable, load.order.money?.payable)?.let { TotalChangedNotice(it) }
                     if (v.timeline.size > 1 || v.slotLabel != null) TimelineCard(v)
                     ItemsCard(v)
                     if (v.addressLines.isNotEmpty()) AddressCard(v)
@@ -241,14 +247,17 @@ fun RemoteOrdersContent(inTab: Boolean) {
     // Idle = never loaded in this session, or invalidated by a new order / a new sign-in: (re)load page 1.
     LaunchedEffect(app.isAuthenticated, history is PagedState.Idle) { if (app.isAuthenticated && history is PagedState.Idle) store.openHistory() }
     var failures by remember { mutableStateOf(0) }
+    // The pull indicator spins from the customer's pull until page 1 has answered (the store reloads page 1 on refresh).
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(surface == OrdersSurface.Loading) { if (surface != OrdersSurface.Loading) pulled = false }
     LaunchedEffect(surface is OrdersSurface.Failed) { if (surface is OrdersSurface.Failed) failures++ else if (surface is OrdersSurface.Content) failures = 0 }
     OrdersTabLayout(
-        surface = surface, inTab = inTab, consecutiveFailures = failures,
+        surface = surface, inTab = inTab, consecutiveFailures = failures, refreshing = pulled && surface == OrdersSurface.Loading,
         actions = OrdersActions(
             back = { app.back() },
             startShopping = { app.homeTab = HomeTab.SHOP; if (!inTab) app.goHome() },
             openOrder = { app.navigate(Screen.OrderDetail(it)) },
-            refresh = { store.refreshHistory() },
+            refresh = { pulled = true; store.refreshHistory() },
             loadMore = { store.loadMoreHistory() },
             signIn = { app.navigate(Screen.Login) }
         )
@@ -262,13 +271,13 @@ class OrdersActions(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrdersTabLayout(surface: OrdersSurface, inTab: Boolean, actions: OrdersActions, consecutiveFailures: Int = 1) {
+fun OrdersTabLayout(surface: OrdersSurface, inTab: Boolean, actions: OrdersActions, consecutiveFailures: Int = 1, refreshing: Boolean = false) {
     Column(Modifier.fillMaxSize().background(TazColors.Cream).testTag("ordersTab")) {
         if (inTab) TabHeader(OrderCopy.ORDERS_TITLE) else Header(OrderCopy.ORDERS_TITLE, onBack = actions.back)
         val pull = rememberPullToRefreshState()
         PullToRefreshBox(
-            isRefreshing = false, onRefresh = actions.refresh, state = pull, modifier = Modifier.fillMaxSize(),
-            indicator = { PullToRefreshDefaults.Indicator(state = pull, isRefreshing = false, modifier = Modifier.align(Alignment.TopCenter), containerColor = TazColors.Surface, color = TazColors.BrandEditorial) }
+            isRefreshing = refreshing, onRefresh = actions.refresh, state = pull, modifier = Modifier.fillMaxSize(),
+            indicator = { PullToRefreshDefaults.Indicator(state = pull, isRefreshing = refreshing, modifier = Modifier.align(Alignment.TopCenter), containerColor = TazColors.Surface, color = TazColors.BrandEditorial) }
         ) {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
                 when (surface) {
@@ -322,6 +331,23 @@ private fun OrderSummaryCard(order: CustomerOrderSummary, onClick: () -> Unit) {
         }
         Text(order.orderId, fontSize = TazType.bodySize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(listOfNotNull(v.placedLabel, v.itemsLabel, v.caption.takeIf { v.amount != null }).joinToString(" · "), fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+    }
+}
+
+/**
+ * "Your total changed from ₹X to ₹Y": the order's authoritative payable differs from the advisory total the customer reviewed.
+ * Informational (not an error, no action); absent when the two are equal or the reviewed total is unknown.
+ */
+@Composable
+private fun TotalChangedNotice(text: String) {
+    Row(
+        Modifier.fillMaxWidth().clip(TazRadius.tile).background(TazColors.GreenSoft).padding(TazSpace.lg)
+            .semantics { liveRegion = LiveRegionMode.Polite }.testTag("orderTotalChanged"),
+        verticalAlignment = Alignment.Top
+    ) {
+        TazIcon(TazIcons.Info, null, size = TazSize.iconSm, tint = TazColors.BrandEditorial)
+        Spacer(Modifier.width(TazSpace.sm))
+        Text(text, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextPrimary)
     }
 }
 

@@ -9,8 +9,9 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /*
  * The REAL checkout quote (`/v1/customer/checkout/quote`). A quote is an immutable server snapshot taken at
- * `createdAt`: it is NOT a stock reservation. Its [CheckoutQuote.money] (`moneyPreview`) is the BINDING customer money:
- * placing an order from this quote either commits exactly that money or is refused with PAYABLE_CHANGED. There is no
+ * `createdAt`: it is NOT a stock reservation. Its [CheckoutQuote.money] (`moneyPreview`) is ADVISORY: placing an order
+ * revalidates and computes the order's own authoritative money, which may differ (placed with 200, not an error; the app then
+ * shows a "Your total changed" notice — see `payableChangeNotice`). There is no
  * delivery/platform fee, tax, tip, COD charge, coupon, Coins or wallet, address snapshot, product name/image/MRP, slot or
  * payment information, so none of those exist here. It is never persisted.
  */
@@ -58,8 +59,8 @@ data class CheckoutQuote(
     val expiresAtMillis: Long,
     val benefit: BenefitPreviewState,
     /**
-     * The BINDING money (`moneyPreview`). Null = a LEGACY quote created before the money model: that is NOT a zero amount,
-     * and such a quote can never be ordered (the backend refuses it) — the customer must refresh checkout.
+     * The ADVISORY money preview (`moneyPreview`). Null = a LEGACY quote created before the money model: that is NOT a zero
+     * amount, and the app never orders such a quote — the customer must refresh checkout.
      */
     val money: PayableMoney?,
     val requestId: String?

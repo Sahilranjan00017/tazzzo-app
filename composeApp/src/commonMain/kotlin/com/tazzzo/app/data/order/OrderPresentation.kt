@@ -17,7 +17,7 @@ sealed interface PlaceOrderAvailability {
     /** An earlier attempt is unresolved: only "Check order" is offered, never a second order. */
     data object NeedsCheck : PlaceOrderAvailability
     data object NoReadyQuote : PlaceOrderAvailability
-    /** The Ready quote carries no binding money (legacy): never orderable, only "Refresh checkout". */
+    /** The Ready quote carries no money preview (legacy): never orderable, only "Refresh checkout". */
     data object NeedsRefresh : PlaceOrderAvailability
 
     val enabled: Boolean get() = this is Available

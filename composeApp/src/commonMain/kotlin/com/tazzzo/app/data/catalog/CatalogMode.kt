@@ -56,9 +56,11 @@ data class CatalogCapabilities(
      */
     val checkoutIntegration: Boolean,
     /**
-     * Whether REAL COD order placement is enabled (`POST /v1/customer/orders`, with the binding money of PR-09). True for REMOTE
-     * since the product-closure release: the backend order path is deployed and the app's idempotent quote replay, pending-order
-     * recovery and 409 mapping are unchanged. A real quote still has no path into the mock OrderPlacement, local orders, coin
+     * Whether REAL COD order placement is enabled (`POST /v1/customer/orders`). True for REMOTE since the product-closure
+     * release. The quote's money preview is ADVISORY (the order computes its own authoritative money, which may differ): the
+     * checkout shows it as the total for review ("Final amount is confirmed when you place your order") and the confirmation /
+     * order detail show "Your total changed from ₹X to ₹Y" when the order differs. Quote replay, pending-order recovery and the
+     * 409 mapping are unchanged. A real quote still has no path into the mock OrderPlacement, local orders, coin
      * credits or Club progress. Read through [com.tazzzo.app.data.order.OrderLaunchGate].
      */
     val orderIntegration: Boolean,
