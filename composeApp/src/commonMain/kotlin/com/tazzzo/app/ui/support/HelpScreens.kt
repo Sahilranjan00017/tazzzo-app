@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -273,6 +274,11 @@ fun SupportCaseScreen(caseId: String) {
                 }
                 Column(Modifier.fillMaxWidth().background(TazColors.Surface).padding(TazSpace.lg).navigationBarsPadding()) {
                     if (!c.status.acceptsReplies) Text(SupportCopy.CLOSED_NOTE, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+                    // The session ended (e.g. rejected) while this thread was open: offer Login, never a dead reply box.
+                    else if (!app.isAuthenticated) {
+                        Text(SupportCopy.SIGNED_OUT_BODY, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+                        TextAction(SupportCopy.LOG_IN, onClick = { app.navigate(Screen.Login) })
+                    }
                     else {
                         val problem = SupportRules.checkMessage(reply)?.takeIf { reply.isNotEmpty() }
                         OutlinedTextField(
@@ -286,11 +292,12 @@ fun SupportCaseScreen(caseId: String) {
                             if (sending) SupportCopy.SENDING else SupportCopy.SEND, trailingArrow = false,
                             enabled = !sending && SupportRules.checkMessage(reply) == null, modifier = Modifier.fillMaxWidth(),
                             onClick = {
+                                if (sending) return@TazzzoPrimaryButton                 // one send at a time; the draft is kept on failure
                                 sending = true
                                 scope.launch {
                                     when (val r = store.reply(c.caseId, reply)) {
                                         is SupportWrite.Done -> { case = r.case; reply = "" }
-                                        is SupportWrite.Failed -> error = r.failure.message
+                                        is SupportWrite.Failed -> { error = r.failure.message; r.refreshed?.let { case = it } }
                                     }
                                     sending = false
                                 }
@@ -374,6 +381,7 @@ fun NewSupportRequestScreen(orderId: String?) {
                 if (sending) SupportCopy.SENDING else SupportCopy.SEND, trailingArrow = false, enabled = !sending && category != null,
                 modifier = Modifier.fillMaxWidth().testTag("supportSend"),
                 onClick = {
+                    if (sending) return@TazzzoPrimaryButton                             // one send at a time; the draft is kept on failure
                     touched = true
                     val c = category ?: return@TazzzoPrimaryButton
                     if (subjectProblem != null || messageProblem != null) return@TazzzoPrimaryButton
@@ -433,12 +441,13 @@ fun LegalLayout(fallbackTitle: String, load: LegalLoad, onBack: () -> Unit, onRe
             }
             LegalLoad.NotPublished -> EditorialEmptyState(TazIcons.Info, LegalCopy.NOT_PUBLISHED_TITLE, LegalCopy.NOT_PUBLISHED_BODY)
             LegalLoad.Failed -> EditorialEmptyState(TazIcons.Offline, LegalCopy.FAILED_TITLE, null, ProfileCopy.TRY_AGAIN, onAction = onRetry)
-            is LegalLoad.Loaded -> SelectionContainer {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
-                    load.document.effectiveLine()?.let { Text(it, fontSize = TazType.captionSize, color = TazColors.TextSecondary, modifier = Modifier.testTag("legalEffective")) }
-                    load.document.paragraphs.forEach { Text(it, fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextPrimary) }
-                    Spacer(Modifier.navigationBarsPadding().height(TazSpace.xxl))
+            // Lazy, so a very long document only lays out what is on screen; each paragraph is selectable plain text.
+            is LegalLoad.Loaded -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = TazSpace.lg), verticalArrangement = Arrangement.spacedBy(TazSpace.md)) {
+                load.document.effectiveLine()?.let { line -> item(key = "effective") { Text(line, fontSize = TazType.captionSize, color = TazColors.TextSecondary, modifier = Modifier.testTag("legalEffective")) } }
+                items(load.document.paragraphs.size) { i ->
+                    SelectionContainer { Text(load.document.paragraphs[i], fontSize = TazType.bodySize, lineHeight = TazType.bodyLine, color = TazColors.TextPrimary) }
                 }
+                item(key = "end") { Spacer(Modifier.navigationBarsPadding().height(TazSpace.xxl)) }
             }
         }
     }

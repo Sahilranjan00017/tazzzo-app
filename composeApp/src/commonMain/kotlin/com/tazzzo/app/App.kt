@@ -86,6 +86,7 @@ fun App() {
                     val live = liveKeys.toSet()
                     (knownKeys - live).forEach { stateHolder.removeState(it) }
                     if (Screen.Search.stateKey !in live) appState.dropSearch()   // Search left the stack: its query/results go too
+                    if (Screen.Login.stateKey !in live) appState.dropAuthFlow()  // Login left the stack: drop the phone/OTP flow
                     knownKeys = live
                 }
 

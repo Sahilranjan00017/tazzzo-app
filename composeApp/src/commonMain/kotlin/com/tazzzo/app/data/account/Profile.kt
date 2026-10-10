@@ -119,6 +119,7 @@ class ProfileStore(
     fun refresh() = scope.launch { if (isAuthenticated()) load() else _state.value = ProfileState.SignedOut }
 
     fun saveDisplayName(raw: String) = scope.launch {
+        if (_save.value == NameSave.Saving) return@launch                  // a double tap while a save is in flight sends nothing
         val current = (_state.value as? ProfileState.Loaded)?.profile ?: return@launch
         val ok = DisplayNameRules.check(raw) as? DisplayNameRules.Check.Ok ?: run { _save.value = NameSave.Invalid; return@launch }
         if (ok.value == current.displayName) { _save.value = NameSave.Saved; return@launch }
@@ -134,7 +135,8 @@ class ProfileStore(
             if (gen != generation) return@launch
             val status = ((e as? ApiException)?.error as? ApiError.Http)?.status
             when (status) {
-                412, 428 -> { _save.value = NameSave.Stale; load() }
+                // Re-read WITHOUT leaving Loaded, so the editor stays open with the customer's draft and shows the stale message.
+                412, 428 -> { load(silent = true); _save.value = NameSave.Stale }
                 400 -> _save.value = NameSave.Invalid
                 else -> _save.value = NameSave.Failed
             }
@@ -146,11 +148,12 @@ class ProfileStore(
     /** Session ended or changed: forget the profile (an in-flight read or save is discarded). */
     fun signOut() = scope.launch { generation++; _state.value = ProfileState.SignedOut; _save.value = NameSave.Idle }
 
-    private suspend fun load() {
+    /** [silent]: keep the current Loaded profile on screen while re-reading (and keep it if the re-read fails). */
+    private suspend fun load(silent: Boolean = false) {
         val gen = generation
-        _state.value = ProfileState.Loading
-        val next = try { ProfileState.Loaded(source.get()) } catch (e: CancellationException) { throw e } catch (_: Throwable) { ProfileState.Failed }
-        if (gen == generation) _state.value = next
+        if (!silent) _state.value = ProfileState.Loading
+        val next = try { ProfileState.Loaded(source.get()) } catch (e: CancellationException) { throw e } catch (_: Throwable) { if (silent) null else ProfileState.Failed }
+        if (gen == generation && next != null) _state.value = next
     }
 }
 

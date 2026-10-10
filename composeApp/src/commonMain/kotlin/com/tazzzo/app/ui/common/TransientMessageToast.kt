@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -67,7 +68,8 @@ fun BoxScope.TransientMessageToast(aboveNav: Boolean) {
         else TazSpace.cartBarClearance + TazSpace.lg
     AnimatedVisibility(
         visible = message != null,
-        modifier = Modifier.align(Alignment.BottomCenter).then(if (aboveNav) Modifier else Modifier.navigationBarsPadding()),
+        // Above the keyboard when it is open (imePadding; insets already consumed by navigationBarsPadding are not added twice).
+        modifier = Modifier.align(Alignment.BottomCenter).then(if (aboveNav) Modifier else Modifier.navigationBarsPadding()).imePadding(),
         // Rises into place and fades out. A refusal that hard-cuts on screen reads as a glitch; the customer needs to see it arrive.
         enter = slideInVertically(tween(TazMotion.fast)) { it / 2 } + fadeIn(tween(TazMotion.fast)),
         exit = fadeOut(tween(TazMotion.fast))

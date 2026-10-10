@@ -38,6 +38,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -204,12 +205,21 @@ class ProfileAndSupportTest {
     private class FakeSupport : SupportSource {
         val rows = mutableListOf<SupportCaseSummary>()
         var lists = 0
+        var opens = 0
         var failWrite: Throwable? = null
-        val created = SupportCase("SUP_abcdefghijklmnopqrstu", SupportCategory.OTHER, null, "Hi", SupportStatus.OPEN, emptyList(), null)
+        /** The write is applied even though it fails (a lost response). */
+        var appliedDespiteFailure = false
+        var gate: CompletableDeferred<Unit>? = null
+        var current = SupportCase("SUP_abcdefghijklmnopqrstu", SupportCategory.OTHER, null, "Hi", SupportStatus.OPEN, emptyList(), null)
+        val created get() = current
         override suspend fun list(cursor: String?) = run { lists++; Page(rows.toList(), null, false) }
-        override suspend fun get(caseId: String) = created
-        override suspend fun open(category: SupportCategory, subject: String, message: String, orderId: String?): SupportCase { failWrite?.let { throw it }; return created }
-        override suspend fun reply(caseId: String, message: String): SupportCase { failWrite?.let { throw it }; return created }
+        override suspend fun get(caseId: String) = current
+        override suspend fun open(category: SupportCategory, subject: String, message: String, orderId: String?): SupportCase {
+            opens++; gate?.await()
+            if (appliedDespiteFailure || failWrite == null) rows.add(0, SupportCaseSummary(current.caseId, category, subject, SupportStatus.OPEN, 1, null))
+            failWrite?.let { throw it }; return current
+        }
+        override suspend fun reply(caseId: String, message: String): SupportCase { gate?.await(); failWrite?.let { throw it }; return current }
     }
 
     @Test fun signedOutWritesNeverReachTheBackend() = runTest {
@@ -227,6 +237,71 @@ class ProfileAndSupportTest {
         assertEquals(PagedState.Idle, s.cases.value)                                   // the next open reloads, newest first
         src.failWrite = hx(409, "TOO_MANY_OPEN")
         assertEquals(SupportWrite.Failed(SupportFailure.TOO_MANY_OPEN), s.submit(SupportCategory.OTHER, "Hi", "Hello", null))
+    }
+
+    // ---- review fixes (PR #29 L1/L2/L3) -------------------------------------------------------------------------------------
+
+    @Test fun aReply404MeansTheRequestIsGoneAndACreate404MeansTheOrder() {
+        assertEquals(SupportFailure.CASE_GONE, hx(404, "NOT_FOUND").toSupportFailure(forReply = true))
+        assertEquals("This request is no longer available.", SupportFailure.CASE_GONE.message)
+        assertEquals(SupportFailure.ORDER_NOT_FOUND, hx(404, "NOT_FOUND").toSupportFailure())
+    }
+
+    @Test fun aReplyRefusedBecauseTheCaseClosedReReadsIt() = runTest {
+        val src = FakeSupport(); val s = SupportStore(backgroundScope, src) { true }
+        src.failWrite = hx(409, "STATE_CONFLICT"); src.current = src.current.copy(status = SupportStatus.CLOSED)
+        val r = assertIs<SupportWrite.Failed>(s.reply(src.current.caseId, "still there?"))
+        assertEquals(SupportFailure.CLOSED, r.failure); assertEquals(SupportStatus.CLOSED, r.refreshed?.status)
+    }
+
+    @Test fun aSecondSendWhileTheFirstIsOutstandingIsNeverSent() = runTest {
+        val src = FakeSupport(); val gate = CompletableDeferred<Unit>(); src.gate = gate
+        val s = SupportStore(backgroundScope, src) { true }
+        val first = backgroundScope.async { s.submit(SupportCategory.OTHER, "Hi", "Hello", null) }
+        runCurrent()
+        assertEquals(SupportWrite.Failed(SupportFailure.IN_FLIGHT), s.submit(SupportCategory.OTHER, "Hi", "Hello", null))
+        gate.complete(Unit)
+        assertIs<SupportWrite.Done>(first.await())
+        assertEquals(1, src.opens)
+    }
+
+    @Test fun resendingAfterALostResponseFindsTheCreatedRequestInsteadOfDuplicatingIt() = runTest {
+        val src = FakeSupport(); val s = SupportStore(backgroundScope, src) { true }
+        src.failWrite = ApiException(ApiError.Timeout); src.appliedDespiteFailure = true
+        assertEquals(SupportWrite.Failed(SupportFailure.NETWORK), s.submit(SupportCategory.DELIVERY, "Late order", "Where is it?", null))
+        src.failWrite = null; src.appliedDespiteFailure = false
+        assertIs<SupportWrite.Done>(s.submit(SupportCategory.DELIVERY, "Late order", "Where is it?", null))
+        assertEquals(1, src.opens)                                              // found in the list: no second POST
+        assertEquals(1, src.rows.size)
+        // A DIFFERENT draft after an ambiguous failure is a new request and is sent.
+        src.failWrite = ApiException(ApiError.Network)
+        s.submit(SupportCategory.OTHER, "Other", "Text", null)
+        src.failWrite = null
+        assertIs<SupportWrite.Done>(s.submit(SupportCategory.OTHER, "Changed subject", "Text", null))
+        assertEquals(3, src.opens)
+    }
+
+    @Test fun aDoubleTapOnSaveSendsOnePatchAndAStaleReloadKeepsTheEditorsProfile() = runTest {
+        val src = FakeProfile(); val s = profileStore(src)
+        s.ensureLoaded(); runCurrent()
+        var patches = 0
+        val inFlight = CompletableDeferred<Unit>()
+        val counting = object : ProfileSource by src {
+            override suspend fun setDisplayName(name: String?, version: Long): CustomerProfile { patches++; inFlight.await(); return src.setDisplayName(name, version) }
+        }
+        val s2 = ProfileStore(backgroundScope, counting) { true }
+        s2.ensureLoaded(); runCurrent()
+        s2.saveDisplayName("A"); runCurrent()                                   // the first PATCH is on the wire
+        s2.saveDisplayName("B"); runCurrent()                                   // a second tap meanwhile
+        inFlight.complete(Unit); runCurrent()
+        assertEquals(1, patches)
+        // 412: the re-read happens while the state STAYS Loaded (the dialog does not close, the draft is kept).
+        src.failNext = ApiException(ApiError.Http(412, "PRECONDITION_FAILED"))
+        val gate = CompletableDeferred<Unit>(); src.gate = gate
+        s.saveDisplayName("New"); runCurrent()
+        assertIs<ProfileState.Loaded>(s.state.value)
+        gate.complete(Unit); runCurrent()
+        assertIs<ProfileState.Loaded>(s.state.value); assertEquals(NameSave.Stale, s.save.value)
     }
 
     @Test fun theThreadShowsWhoWroteEachMessageAsPlainText() = runTest {

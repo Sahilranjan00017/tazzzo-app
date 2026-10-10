@@ -249,6 +249,18 @@ class TazzzoAppState(
 
     internal fun attachSearch(holder: com.tazzzo.app.data.catalog.ProductSearch) { search?.close(); search = holder }
 
+    /** The login flow (phone → OTP), held above the Login screen so a Legal page opened from it does not reset the OTP step. */
+    var authFlow: com.tazzzo.app.ui.onboarding.AuthFlow? = null
+        internal set
+    private var authFlowScope: kotlinx.coroutines.CoroutineScope? = null
+
+    internal fun attachAuthFlow(flow: com.tazzzo.app.ui.onboarding.AuthFlow, scope: kotlinx.coroutines.CoroutineScope) {
+        dropAuthFlow(); authFlow = flow; authFlowScope = scope
+    }
+
+    /** Login left the back stack: forget the flow (and with it the phone number and any timer). */
+    fun dropAuthFlow() { authFlowScope?.coroutineContext?.get(kotlinx.coroutines.Job)?.cancel(); authFlowScope = null; authFlow = null }
+
     /** Search is no longer on the back stack (or the session ended): forget its query and results. */
     fun dropSearch() { search?.close(); search = null }
 

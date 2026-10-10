@@ -113,13 +113,18 @@ enum class SupportFailure(val message: String) {
     MESSAGE_LIMIT("This request has reached its message limit. Please start a new one."),
     CLOSED("This request is closed. Start a new one if you still need help."),
     ORDER_NOT_FOUND("We couldn't find that order on your account."),
+    /** A reply to a request that no longer exists for this customer (404 on `/cases/{id}/messages`). */
+    CASE_GONE("This request is no longer available."),
     INVALID("Please check your message and try again."),
     SIGNED_OUT("Log in to contact us."),
+    /** A second tap while the first send is still outstanding: nothing is sent. */
+    IN_FLIGHT("Still sending your message…"),
     NETWORK("No internet connection. Please try again."),
     UNAVAILABLE("We couldn't send this right now. Please try again in a moment.")
 }
 
-fun Throwable.toSupportFailure(): SupportFailure {
+/** [forReply]: a 404 means the REQUEST is gone (a create's 404 means the linked order is unknown). */
+fun Throwable.toSupportFailure(forReply: Boolean = false): SupportFailure {
     val e = (this as? ApiException)?.error ?: return SupportFailure.UNAVAILABLE
     return when (e) {
         ApiError.Network, ApiError.Timeout -> SupportFailure.NETWORK
@@ -129,7 +134,7 @@ fun Throwable.toSupportFailure(): SupportFailure {
             e.code == "TOO_MANY_OPEN" -> SupportFailure.TOO_MANY_OPEN
             e.code == "MESSAGE_LIMIT" -> SupportFailure.MESSAGE_LIMIT
             e.code == "STATE_CONFLICT" -> SupportFailure.CLOSED
-            e.status == 404 -> SupportFailure.ORDER_NOT_FOUND
+            e.status == 404 -> if (forReply) SupportFailure.CASE_GONE else SupportFailure.ORDER_NOT_FOUND
             e.status == 400 -> SupportFailure.INVALID
             else -> SupportFailure.UNAVAILABLE
         }
@@ -188,8 +193,12 @@ class RemoteSupportDataSource(private val api: ApiClient) : SupportSource {
 /** The outcome of a create/reply, for the screen. */
 sealed interface SupportWrite {
     data class Done(val case: SupportCase) : SupportWrite
-    data class Failed(val failure: SupportFailure) : SupportWrite
+    /** [refreshed]: the case re-read after the refusal (a closed/changed case), so the screen shows its current state. */
+    data class Failed(val failure: SupportFailure, val refreshed: SupportCase? = null) : SupportWrite
 }
+
+/** A lost response or an unknown server outcome: the write MAY have happened, so a blind resend could duplicate it. */
+internal val SupportFailure.isAmbiguous: Boolean get() = this == SupportFailure.NETWORK || this == SupportFailure.UNAVAILABLE
 
 /**
  * The customer's support cases: the list (paged, keyed by a session epoch like order history) and the write helpers.
@@ -217,13 +226,41 @@ class SupportStore(
     suspend fun load(caseId: String): SupportCase? =
         try { source.get(caseId) } catch (e: CancellationException) { throw e } catch (_: Throwable) { null }
 
-    suspend fun submit(category: SupportCategory, subject: String, message: String, orderId: String?): SupportWrite =
-        write { source.open(category, subject, message, orderId) }
+    /** The request whose create ended ambiguously (cleaned category/subject/message): a resend of it is checked first. */
+    private var ambiguousCreate: Triple<SupportCategory, String, String>? = null
+    private var inFlight = false
 
-    suspend fun reply(caseId: String, message: String): SupportWrite = write { source.reply(caseId, message) }
+    /**
+     * Creates a request. Single flight (a second call while one is outstanding is refused, never sent). There is no idempotency
+     * key on the backend, so after an AMBIGUOUS failure (lost response / 5xx) a resend of the SAME draft first reads the newest
+     * requests and, if one with the same category and subject is there, returns it instead of creating a duplicate.
+     */
+    suspend fun submit(category: SupportCategory, subject: String, message: String, orderId: String?): SupportWrite {
+        val draft = Triple(category, SupportRules.cleanSubject(subject), SupportRules.cleanMessage(message))
+        if (ambiguousCreate == draft) {
+            val existing = try { source.list(null).items.firstOrNull { it.category == category && it.subject == draft.second } }
+                catch (e: CancellationException) { throw e } catch (_: Throwable) { null }
+            if (existing != null) {
+                val c = load(existing.caseId)
+                if (c != null) { ambiguousCreate = null; scope.launch { epoch++; pager.reset() }; return SupportWrite.Done(c) }
+            }
+        }
+        val r = write(forReply = false) { source.open(category, subject, message, orderId) }
+        ambiguousCreate = if (r is SupportWrite.Failed && r.failure.isAmbiguous) draft else null
+        return r
+    }
 
-    private suspend fun write(block: suspend () -> SupportCase): SupportWrite {
+    /** Replies to a request. Single flight. A refusal because the case changed (closed) re-reads it for the screen. */
+    suspend fun reply(caseId: String, message: String): SupportWrite {
+        val r = write(forReply = true) { source.reply(caseId, message) }
+        if (r is SupportWrite.Failed && r.failure == SupportFailure.CLOSED) return r.copy(refreshed = load(caseId))
+        return r
+    }
+
+    private suspend fun write(forReply: Boolean, block: suspend () -> SupportCase): SupportWrite {
         if (!isAuthenticated()) return SupportWrite.Failed(SupportFailure.SIGNED_OUT)
+        if (inFlight) return SupportWrite.Failed(SupportFailure.IN_FLIGHT)
+        inFlight = true
         return try {
             val c = block()
             scope.launch { epoch++; pager.reset() }       // the list reloads (newest first) the next time it is shown
@@ -233,7 +270,9 @@ class SupportStore(
         } catch (e: IllegalArgumentException) {
             SupportWrite.Failed(SupportFailure.INVALID)
         } catch (e: Throwable) {
-            SupportWrite.Failed(e.toSupportFailure())
+            SupportWrite.Failed(e.toSupportFailure(forReply))
+        } finally {
+            inFlight = false
         }
     }
 }
