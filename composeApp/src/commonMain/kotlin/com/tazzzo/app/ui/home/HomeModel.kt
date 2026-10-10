@@ -30,8 +30,6 @@ object HomeCopy {
     const val RAIL_SEE_ALL = "See all"
     const val BULK_EYEBROW = "BULK SAVINGS"
     const val BULK_CTA = "Shop in bulk"
-    const val ORDERS_UNAVAILABLE_TITLE = "Order history isn't available yet"
-    const val ORDERS_UNAVAILABLE_BODY = "Your orders will appear here once history is ready."
     const val CONTINUE_SHOPPING = "Continue shopping"
 }
 

@@ -142,7 +142,7 @@ class CheckoutUiModelTest {
         assertEquals(PlaceOrderAvailability.LaunchGated, placeOrderAvailability(false, CheckoutState.Idle, OrderState.Idle))
         assertEquals(PlaceOrderAvailability.NoReadyQuote, placeOrderAvailability(true, CheckoutState.Idle, OrderState.Idle))
         assertEquals(PlaceOrderAvailability.Placing, placeOrderAvailability(true, CheckoutState.Idle, OrderState.Placing))
-        assertFalse(CatalogCapabilities.REMOTE.orderIntegration)
+        assertTrue(CatalogCapabilities.REMOTE.orderIntegration)
     }
 
     @Test fun nullMoneyNeverProducesADueLine() { assertNull(paymentCard(null).dueLine) }

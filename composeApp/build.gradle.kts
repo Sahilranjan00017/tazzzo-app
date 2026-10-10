@@ -81,9 +81,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.9.0")
 }
 
-/** `-Ptazzzo.debugRealOrdering=true`: the debug build may submit real COD orders. Anything else (or absent) = false. */
-val debugRealOrdering: Boolean = providers.gradleProperty("tazzzo.debugRealOrdering").orNull == "true"
-
 // MOCK-only photography (legacy MOCK catalogue art: prod_*, cat_*.jpg, the old hero and coins banners, 2.3 MB) is referenced only
 // behind AppEnvironment.allowsDevTooling, so a release build never loads it. Keep it out of the release package.
 // The assets are removed from the merged release assets (not via ignore patterns, which do not see generated Compose resources).
@@ -132,18 +129,12 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
-            // Explicit developer opt-in to REAL COD order submission from a debug build:
-            //   ./gradlew :composeApp:assembleDebug -Ptazzzo.debugRealOrdering=true
-            // Default false. Build-time only: never persisted, no UI (see config/DebugOrdering.kt).
-            buildConfigField("boolean", "DEBUG_REAL_ORDERING", debugRealOrdering.toString())
         }
         release {
             // Demo flags, the autopilot and DevLogSink are gated on
             // AppEnvironment.allowsDevTooling, which is false whenever
             // BuildConfig.DEBUG is false — i.e. in every release build.
             isMinifyEnabled = false
-            // Never honoured in release, whatever -Ptazzzo.debugRealOrdering says.
-            buildConfigField("boolean", "DEBUG_REAL_ORDERING", "false")
         }
     }
     compileOptions {

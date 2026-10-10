@@ -91,15 +91,15 @@ class OrderPresentationTest {
     }
 
     @Test fun noCopyTellsTheCustomerTheAmountIsConfirmedOnDeliveryOrIsAdvisory() {
-        val all = allFailures.flatMap { listOf(it.view().title, it.view().hint) } + CheckoutCopy.LAUNCH_GATED + lines(orderOf()) + lines(orderOf(money = null))
+        val all = allFailures.flatMap { listOf(it.view().title, it.view().hint) } + CheckoutCopy.ORDERING_PAUSED + lines(orderOf()) + lines(orderOf(money = null))
         for (t in all) for (w in listOf("confirmed on delivery", "on the door", "final amount", "estimated", "approximate", "provisional", "may change"))
             assertFalse(w in t.lowercase(), "'$w' in '$t'")
     }
 
-    @Test fun theLaunchGatedMessageIsTheApprovedNeutralCopyAndNeverAboutTheAmount() {
-        assertEquals("Ordering isn't available yet.", CheckoutCopy.LAUNCH_GATED)
-        assertEquals(CheckoutCopy.LAUNCH_GATED, OrderFailure.NotLaunched.view().title)
-        assertFalse("amount" in CheckoutCopy.LAUNCH_GATED.lowercase())
+    @Test fun theKillSwitchMessageIsNeutralNeverAboutTheAmountAndNeverThePreLaunchPlaceholder() {
+        assertEquals(CheckoutCopy.ORDERING_PAUSED, OrderFailure.NotLaunched.view().title)
+        assertFalse("amount" in CheckoutCopy.ORDERING_PAUSED.lowercase())
+        assertFalse("isn't available yet" in CheckoutCopy.ORDERING_PAUSED.lowercase())   // the pre-launch "Ordering isn't available yet." is gone
     }
 
     @Test fun benefitNeverAppearsInOrderCopy() {

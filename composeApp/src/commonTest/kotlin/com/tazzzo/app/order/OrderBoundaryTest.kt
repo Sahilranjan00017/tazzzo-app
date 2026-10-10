@@ -1,7 +1,6 @@
 package com.tazzzo.app.order
 
 import com.tazzzo.app.HomeTab
-import com.tazzzo.app.config.AppEnvironment
 import com.tazzzo.app.data.catalog.CatalogCapabilities
 import com.tazzzo.app.data.catalog.CatalogMode
 import com.tazzzo.app.data.catalog.CatalogSource
@@ -45,31 +44,19 @@ class OrderBoundaryTest {
         }
     }
 
-    @Test fun orderAgainStaysHiddenInRemoteWhateverTheOrderCapabilityIs() {
+    @Test fun orderAgainStaysHiddenInRemoteEvenWithRealHistory() {
         val remote = CatalogCapabilities.REMOTE
-        assertFalse(remote.orderHistoryIntegration)
+        assertTrue(remote.orderHistoryIntegration)                                                       // real history exists...
+        assertFalse(remote.reorder)                                                                      // ...but no reorder contract
         assertTrue(HomeTab.ORDER_AGAIN !in visibleHomeTabs(remote))
-        assertTrue(HomeTab.ORDER_AGAIN !in visibleHomeTabs(remote.copy(orderIntegration = true)))      // enabling placing does not expose history
+        assertTrue(HomeTab.ORDERS in visibleHomeTabs(remote))
         assertTrue(HomeTab.ORDER_AGAIN in visibleHomeTabs(CatalogCapabilities.MOCK))
     }
 
-    @Test fun productionRemoteKeepsOrderPlacementGatedUntilAnAuthoritativePayableExists() {
-        val remote = CatalogCapabilities.REMOTE
-        assertFalse(remote.orderIntegration)
-        OrderLaunchGate.debugEnabled = false
-        assertFalse(OrderLaunchGate.enabled(remote))
-    }
-
-    @Test fun anExplicitDevelopmentSwitchLetsTheRealFlowBeExercisedAndNothingElseDoes() {
-        try {
-            OrderLaunchGate.debugEnabled = true
-            assertEquals(AppEnvironment.isDebug, OrderLaunchGate.enabled(CatalogCapabilities.REMOTE))   // honoured only in a debug build
-        } finally { OrderLaunchGate.debugEnabled = false }
-        assertFalse(OrderLaunchGate.enabled(CatalogCapabilities.REMOTE))
-    }
-
-    @Test fun flippingTheCapabilityLaterEnablesPlacingWithoutTouchingTheStore() {
-        assertTrue(OrderLaunchGate.enabled(CatalogCapabilities.REMOTE.copy(orderIntegration = true)))
+    @Test fun releaseRemotePlacesRealOrdersThroughTheCapabilityAlone() {
+        assertTrue(CatalogCapabilities.REMOTE.orderIntegration)
+        assertTrue(OrderLaunchGate.enabled(CatalogCapabilities.REMOTE))
+        assertFalse(OrderLaunchGate.enabled(CatalogCapabilities.REMOTE.copy(orderIntegration = false)))   // fail-closed kill switch
         assertTrue(OrderLaunchGate.enabled(CatalogCapabilities.MOCK))
     }
 }

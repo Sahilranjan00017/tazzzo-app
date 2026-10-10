@@ -16,8 +16,8 @@ object CheckoutCopy {
     /** Cash on delivery with nothing to collect (a full discount). Never "Payment due" for ₹0. */
     const val NOTHING_DUE = "Nothing due on delivery"
     const val ORDER_CTA = "Place order"
-    /** Shown while production order placement is not launch-enabled (deployment / end-to-end sign-off), never about money. */
-    const val LAUNCH_GATED = "Ordering isn't available yet."
+    /** Fail-closed copy when the order capability is off (a kill switch; REMOTE and MOCK have it on). Never about money. */
+    const val ORDERING_PAUSED = "We can't take orders right now."
     /** An order was refused because its binding money is no longer the current money (PAYABLE_CHANGED). */
     const val PAYABLE_CHANGED = "Your order amount changed. Review checkout again."
     /** A quote that violates the contract. */

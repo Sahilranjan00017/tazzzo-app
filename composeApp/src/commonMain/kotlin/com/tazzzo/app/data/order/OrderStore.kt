@@ -2,10 +2,11 @@ package com.tazzzo.app.data.order
 
 import com.tazzzo.app.analytics.Analytics
 import com.tazzzo.app.analytics.AnalyticsEvents
-import com.tazzzo.app.config.AppEnvironment
-import com.tazzzo.app.config.debugRealOrderingRequested
 import com.tazzzo.app.data.cart.CartAccess
+import com.tazzzo.app.data.catalog.AppendState
 import com.tazzzo.app.data.catalog.CatalogCapabilities
+import com.tazzzo.app.data.catalog.PagedLoader
+import com.tazzzo.app.data.catalog.PagedState
 import com.tazzzo.app.data.checkout.CheckoutQuoteAccess
 import com.tazzzo.app.data.checkout.CheckoutState
 import com.tazzzo.app.data.checkout.StaleReason
@@ -17,24 +18,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Decides whether the app may submit a real COD order. This is a LAUNCH rule, not a property of [OrderStore]: production
- * REMOTE keeps `orderIntegration = false` until deployment and end-to-end sign-off, while a developer build can explicitly
- * enable the full real path. Flipping the capability later needs no store changes.
- *
- * The developer override needs BOTH a debug binary AND an explicit build-time opt-in (`-Ptazzzo.debugRealOrdering=true`,
- * see [debugRealOrderingRequested]); it is never persisted and has no UI. A release build ignores it: there only
- * `orderIntegration` decides.
+ * Decides whether the app may submit a real COD order: the catalogue's `orderIntegration` capability, nothing else. True for
+ * REMOTE (release) and MOCK; a capability set with it false (a future kill switch) fails closed to `NotLaunched` before any
+ * request. There is no debug-only override any more: the release path IS the real path.
  */
 object OrderLaunchGate {
-    /** Debug-only explicit enable (a hard no-op in a release build, same rule as `CatalogSource`). Starts from the build opt-in. */
-    var debugEnabled: Boolean = AppEnvironment.isDebug && debugRealOrderingRequested()
-        set(value) { if (!AppEnvironment.isDebug) return; field = value }
-
-    fun enabled(caps: CatalogCapabilities): Boolean = allows(caps.orderIntegration, AppEnvironment.isDebug, debugEnabled)
-
-    /** The rule itself: the production capability, or (debug binary AND explicit opt-in). A release binary ignores the override. */
-    internal fun allows(orderIntegration: Boolean, debugBuild: Boolean, debugOptIn: Boolean): Boolean =
-        orderIntegration || (debugBuild && debugOptIn)
+    fun enabled(caps: CatalogCapabilities): Boolean = caps.orderIntegration
 }
 
 sealed interface OrderState {
@@ -80,9 +69,18 @@ class OrderStore(
     private val _state = MutableStateFlow<OrderState>(OrderState.Idle)
     val state: StateFlow<OrderState> = _state
 
-    /** The order placed in THIS session, for the confirmation / "recent order" surfaces. Memory only; not history. */
+    /** The order placed in THIS session, for the confirmation (no refetch right after placing). Memory only. */
     private val _recent = MutableStateFlow<CustomerOrder?>(null)
     val recent: StateFlow<CustomerOrder?> = _recent
+
+    /**
+     * The REAL order history (`GET /v1/customer/orders`, newest first, cursor-paged). Keyed by a session epoch, so a sign-out
+     * or a new sign-in never shows the previous customer's rows; a successful placement makes the next open reload page 1.
+     * Every call goes through [command], so the pager is driven only on [scope]'s serial dispatcher.
+     */
+    private val historyPager = PagedLoader<Int, CustomerOrderSummary>(scope, { it.orderId }) { _, cursor -> source.listOrders(cursor) }
+    val history: StateFlow<PagedState<CustomerOrderSummary>> = historyPager.state
+    private var historyEpoch = 0
 
     private var attemptQuoteId: String? = null
     private var generation = 0
@@ -91,7 +89,7 @@ class OrderStore(
 
     // ---- public API (each enqueues a command) ----------------------------------------------------------------------
 
-    /** "Place order". Single flight; needs a Ready quote and a launch-enabled build. */
+    /** "Place order". Single flight; needs a Ready quote and the order capability. */
     fun place() = command {
         when (_state.value) {
             OrderState.Placing, is OrderState.Ambiguous, is OrderState.Placed -> return@command
@@ -129,6 +127,23 @@ class OrderStore(
         begin(quoteId, saveFirst = false)
     }
 
+    /** The Orders surface is showing: load page 1 once per session (a no-op while loaded). Signed out: nothing is fetched. */
+    fun openHistory() = command {
+        if (!isAuthenticated()) { historyPager.reset(); return@command }
+        historyPager.setKey(historyEpoch)
+    }
+
+    /** Pull-to-refresh / "Try again" on a first-page failure. */
+    fun refreshHistory() = command { if (isAuthenticated()) historyPager.refresh() else historyPager.reset() }
+
+    /** "Load more" (also retries a failed append). */
+    fun loadMoreHistory() = command {
+        val s = historyPager.state.value as? PagedState.Content ?: return@command
+        if (s.append is AppendState.Failed) historyPager.retryAppend() else historyPager.loadMore()
+    }
+
+    private fun forgetHistory() { historyEpoch++; historyPager.reset() }
+
     /** The confirmation or a conclusive failure was seen: back to Idle. */
     fun acknowledge() = command {
         if (_state.value is OrderState.Placed || _state.value is OrderState.Failed) _state.value = OrderState.Idle
@@ -145,6 +160,7 @@ class OrderStore(
         attemptQuoteId = null
         pending.clear()
         _recent.value = null
+        forgetHistory()
         _state.value = OrderState.SignedOut
     }
 
@@ -159,6 +175,7 @@ class OrderStore(
         attemptQuoteId = null
         pending.clear()
         _recent.value = null
+        forgetHistory()
         _state.value = OrderState.SignedOut
     }
 
@@ -169,12 +186,13 @@ class OrderStore(
     fun onInteractiveSignIn() = command {
         pending.clear()
         attemptQuoteId = null
+        forgetHistory()
         if (_state.value == OrderState.SignedOut) _state.value = OrderState.Idle
     }
 
     /**
-     * One stored order by id, for the confirmation / current-session detail: this session's order if it is the one asked for,
-     * otherwise `GET /orders/{id}`. This is NOT history (there is no list endpoint) and the id is never persisted for one.
+     * One stored order by id, for the confirmation / order detail: this session's order if it is the one asked for, otherwise
+     * `GET /orders/{id}`. The id is never persisted.
      */
     suspend fun fetch(orderId: String): CustomerOrder? {
         _recent.value?.takeIf { it.orderId == orderId }?.let { return it }
@@ -233,6 +251,7 @@ class OrderStore(
         quotes.resetNow()                         // 1. the quote is spent: reset BEFORE the cart moves, so no misleading "stale" state
         forgetAttempt()                           // 2. the outcome is known: delete the recovery record
         _recent.value = order
+        forgetHistory()                           //    the new order heads the history: the next open reloads page 1
         _state.value = OrderState.Placed(order)
         track(AnalyticsEvents.ORDER_PLACE_SUCCEEDED)
         cart.refreshAndAwait()                    // 3. take the SERVER cart as truth (emptied, or preserved if it changed after the quote)

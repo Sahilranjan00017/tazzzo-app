@@ -11,12 +11,9 @@ import com.tazzzo.app.data.order.OrderPaymentCondition
 import com.tazzzo.app.data.order.OrderState
 import com.tazzzo.app.data.order.view
 import com.tazzzo.app.ui.order.OrderCopy
-import com.tazzzo.app.ui.order.OrdersEmptyKind
 import com.tazzzo.app.ui.order.amountHeadline
 import com.tazzzo.app.ui.order.confirmedOrder
 import com.tazzzo.app.ui.order.label
-import com.tazzzo.app.ui.order.orderHistoryAvailable
-import com.tazzzo.app.ui.order.ordersEmptyKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -51,11 +48,15 @@ class OrderUiModelTest {
         assertFalse(v.orderId.startsWith("CHKQ_")); assertFalse(v.orderId.contains("quote", ignoreCase = true))
     }
 
-    @Test fun statusLabelsExistOnlyForTheContractsStatusesAndFormNoProgression() {
+    @Test fun statusLabelsExistOnlyForTheContractsCustomerVisibleStatuses() {
         assertEquals("Confirmed", CustomerOrderStatus.CONFIRMED.label())
+        assertEquals("Out for delivery", CustomerOrderStatus.OUT_FOR_DELIVERY.label())
+        assertEquals("Delivered", CustomerOrderStatus.DELIVERED.label())
+        assertEquals("Cancelled", CustomerOrderStatus.CANCELLED.label())
         assertEquals("Received", CustomerOrderStatus.UNRECOGNIZED.label())
-        assertEquals(2, CustomerOrderStatus.entries.size)
-        for (fake in listOf("Packed", "Out for delivery", "Delivered", "On the way")) assertFalse(CustomerOrderStatus.entries.any { it.label() == fake })
+        assertEquals(5, CustomerOrderStatus.entries.size)
+        // Steps the backend does not have are never invented.
+        for (fake in listOf("Packed", "On the way", "Shipped", "Preparing")) assertFalse(CustomerOrderStatus.entries.any { it.label() == fake })
     }
 
     // ---- money -------------------------------------------------------------------------------------------------------------
@@ -114,19 +115,17 @@ class OrderUiModelTest {
 
     // ---- Orders tab truth ------------------------------------------------------------------------------------------------------
 
-    @Test fun orderHistoryIsUnavailableInRemoteModeAndTheTabSaysSoNotNoOrdersYet() {
-        assertFalse(orderHistoryAvailable(CatalogCapabilities.REMOTE.orderHistoryIntegration))
-        assertEquals(OrdersEmptyKind.HistoryUnavailable, ordersEmptyKind(CatalogCapabilities.REMOTE.orderHistoryIntegration))
-        assertEquals(OrdersEmptyKind.NoOrdersYet, ordersEmptyKind(true))
-        assertTrue("isn't available yet" in OrderCopy.HISTORY_UNAVAILABLE_TITLE)
+    @Test fun remoteHasRealOrderHistoryAndAnEmptyHistorySaysNoOrdersYet() {
+        assertTrue(CatalogCapabilities.REMOTE.orderHistoryIntegration)
         assertEquals("No orders yet", OrderCopy.NO_ORDERS_TITLE)
+        assertEquals("Start shopping", OrderCopy.START_SHOPPING)
     }
 
     @Test fun noCopyPromisesAnEtaOrADeliveryTime() {
-        val all = listOf(OrderCopy.CONFIRMATION_TITLE, OrderCopy.CONFIRMATION_SUPPORT, OrderCopy.HISTORY_UNAVAILABLE_BODY, OrderCopy.NO_ORDERS_BODY, orderOf().view().title).joinToString(" ").lowercase()
+        val all = listOf(OrderCopy.CONFIRMATION_TITLE, OrderCopy.CONFIRMATION_SUPPORT, OrderCopy.SIGNED_OUT_BODY, OrderCopy.NO_ORDERS_BODY, orderOf().view().title).joinToString(" ").lowercase()
         for (w in listOf("min", "arriving", "eta", "today", "tomorrow", "slot")) assertFalse(w in all, w)
         assertNotNull(OrderCopy.CONTINUE_SHOPPING)
     }
 
-    @Test fun productionOrderingStaysOff() { assertFalse(CatalogCapabilities.REMOTE.orderIntegration) }
+    @Test fun productionOrderingIsOn() { assertTrue(CatalogCapabilities.REMOTE.orderIntegration) }
 }

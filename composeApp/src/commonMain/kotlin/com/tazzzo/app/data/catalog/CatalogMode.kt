@@ -55,30 +55,36 @@ data class CatalogCapabilities(
      */
     val checkoutIntegration: Boolean,
     /**
-     * Whether PRODUCTION order placement is launch-enabled. False for REMOTE until the binding-payable backend is deployed
-     * and the real quote / order / PAYABLE_CHANGED / COD end-to-end checks are signed off. The real order path (PR-08, with
-     * the binding money of PR-09) exists and is tested regardless; only an explicitly opted-in debug build can exercise it,
-     * through [com.tazzzo.app.data.order.OrderLaunchGate]. A real quote has no path into the mock OrderPlacement, local
-     * orders, coin credits or Club progress.
+     * Whether REAL COD order placement is enabled (`POST /v1/customer/orders`, with the binding money of PR-09). True for REMOTE
+     * since the product-closure release: the backend order path is deployed and the app's idempotent quote replay, pending-order
+     * recovery and 409 mapping are unchanged. A real quote still has no path into the mock OrderPlacement, local orders, coin
+     * credits or Club progress. Read through [com.tazzzo.app.data.order.OrderLaunchGate].
      */
     val orderIntegration: Boolean,
     /**
-     * Whether REAL order history / "order again" exists. False for REMOTE until the backend has a list endpoint (PR-08B):
-     * the Order again tab and any history surface stay hidden rather than showing mock orders.
+     * Whether REAL order history exists: `GET /v1/customer/orders` (cursor-paged) + `GET /v1/customer/orders/{id}`. True for
+     * REMOTE: the Orders tab lists the customer's real orders. It does NOT expose "Order again" (see [reorder]).
      */
-    val orderHistoryIntegration: Boolean
+    val orderHistoryIntegration: Boolean,
+    /**
+     * Whether the "Order again" tab exists. It is built from the MOCK order history and there is no reorder contract, so it
+     * stays MOCK-only even though REMOTE now has real history.
+     */
+    val reorder: Boolean
 ) {
     companion object {
-        /** What the running backend provides today: taxonomy, product lists, PDP, serviceability — and nothing else. */
+        /** What the running backend provides: taxonomy, product lists, PDP, serviceability, cart, checkout, COD orders and history. */
         val REMOTE = CatalogCapabilities(
             search = false, bestsellers = false, deals = false, banners = false,
-            counts = false, sorting = false, cartIntegration = true, checkoutIntegration = true, orderIntegration = false, orderHistoryIntegration = false
+            counts = false, sorting = false, cartIntegration = true, checkoutIntegration = true, orderIntegration = true, orderHistoryIntegration = true,
+            reorder = false
         )
 
         /** The in-memory demo/test catalogue. */
         val MOCK = CatalogCapabilities(
             search = true, bestsellers = true, deals = true, banners = true,
-            counts = true, sorting = true, cartIntegration = true, checkoutIntegration = true, orderIntegration = true, orderHistoryIntegration = true
+            counts = true, sorting = true, cartIntegration = true, checkoutIntegration = true, orderIntegration = true, orderHistoryIntegration = true,
+            reorder = true
         )
 
         fun forMode(mode: CatalogMode) = when (mode) { CatalogMode.REMOTE -> REMOTE; CatalogMode.MOCK -> MOCK }

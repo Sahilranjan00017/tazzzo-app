@@ -1,16 +1,20 @@
 package com.tazzzo.app.ui.order
 
+import com.tazzzo.app.data.catalog.AppendState
+import com.tazzzo.app.data.catalog.CatalogFailure
+import com.tazzzo.app.data.catalog.PagedState
 import com.tazzzo.app.data.checkout.CheckoutCopy
 import com.tazzzo.app.data.order.CustomerOrder
+import com.tazzzo.app.data.order.CustomerOrderSummary
 import com.tazzzo.app.data.order.CustomerOrderStatus
 import com.tazzzo.app.data.order.OrderPaymentCondition
 import com.tazzzo.app.data.order.OrderState
 
 /*
  * Presentation-only bindings for the order surfaces (UI-06). The REAL contract is: `POST /v1/customer/orders` (place or
- * replay) and `GET /v1/customer/orders/{orderId}`; there is NO list endpoint, so "history" does not exist and the Orders tab
- * can only show the order placed in this session (`OrderStore.recent`). Money is the order's persisted AUTHORITATIVE
- * snapshot through [com.tazzzo.app.data.order.view]; nothing here recomputes, infers or defaults an amount.
+ * replay), `GET /v1/customer/orders` (the customer's own history, cursor-paged, newest first) and
+ * `GET /v1/customer/orders/{orderId}`. Money is the order's persisted AUTHORITATIVE snapshot through
+ * [com.tazzzo.app.data.order.view]; nothing here recomputes, infers or defaults an amount.
  */
 
 object OrderCopy {
@@ -20,11 +24,7 @@ object OrderCopy {
     const val VIEW_ORDER = "View order"
     const val ORDERS_TITLE = "Orders"
     const val ORDER_TITLE = "Your order"
-    const val THIS_SESSION = "Placed in this session"
-    const val HISTORY_UNAVAILABLE_TITLE = "Order history isn't available yet"
-    const val HISTORY_UNAVAILABLE_BODY = "Your orders will appear here once history is ready."
-    const val HISTORY_UNAVAILABLE_NOTE = "Full order history isn't available yet."
-    /** Only for a REAL history list that answered with zero orders; never shown while history is unavailable. */
+    /** Only for a REAL history list that answered with zero orders. */
     const val NO_ORDERS_TITLE = "No orders yet"
     const val NO_ORDERS_BODY = "Your orders will appear here after you place one."
     const val START_SHOPPING = "Start shopping"
@@ -32,6 +32,15 @@ object OrderCopy {
     const val LOAD_FAILED_BODY = "Please check your connection and try again."
     const val CONFIRMATION_LOAD_FAILED_BODY = "Your order is placed. We couldn't load its details right now."
     const val TRY_AGAIN = "Try again"
+    const val HISTORY_FAILED_TITLE = "We couldn't load your orders"
+    const val SIGNED_OUT_TITLE = "Log in to see your orders"
+    const val SIGNED_OUT_BODY = "Your orders appear here once you're logged in."
+    const val LOG_IN = "Log in"
+    const val LOAD_MORE = "Load more"
+    const val LOAD_MORE_FAILED = "We couldn't load more orders."
+    const val SECTION_TIMELINE = "Status"
+    const val SLOT_LABEL = "Delivery slot"
+    const val PLACED_LABEL = "Placed"
     /** A legacy order without the money snapshot: never ₹0, never derived. */
     const val AMOUNT_UNAVAILABLE = "Amount details unavailable"
     const val SECTION_ITEMS = "Items"
@@ -41,9 +50,12 @@ object OrderCopy {
     const val ORDER_NUMBER = "Order number"
 }
 
-/** The customer label for the backend's status. Only the statuses in the contract exist; nothing is a progression. */
+/** The customer label (status chip) for the backend's status. Only the statuses in the contract exist; nothing is projected. */
 fun CustomerOrderStatus.label(): String = when (this) {
     CustomerOrderStatus.CONFIRMED -> "Confirmed"
+    CustomerOrderStatus.OUT_FOR_DELIVERY -> "Out for delivery"
+    CustomerOrderStatus.DELIVERED -> "Delivered"
+    CustomerOrderStatus.CANCELLED -> "Cancelled"
     CustomerOrderStatus.UNRECOGNIZED -> "Received"
 }
 
@@ -58,6 +70,9 @@ data class OrderAmount(val amount: String?, val caption: String) {
 
 fun CustomerOrder.amountHeadline(): OrderAmount {
     val m = money ?: return OrderAmount(null, OrderCopy.AMOUNT_UNAVAILABLE)
+    // Nothing is due on a cancelled order, and a delivered one is not "due on delivery" any more — but never "paid" either.
+    if (status == CustomerOrderStatus.CANCELLED) return OrderAmount(m.payable.format(), "order total · cancelled")
+    if (status == CustomerOrderStatus.DELIVERED) return OrderAmount(m.payable.format(), "cash on delivery")
     if (paymentCondition != OrderPaymentCondition.COD_DUE) return OrderAmount(m.payable.format(), "Amount")
     return if (m.isNothingDue) OrderAmount("₹0", CheckoutCopy.NOTHING_DUE) else OrderAmount(m.payable.format(), "due on delivery")
 }
@@ -65,11 +80,22 @@ fun CustomerOrder.amountHeadline(): OrderAmount {
 /** The confirmation is shown ONLY for a confirmed real order held by the store — never for Placing, Ambiguous or Failed. */
 fun OrderState.confirmedOrder(): CustomerOrder? = (this as? OrderState.Placed)?.order
 
-/** Whether the Orders surface is a real history list. False today: the contract has no list endpoint. */
-fun orderHistoryAvailable(historyIntegration: Boolean): Boolean = historyIntegration
+/** What the Orders surface shows, decided once from the session and the history state. */
+sealed interface OrdersSurface {
+    data object SignedOut : OrdersSurface
+    data object Loading : OrdersSurface
+    data class Failed(val failure: CatalogFailure) : OrdersSurface
+    /** A REAL history that answered with zero orders. */
+    data object NoOrdersYet : OrdersSurface
+    data class Content(val orders: List<CustomerOrderSummary>, val hasMore: Boolean, val append: AppendState) : OrdersSurface
+}
 
-/** The "no orders" vs "history unavailable" distinction, decided once. */
-enum class OrdersEmptyKind { HistoryUnavailable, NoOrdersYet }
-
-fun ordersEmptyKind(historyIntegration: Boolean): OrdersEmptyKind =
-    if (historyIntegration) OrdersEmptyKind.NoOrdersYet else OrdersEmptyKind.HistoryUnavailable
+fun ordersSurface(authenticated: Boolean, history: PagedState<CustomerOrderSummary>): OrdersSurface = when {
+    !authenticated -> OrdersSurface.SignedOut
+    else -> when (history) {
+        PagedState.Idle, PagedState.LoadingFirst -> OrdersSurface.Loading
+        is PagedState.FirstPageFailed -> OrdersSurface.Failed(history.failure)
+        PagedState.Empty -> OrdersSurface.NoOrdersYet
+        is PagedState.Content -> OrdersSurface.Content(history.items, history.hasMore, history.append)
+    }
+}

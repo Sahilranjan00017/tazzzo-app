@@ -78,5 +78,5 @@ class ProfileUiModelTest {
         assertEquals("Cancel", ProfileCopy.CANCEL)
     }
 
-    @Test fun productionOrderingStaysOff() { assertFalse(CatalogCapabilities.REMOTE.orderIntegration) }
+    @Test fun productionOrderingIsOn() { assertTrue(CatalogCapabilities.REMOTE.orderIntegration) }
 }

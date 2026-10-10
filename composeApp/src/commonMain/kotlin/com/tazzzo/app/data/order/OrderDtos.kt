@@ -21,6 +21,9 @@ import kotlinx.serialization.Serializable
     val postalCode: String? = null
 )
 
+/** The delivery window the customer chose (only when one was chosen; the default checkout has no slot step). */
+@Serializable internal data class OrderSlotDto(val slotId: String? = null, val label: String? = null, val startsAt: String? = null, val endsAt: String? = null)
+
 @Serializable internal data class OrderDto(
     val orderId: String,
     val status: String? = null,
@@ -34,8 +37,28 @@ import kotlinx.serialization.Serializable
     val createdAt: String? = null,
     val confirmedAt: String? = null,
     val money: PayableMoneyDto? = null,
+    val deliverySlot: OrderSlotDto? = null,
+    val cancelledAt: String? = null,
+    val outForDeliveryAt: String? = null,
+    val deliveredAt: String? = null,
     val requestId: String? = null
 )
+
+/** One row of `GET /v1/customer/orders` (`CustomerOrderDto.Summary`): never the address or the lines. */
+@Serializable internal data class OrderSummaryDto(
+    val orderId: String,
+    val status: String? = null,
+    val paymentMethod: String? = null,
+    val itemCount: Int = 0,
+    val subtotalPaise: Long,
+    /** Absent for an order created before the money model: NEVER a zero payable. */
+    val payablePaise: Long? = null,
+    val createdAt: String? = null,
+    val deliverySlot: OrderSlotDto? = null,
+    val cancelledAt: String? = null
+)
+
+@Serializable internal data class OrderPageDto(val items: List<OrderSummaryDto> = emptyList(), val nextCursor: String? = null, val requestId: String? = null)
 
 private fun malformed(): Nothing = throw ApiException(ApiError.Decoding())
 
@@ -62,6 +85,24 @@ internal fun OrderDto.toDomain(): CustomerOrder {
             OrderDeliveryAddress(it.label, it.recipientName, it.recipientPhone, it.addressLine1, it.addressLine2, it.landmark, it.city, it.state, it.postalCode)
         },
         createdAtMillis = createdAt?.let { Iso8601.parseMillis(it) },
-        confirmedAtMillis = confirmedAt?.let { Iso8601.parseMillis(it) }
+        confirmedAtMillis = confirmedAt?.let { Iso8601.parseMillis(it) },
+        deliverySlotLabel = deliverySlot?.label?.takeIf { it.isNotBlank() },
+        outForDeliveryAtMillis = outForDeliveryAt?.let { Iso8601.parseMillis(it) },
+        deliveredAtMillis = deliveredAt?.let { Iso8601.parseMillis(it) },
+        cancelledAtMillis = cancelledAt?.let { Iso8601.parseMillis(it) }
+    )
+}
+
+internal fun OrderSummaryDto.toDomain(): CustomerOrderSummary {
+    if (!ORDER_ID.matches(orderId)) malformed()
+    return CustomerOrderSummary(
+        orderId = orderId,
+        status = CustomerOrderStatus.of(status),
+        paymentMethod = CustomerPaymentMethod.of(paymentMethod),
+        itemCount = itemCount.coerceAtLeast(0),
+        subtotal = paise(subtotalPaise),
+        payable = payablePaise?.let { paise(it) },
+        createdAtMillis = createdAt?.let { Iso8601.parseMillis(it) },
+        deliverySlotLabel = deliverySlot?.label?.takeIf { it.isNotBlank() }
     )
 }

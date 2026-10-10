@@ -34,7 +34,10 @@ import com.tazzzo.app.ui.order.OrderConfirmationLayout
 import com.tazzzo.app.ui.order.OrderDetailLayout
 import com.tazzzo.app.ui.order.OrderLoad
 import com.tazzzo.app.ui.order.OrdersActions
+import com.tazzzo.app.ui.order.OrdersSurface
 import com.tazzzo.app.ui.order.OrdersTabLayout
+import com.tazzzo.app.data.catalog.AppendState
+import com.tazzzo.app.data.order.CustomerOrderSummary
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -99,22 +102,22 @@ class OrdersUi06EvidenceTest {
         snapshot("ui06_confirmation_failed")
     }
 
-    @Test fun orders_tab_history_unavailable() {
-        content(tab = true) { OrdersTabLayout(null, true, false, ordersActions) }
-        rule.onNodeWithText("Order history isn't available yet").assertIsDisplayed()
-        snapshot("ui06_orders_unavailable")
+    @Test fun orders_tab_signed_out() {
+        content(tab = true) { OrdersTabLayout(OrdersSurface.SignedOut, true, ordersActions) }
+        rule.onNodeWithText("Log in to see your orders").assertIsDisplayed()
+        snapshot("ui06_orders_signed_out")
     }
 
-    @Test fun orders_tab_with_session_order() {
-        content(tab = true) { OrdersTabLayout(positive, true, false, ordersActions) }
-        rule.onNodeWithContentDescription("Order ORD_9f3kq2m7xv1").assertIsDisplayed()
-        rule.onNodeWithText("Full order history isn't available yet.").assertIsDisplayed()
-        snapshot("ui06_orders_recent")
+    @Test fun orders_tab_with_history() {
+        val row = CustomerOrderSummary(positive.orderId, CustomerOrderStatus.CONFIRMED, CustomerPaymentMethod.COD, 3, rs(933), rs(840), 1_790_931_600_000L)
+        content(tab = true) { OrdersTabLayout(OrdersSurface.Content(listOf(row), hasMore = true, append = AppendState.Idle), true, ordersActions) }
+        rule.onNodeWithContentDescription("Order ORD_9f3kq2m7xv1, Confirmed").assertIsDisplayed()
+        rule.onNodeWithText("Load more").assertIsDisplayed()
+        snapshot("ui06_orders_history")
     }
 
     @Test fun orders_tab_real_history_empty() {
-        // Only reachable once a history integration exists; rendered to show the DIFFERENT copy it would use.
-        content(tab = true) { OrdersTabLayout(null, true, true, ordersActions) }
+        content(tab = true) { OrdersTabLayout(OrdersSurface.NoOrdersYet, true, ordersActions) }
         rule.onNodeWithText("No orders yet").assertIsDisplayed()
         snapshot("ui06_orders_empty")
     }

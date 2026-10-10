@@ -99,7 +99,7 @@ class CartBindingAndGuardsTest {
     @Test fun remoteHasCheckoutReviewButNoOrderPlacementAndMockHasBoth() {
         val r = com.tazzzo.app.data.catalog.CatalogCapabilities.REMOTE
         val m = com.tazzzo.app.data.catalog.CatalogCapabilities.MOCK
-        assertEquals(true, r.checkoutIntegration); assertEquals(false, r.orderIntegration)
+        assertEquals(true, r.checkoutIntegration); assertEquals(true, r.orderIntegration)
         assertEquals(true, m.checkoutIntegration); assertEquals(true, m.orderIntegration)
     }
 

@@ -53,7 +53,7 @@ class CheckoutPresentationTest {
         StaleReason.entries.forEach { all += it.view().title; all += it.view().hint }
         all += listOf(EXPIRED_VIEW.title, EXPIRED_VIEW.hint, NO_BINDING_MONEY_VIEW.title, NO_BINDING_MONEY_VIEW.hint)
         all += listOf(CheckoutCopy.SUBTOTAL_LABEL, CheckoutCopy.DISCOUNT_LABEL, CheckoutCopy.AMOUNT_DUE_LABEL, CheckoutCopy.NOTHING_DUE,
-            CheckoutCopy.ORDER_CTA, CheckoutCopy.LAUNCH_GATED, CheckoutCopy.PAYABLE_CHANGED, CheckoutCopy.CONTRACT_FAILURE)
+            CheckoutCopy.ORDER_CTA, CheckoutCopy.ORDERING_PAUSED, CheckoutCopy.PAYABLE_CHANGED, CheckoutCopy.CONTRACT_FAILURE)
         listOf(m(10_000, 1_000, 9_000), m(4_950, 0, 4_950), m(10_000, 10_000, 0)).forEach { mm ->
             quote(money = mm).summary().let { all += texts(it); all += it.dueNote.orEmpty() }
         }

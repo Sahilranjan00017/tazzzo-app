@@ -14,7 +14,9 @@ import com.tazzzo.app.data.model.PayableMoney
 import com.tazzzo.app.data.model.Money
 import com.tazzzo.app.data.order.CustomerOrder
 import com.tazzzo.app.data.order.CustomerOrderItem
+import com.tazzzo.app.data.catalog.Page
 import com.tazzzo.app.data.order.CustomerOrderStatus
+import com.tazzzo.app.data.order.CustomerOrderSummary
 import com.tazzzo.app.data.order.CustomerPaymentMethod
 import com.tazzzo.app.data.order.OrderDeliveryAddress
 import com.tazzzo.app.data.order.OrderPaymentCondition
@@ -104,4 +106,26 @@ class FakeOrderSource : OrderSource {
         gets += orderId
         return orders.values.firstOrNull { it.orderId == orderId } ?: throw hx(404, "NOT_FOUND")
     }
+
+    /** The history, newest first, as `listOrders` pages it ([pageSize] rows per page, cursor = the next index). */
+    val history = mutableListOf<CustomerOrderSummary>()
+    val listCalls = mutableListOf<String?>()
+    var listError: Throwable? = null
+    var listGate: CompletableDeferred<Unit>? = null
+    var pageSize = 2
+
+    override suspend fun listOrders(cursor: String?, pageSize: Int): Page<CustomerOrderSummary> {
+        listCalls += cursor
+        listGate?.await()
+        listError?.let { throw it }
+        val from = cursor?.toInt() ?: 0
+        val rows = history.drop(from).take(this.pageSize)
+        val next = (from + rows.size).takeIf { it < history.size }?.toString()
+        return Page(rows, next, next != null)
+    }
 }
+
+fun summaryOf(
+    id: String = "ORD_abc123", status: CustomerOrderStatus = CustomerOrderStatus.CONFIRMED, payable: Long? = 9_900, items: Int = 2,
+    createdAt: Long? = 1_790_931_600_000L
+) = CustomerOrderSummary(id, status, CustomerPaymentMethod.COD, items, Money.ofPaise(payable ?: 9_900), payable?.let { Money.ofPaise(it) }, createdAt)

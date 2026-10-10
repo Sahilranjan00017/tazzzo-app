@@ -130,7 +130,7 @@ class ShopModelTest {
         assertTrue(3 * CATEGORY_GRID_MIN_CELL_DP <= 360 - 32 - 24)
     }
 
-    @Test fun productionOrderingStaysOff() {
-        assertFalse(CatalogCapabilities.REMOTE.orderIntegration)
+    @Test fun productionOrderingIsOn() {
+        assertTrue(CatalogCapabilities.REMOTE.orderIntegration)
     }
 }

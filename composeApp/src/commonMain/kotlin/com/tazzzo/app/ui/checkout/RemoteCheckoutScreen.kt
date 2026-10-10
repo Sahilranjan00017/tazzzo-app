@@ -255,7 +255,7 @@ private fun PlaceOrderBar(money: com.tazzzo.app.data.model.PayableMoney, availab
         }
         if (availability is PlaceOrderAvailability.LaunchGated) {
             Spacer(Modifier.height(TazSpace.xs))
-            Text(CheckoutCopy.LAUNCH_GATED, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
+            Text(CheckoutCopy.ORDERING_PAUSED, fontSize = TazType.captionSize, color = TazColors.TextSecondary)
         }
     }
 }

@@ -70,9 +70,9 @@ class CheckoutBoundaryTest {
         assertTrue(session.placement is CheckoutSession.Placement.Idle)
     }
 
-    @Test fun remoteHasCheckoutReviewButNoOrderCapability() {
+    @Test fun remoteHasCheckoutReviewAndTheRealOrderCapabilityButNoOrderAgain() {
         val r = CatalogCapabilities.REMOTE
-        assertTrue(r.checkoutIntegration); assertFalse(r.orderIntegration)
+        assertTrue(r.checkoutIntegration); assertTrue(r.orderIntegration)
         assertTrue(HomeTab.ORDER_AGAIN !in visibleHomeTabs(r))
         assertTrue(HomeTab.ORDER_AGAIN in visibleHomeTabs(CatalogCapabilities.MOCK))
     }

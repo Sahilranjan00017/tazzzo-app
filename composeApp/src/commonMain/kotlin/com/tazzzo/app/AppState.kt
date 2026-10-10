@@ -80,7 +80,7 @@ enum class HomeTab(val label: String) {
     HOME("Home"),
     SHOP("Shop"),
     DEALS("Deals"),
-    /** Real surface: the truthful "history isn't available yet" state until the list endpoint exists. Never mock history. */
+    /** Real surface: the customer's order history (`GET /v1/customer/orders`). Never mock history. */
     ORDERS("Orders"),
     ORDER_AGAIN("Order Again"),
     PROFILE("Profile")
