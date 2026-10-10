@@ -186,6 +186,7 @@ class TazzzoAppState(
 
     /** Called with the secure session's state at start-up and whenever it changes. */
     fun applyAuthState(authenticated: Boolean) {
+        if (isAuthenticated && !authenticated) clearRecentSearches()   // session ended (logout or rejection): next person must not see them
         isAuthenticated = authenticated
         _user.value = _user.value.copy(isGuest = !authenticated)
     }
@@ -222,6 +223,10 @@ class TazzzoAppState(
     // --- search ----------------------------------------------------------
     /** Most-recent-first, deduplicated, capped. Session-only until persistence lands. */
     val recentSearches = mutableStateListOf<String>()
+    fun clearRecentSearches() {
+        recentSearches.clear()
+        store?.clearRecentSearches()
+    }
     fun recordSearch(query: String) {
         val q = query.trim()
         if (q.length < 2) return
@@ -288,6 +293,7 @@ class TazzzoAppState(
 
     fun markLoggedOut() {
         isAuthenticated = false
+        clearRecentSearches()
         store?.onboarded = false
         user = UserProfile(name = "Guest", phone = "", isGuest = true,
             coinBalance = user.coinBalance, address = user.address)

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 11 and below (android:fullBackupContent). Targeted exclusion only:
-     the encrypted session blob is useless without its Keystore key, which is
-     never backed up, so it must not be restored. Everything else stays eligible. -->
+<!-- Android 11 and below (android:fullBackupContent). Explicit exclusions:
+     the encrypted session blob (useless without its Keystore key, which is never
+     backed up) and the default prefs file (saved profile, recent searches and the
+     per-install id, which must not be restored onto another device). -->
 <full-backup-content>
     <exclude domain="sharedpref" path="tazzzo_secure_auth.xml" />
+    <exclude domain="sharedpref" path="com.tazzzo.app_preferences.xml" />
 </full-backup-content>

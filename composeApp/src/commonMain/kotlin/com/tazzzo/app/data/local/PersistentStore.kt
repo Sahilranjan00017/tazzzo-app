@@ -116,6 +116,8 @@ class PersistentStore(provided: Settings? = null) {
 
     fun loadRecentSearches(): List<String> = decodeList(KEY_SEARCHES)
 
+    fun clearRecentSearches() = settings.remove(KEY_SEARCHES)
+
     // ---- Tazzzo Club membership -------------------------------------------
 
     /**
