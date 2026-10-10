@@ -101,6 +101,24 @@ Every product payload must include:
   answers 400 to any query parameter on this route; the app then shows no published blocks (no error surface). **The
   app must not ship before #96 is deployed.**
 
+### 8. Product-closure release (2026-10-10) — consumed endpoints
+
+All against backend main `5caee8e` (and the frozen legal contract of `feature/legal-content`). Every id is validated
+before it is put in a path; every request sends only the documented fields/parameters; bodies are never logged.
+
+| Endpoint | App client | Notes |
+|---|---|---|
+| `POST /v1/customer/orders` | `RemoteOrderDataSource.placeCodOrder` | `{quoteId, paymentMethod:"COD"}` only. `deliverySlotId` is NOT sent (optional unless `tazzzo.checkout.delivery-slot-required=true`, default false). Release ordering is ON (`CatalogCapabilities.REMOTE.orderIntegration = true`). The quote money is advisory: the order's `money` holds and a "Your total changed" notice shows when it differs (see "Order money"). |
+| `GET /v1/customer/orders?page_size&cursor` | `RemoteOrderDataSource.listOrders` | `CustomerOrderDto.Page{items:[Summary], nextCursor}`; Summary = `orderId,status,paymentMethod,itemCount,subtotalPaise,payablePaise?,createdAt,deliverySlot?,cancelledAt?`. page_size 1..50, cursor ≤ 128 chars (a longer `nextCursor` ends the list). |
+| `GET /v1/customer/orders/{id}` | `getOrder` | Statuses CONFIRMED / OUT_FOR_DELIVERY / DELIVERED / CANCELLED (+ unknown → "Received"); `paymentCondition` absent on CANCELLED; timeline from `confirmedAt/outForDeliveryAt/deliveredAt/cancelledAt`; optional `deliverySlot.label`. |
+| `POST /v1/customer/orders/{id}/cancel` | — not used | Customer cancel window defaults to 0 s (disabled) on the backend; no cancel UI ships day-1. |
+| `GET /v1/search?q&page_size&cursor&pin` | `RemoteCatalogDataSource.search` | Products only (same paged card shape as a category). The app enforces the backend's `SearchTokens` grammar first (trimmed 2..64 chars, 1..5 words of 2+ letters/digits, words ≤ 32). 429 → Retry-After countdown. |
+| `GET/PATCH /v1/customer/profile` | `RemoteProfileDataSource` | Response has `displayName`, `email`, `version` and NO phone. PATCH sends `{"displayName": value|null}` with `If-Match: "profile-<version>"`; 412 re-reads. |
+| `/v1/customer/support/cases` (POST, GET list, GET `{id}`, POST `{id}/messages`) | `RemoteSupportDataSource` | Create `{category, subject, message[, orderId]}`; subject 1..120, message 1..2000 plain text (`\n` allowed); 409 `TOO_MANY_OPEN` (5 open), `MESSAGE_LIMIT` (100), `STATE_CONFLICT` (closed case); 404 = foreign/unknown order. `POST {id}/close` is not used. |
+| `GET /v1/content/faqs` | `RemoteContentDataSource.faqs` | Grouped by the closed category set; plain text. |
+| `GET /v1/app-config` | `RemoteContentDataSource.appConfig` | Uses `support.phone` / `support.email` only (re-validated: E.164, strict email). `legal.*Url` are not opened. |
+| `GET /v1/content/legal/{slug}` (`terms`, `privacy`) | `RemoteContentDataSource.legal` | `{slug,title,body,effectiveDate|null}`; body = plain-text paragraphs separated by blank lines, never rendered as HTML; 404 (or an older backend) → "This document isn't available yet". |
+
 ## Model change log
 
 ### 2026-08-30 — `Order.payment`

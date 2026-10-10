@@ -33,8 +33,14 @@ sealed interface Screen {
     data object ClubCheckout : Screen
     /** Permanent receipt + service centre for one order. */
     data class OrderDetail(val orderId: String) : Screen
-    /** Tazzzo Genie: the voice-ordering surface (truthful "coming soon" until a real capability exists). */
+    /** Tazzzo Genie: the voice-ordering surface (truthful "coming soon" until a real capability exists). MOCK-only entry. */
     data object Voice : Screen
+    /** A legal document (`terms` | `privacy`), rendered as plain text from `GET /v1/content/legal/{slug}`. Works signed out. */
+    data class Legal(val slug: String) : Screen
+    /** One of the customer's support requests: its message thread and the reply box. */
+    data class SupportCase(val caseId: String) : Screen
+    /** "Contact us": a new support request, optionally about one order. */
+    data class SupportNew(val orderId: String? = null) : Screen
 }
 
 /**
@@ -70,6 +76,9 @@ val Screen.stateKey: String
         is Screen.ClubCheckout -> "clubCheckout"
         is Screen.OrderDetail -> "order:$orderId"
         is Screen.Voice -> "voice"
+        is Screen.Legal -> "legal:$slug"
+        is Screen.SupportCase -> "support:$caseId"
+        is Screen.SupportNew -> "supportNew:${orderId ?: ""}"
     }
 
 /** Which way the customer is travelling. Drives the transition, nothing else. */
@@ -239,6 +248,18 @@ class TazzzoAppState(
         internal set
 
     internal fun attachSearch(holder: com.tazzzo.app.data.catalog.ProductSearch) { search?.close(); search = holder }
+
+    /** The login flow (phone → OTP), held above the Login screen so a Legal page opened from it does not reset the OTP step. */
+    var authFlow: com.tazzzo.app.ui.onboarding.AuthFlow? = null
+        internal set
+    private var authFlowScope: kotlinx.coroutines.CoroutineScope? = null
+
+    internal fun attachAuthFlow(flow: com.tazzzo.app.ui.onboarding.AuthFlow, scope: kotlinx.coroutines.CoroutineScope) {
+        dropAuthFlow(); authFlow = flow; authFlowScope = scope
+    }
+
+    /** Login left the back stack: forget the flow (and with it the phone number and any timer). */
+    fun dropAuthFlow() { authFlowScope?.coroutineContext?.get(kotlinx.coroutines.Job)?.cancel(); authFlowScope = null; authFlow = null }
 
     /** Search is no longer on the back stack (or the session ended): forget its query and results. */
     fun dropSearch() { search?.close(); search = null }

@@ -1,5 +1,8 @@
 package com.tazzzo.app.data.repository
 
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
+
 import com.tazzzo.app.data.MockCatalog
 import com.tazzzo.app.data.search.SearchEngine
 import com.tazzzo.app.data.model.*
@@ -340,8 +343,31 @@ object ServiceLocator {
         )
     }
 
+    // --- account, support and help content (product-closure release): in memory only ---
+    /** One thread at a time: the profile and support stores are confined to this dispatcher. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val accountScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1)
+    )
+    /** `GET/PATCH /v1/customer/profile` (display name; no phone in the contract). */
+    val profileStore: com.tazzzo.app.data.account.ProfileStore by lazy {
+        com.tazzzo.app.data.account.ProfileStore(accountScope, com.tazzzo.app.data.account.RemoteProfileDataSource(apiClient)) { authSession.isAuthenticated }
+    }
+    /** The customer's own support requests (`/v1/customer/support/cases`). */
+    val supportStore: com.tazzzo.app.data.support.SupportStore by lazy {
+        com.tazzzo.app.data.support.SupportStore(accountScope, com.tazzzo.app.data.support.RemoteSupportDataSource(apiClient)) { authSession.isAuthenticated }
+    }
+    /** Public help/legal content: FAQs, app-config (support contacts) and the legal documents. Anonymous. */
+    val helpContent: com.tazzzo.app.data.content.RemoteContentDataSource by lazy {
+        com.tazzzo.app.data.content.RemoteContentDataSource(catalogClient, installationId)
+    }
+
     /** Wires login/logout and the delivery location to [cart], [checkoutQuote] and [orderStore]. REMOTE only. */
     fun startCartBinding(initiallyAuthenticated: Boolean) {
+        // Any later session change (logout, rejection, a different sign-in) forgets the previous customer's profile and requests.
+        accountScope.launch {
+            authSession.active.drop(1).collect { profileStore.signOut(); supportStore.signOut() }
+        }
         com.tazzzo.app.data.order.OrderSessionBinding(cartScope, authSession.active, orderStore).start(initiallyAuthenticated)
         com.tazzzo.app.data.checkout.CheckoutSessionBinding(cartScope, authSession.active, checkoutQuote).start()
         com.tazzzo.app.data.cart.CartSessionBinding(

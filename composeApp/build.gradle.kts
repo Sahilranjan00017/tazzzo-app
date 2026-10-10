@@ -51,6 +51,9 @@ kotlin {
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
+            // iOS edge-swipe back (PlatformBack.ios.kt). compose-ui 1.9.0 already lists it in its uikit API elements; declared
+            // explicitly so the iOS actual never depends on that transitive detail.
+            implementation("org.jetbrains.compose.ui:ui-backhandler:1.9.0")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

@@ -67,6 +67,18 @@ The machine's default JDK is 27-ea, which Gradle 8.14 rejects.
 
 ## 2. CURRENT PRODUCT STATE
 
+> **2026-10-10 — product-closure release path (REMOTE = every release build).** The table below is the historical MOCK
+> (debug/demo) inventory. The RELEASE app now routes through `RouteTable.kt` (`routeImpl`): REMOTE never renders a MOCK
+> screen (`ReleaseConfigurationTest`). Day-1 REMOTE surfaces: launch/onboarding/login (OTP; back on the OTP step returns
+> to the phone step; Terms/Privacy links), Home, Shop, PLP, PDP, **Search** (`/v1/search`, `ui/catalog/RemoteSearchScreen.kt`
+> + `data/catalog/ProductSearch.kt`), Cart, Addresses, Checkout (COD; **Place order enabled** — the debug opt-in
+> `-Ptazzzo.debugRealOrdering` was removed), order confirmation, **Orders history + detail** (`OrderStore.history`,
+> `ui/order/RemoteOrderUi.kt`), **Profile** (display name from `/v1/customer/profile`), **Help & support** (FAQs, contacts,
+> support requests: `ui/support/HelpScreens.kt`, `data/support/Support.kt`), **Legal** (`Screen.Legal`, plain text), About.
+> Coins / Genie / Club / shopping list / Deals / Order again remain MOCK-only. The transient toast is hosted at the App root
+> (`ui/common/TransientMessageToast.kt`). iOS edge-swipe back goes through Compose Multiplatform's `BackHandler`
+> (`PlatformBack.ios.kt`). None of this has been run on a device yet (see PRODUCTION_READINESS.md verification log).
+
 All screens below exist, compile, and have been run on device.
 
 | Screen | File | State |
@@ -95,9 +107,9 @@ All screens below exist, compile, and have been run on device.
 
 **Loading / error / empty states** — `ui/common/States.kt` provides
 `ProductCardSkeleton`, `ProductRailSkeleton`, `SkeletonBlock`, `EmptyState`,
-`ErrorState` (with retry), `OfflineBanner`, and `StateHost` which renders
-loading/empty/error/content for a `LoadHandle`. **`OfflineBanner` exists but is
-not wired to any connectivity observer.**
+`ErrorState` (with retry), and `StateHost` which renders
+loading/empty/error/content for a `LoadHandle`. (`OfflineBanner` was deleted
+2026-10-10 as dead code: per-screen failure states remain the honest signal.)
 
 **Out-of-stock handling** — `Availability` is a first-class model concept
 (`InStock` / `LowStock(remaining)` / `OutOfStock` / `NotServiceable`).
@@ -685,7 +697,7 @@ a fake server, and a UI/journey harness (none exists). Preserve the 41 passing.
 - Choose a Compose Multiplatform image-loading library and implement
   `ProductImageLoader` once.
 - Consider replacing the 12-digit `Random` idempotency key with a UUID.
-- Wire `OfflineBanner` to a real connectivity observer (component exists, unused).
+- (Done 2026-10-10: `OfflineBanner` deleted — no connectivity observer is planned for day 1.)
 - Move coin crediting server-side and remove `CoinRepository.credit` from the
   client path.
 - Decide whether to initialise **git** — the project is not under version control.
@@ -733,7 +745,7 @@ its own review.
 - API error mapping onto `LoadError`
 - Choose image-loading library; implement `ProductImageLoader`
 - Replace `Random` idempotency key with a UUID
-- Wire `OfflineBanner` to a connectivity observer
+- (`OfflineBanner` deleted 2026-10-10)
 - Serialization + repository contract tests; UI/journey harness
 - Decide on git initialisation
 - Android depth: PDP tap-test, scroll review, physical device

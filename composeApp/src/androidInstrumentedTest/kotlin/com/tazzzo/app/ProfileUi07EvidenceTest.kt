@@ -21,13 +21,18 @@ import com.tazzzo.app.config.appVersionLabel
 import com.tazzzo.app.theme.TazzzoTheme
 import com.tazzzo.app.ui.home.FloatingNavBar
 import com.tazzzo.app.ui.profile.AboutLayout
-import com.tazzzo.app.ui.profile.CoinsUnavailableLayout
-import com.tazzzo.app.ui.profile.HelpLayout
+import com.tazzzo.app.ui.support.HelpLayout
+import com.tazzzo.app.ui.support.HelpActions
+import com.tazzzo.app.ui.support.HelpLoad
+import com.tazzzo.app.ui.support.RequestsSection
+import com.tazzzo.app.data.content.AppInfo
+import com.tazzzo.app.data.content.Faq
+import com.tazzzo.app.data.content.FaqCategory
+import com.tazzzo.app.data.content.FaqGroup
 import com.tazzzo.app.ui.profile.ProfileActions
 import com.tazzzo.app.ui.profile.ProfileIdentity
 import com.tazzzo.app.ui.profile.ProfileLayout
 import com.tazzzo.app.ui.profile.SupportChannels
-import com.tazzzo.app.ui.profile.legalLinks
 import com.tazzzo.app.ui.voice.GenieLayout
 import org.junit.Rule
 import org.junit.Test
@@ -83,24 +88,25 @@ class ProfileUi07EvidenceTest {
         snapshot("ui07_logout_sheet")
     }
 
-    @Test fun help_unavailable() {
-        content { HelpLayout(SupportChannels.NONE, onBack = {}, onOrders = {}) }
-        rule.onNodeWithText("Support isn't set up in the app yet").assertIsDisplayed()
+    @Test fun help_and_support() {
+        val faqs = listOf(FaqGroup(FaqCategory.DELIVERY, listOf(Faq("f1", FaqCategory.DELIVERY, "When will my order arrive?", "We'll show your delivery window at checkout."))))
+        content {
+            HelpLayout(
+                HelpLoad.Loaded(faqs), HelpLoad.Loaded(AppInfo("+918000000000", "help@tazzzo.com", true, null)), RequestsSection.Empty,
+                HelpActions({}, {}, {}, {}, {}, {}, {})
+            )
+        }
+        rule.onNodeWithText("+918000000000").assertIsDisplayed()
+        rule.onNodeWithTag("newSupportRequest").assertIsDisplayed()
         snapshot("ui07_help")
     }
 
     @Test fun about() {
-        content { AboutLayout(appVersionLabel(), legalLinks(), onBack = {}) }
+        content { AboutLayout(appVersionLabel(), onBack = {}) }
         rule.onNodeWithTag("tagline").assertIsDisplayed()
         rule.onNodeWithTag("aboutVersion").assertIsDisplayed()
-        rule.onNodeWithTag("legalUnavailable").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Terms of Service").performScrollTo().assertIsDisplayed()
         snapshot("ui07_about")
-    }
-
-    @Test fun coins_unavailable() {
-        content { CoinsUnavailableLayout(onBack = {}) }
-        rule.onNodeWithText("Tazzzo Coins aren't available yet").assertIsDisplayed()
-        snapshot("ui07_coins")
     }
 
     @Test fun genie_coming_soon() {

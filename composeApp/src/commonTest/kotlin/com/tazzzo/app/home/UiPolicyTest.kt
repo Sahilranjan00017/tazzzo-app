@@ -15,7 +15,6 @@ import com.tazzzo.app.ui.order.OrderCopy
 import com.tazzzo.app.ui.profile.ProfileCopy
 import com.tazzzo.app.ui.profile.coinsAvailable
 import com.tazzzo.app.ui.profile.configuredSupportChannels
-import com.tazzzo.app.ui.profile.legalLinks
 import com.tazzzo.app.ui.voice.GenieCopy
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -33,7 +32,7 @@ class UiPolicyTest {
         "PdpCopy" to listOf(PdpCopy.ADD_TO_CART, PdpCopy.NOT_FOUND_TITLE, PdpCopy.NOT_FOUND_BODY, PdpCopy.BACK_TO_SHOP, PdpCopy.PRICE_UNAVAILABLE).joinToString(" | "),
         "PurchaseCopy" to listOf(PurchaseCopy.CART_EMPTY_TITLE, PurchaseCopy.CART_EMPTY_BODY, PurchaseCopy.CART_SIGNED_OUT_BODY, PurchaseCopy.ADDRESS_EMPTY_BODY, PurchaseCopy.ADDRESS_LIMIT_TITLE, PurchaseCopy.COD, PurchaseCopy.COD_HINT, PurchaseCopy.PLACING, PurchaseCopy.PAYABLE_CHANGED_TITLE, PurchaseCopy.PAYABLE_CHANGED_SUPPORT, PurchaseCopy.AMBIGUOUS_TITLE).joinToString(" | "),
         "OrderCopy" to listOf(OrderCopy.CONFIRMATION_TITLE, OrderCopy.CONFIRMATION_SUPPORT, OrderCopy.NO_ORDERS_TITLE, OrderCopy.HISTORY_FAILED_TITLE, OrderCopy.SIGNED_OUT_BODY, OrderCopy.NO_ORDERS_BODY, OrderCopy.LOAD_FAILED_BODY, OrderCopy.AMOUNT_UNAVAILABLE).joinToString(" | "),
-        "ProfileCopy" to listOf(ProfileCopy.SIGNED_IN_BODY, ProfileCopy.SIGNED_OUT_BODY, ProfileCopy.COINS_SUB, ProfileCopy.HELP_UNAVAILABLE_TITLE, ProfileCopy.HELP_UNAVAILABLE_BODY, ProfileCopy.ABOUT_DESCRIPTION, ProfileCopy.LEGAL_UNAVAILABLE, ProfileCopy.COINS_UNAVAILABLE_TITLE, ProfileCopy.COINS_UNAVAILABLE_BODY).joinToString(" | "),
+        "ProfileCopy" to listOf(ProfileCopy.SIGNED_IN_BODY, ProfileCopy.SIGNED_OUT_BODY, ProfileCopy.CONTACT_NONE, ProfileCopy.REQUESTS_EMPTY, ProfileCopy.FAQ_EMPTY, ProfileCopy.ABOUT_DESCRIPTION, ProfileCopy.COINS_UNAVAILABLE_TITLE, ProfileCopy.COINS_UNAVAILABLE_BODY).joinToString(" | "),
         "GenieCopy" to listOf(GenieCopy.TITLE, GenieCopy.STATUS, GenieCopy.HEADLINE_PLAIN, GenieCopy.HEADLINE_ITALIC, GenieCopy.BODY, GenieCopy.CTA).joinToString(" | "),
         "CheckoutCopy" to listOf(CheckoutCopy.SUBTOTAL_LABEL, CheckoutCopy.DISCOUNT_LABEL, CheckoutCopy.AMOUNT_DUE_LABEL, CheckoutCopy.NOTHING_DUE, CheckoutCopy.ORDER_CTA, CheckoutCopy.ORDERING_PAUSED, CheckoutCopy.PAYABLE_CHANGED, CheckoutCopy.CONTRACT_FAILURE).joinToString(" | ")
     )
@@ -70,7 +69,6 @@ class UiPolicyTest {
         assertFalse(CatalogCapabilities.REMOTE.reorder)
         assertFalse(coinsAvailable(remoteMode = true))
         assertFalse(configuredSupportChannels().any)
-        assertFalse(legalLinks().any)
         assertEquals(SearchSurface.Available, searchSurface(CatalogCapabilities.REMOTE))     // real product search
     }
 

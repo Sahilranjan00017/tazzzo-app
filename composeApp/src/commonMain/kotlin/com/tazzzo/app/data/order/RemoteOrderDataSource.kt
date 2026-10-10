@@ -70,5 +70,6 @@ class RemoteOrderDataSource(private val api: ApiClient) : OrderSource {
         const val MAX_CURSOR = 128
         internal val QUOTE_ID = Regex("^CHKQ_[A-Za-z0-9_-]{6,64}$")
         fun isValidQuoteId(id: String) = QUOTE_ID.matches(id)
+        fun isValidOrderId(id: String) = ORDER_ID.matches(id)
     }
 }

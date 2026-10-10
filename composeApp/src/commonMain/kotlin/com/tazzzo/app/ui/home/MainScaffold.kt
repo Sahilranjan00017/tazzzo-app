@@ -29,21 +29,13 @@ import androidx.compose.ui.unit.dp
 import com.tazzzo.app.HomeTab
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.data.repository.ServiceLocator
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
 import com.tazzzo.app.ui.interaction.TazPress
 import com.tazzzo.app.ui.interaction.tazPressable
-import androidx.compose.animation.core.tween
-import com.tazzzo.app.theme.TazMotion
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
 import com.tazzzo.app.theme.TazRadius
@@ -53,7 +45,6 @@ import com.tazzzo.app.theme.TazType
 import com.tazzzo.app.ui.common.CartBar
 import com.tazzzo.app.ui.guided.GuidedJourneyOverlay
 import com.tazzzo.app.ui.voice.VoiceComingSoonSheet
-import kotlinx.coroutines.delay
 
 /**
  * The main shell of the app: 5 bottom tabs + floating cart bar + one-time
@@ -82,7 +73,7 @@ fun MainScaffold() {
         FloatingNavBar(Modifier.align(Alignment.BottomCenter))
 
         CartBar(aboveNav = true)
-        TransientMessageToast()
+        // The transient notice is hosted at the App root (above every screen), not here.
 
         if (app.guidedJourneyPending) {
             GuidedJourneyOverlay(onDone = { app.markTourSeen() })
@@ -92,69 +83,3 @@ fun MainScaffold() {
         }
     }
 }
-
-/**
- * Small centered bottom toast for [com.tazzzo.app.TazzzoAppState.transientMessage]
- * (e.g. "Only 3 left in stock"). Sits above the floating cart bar and
- * auto-dismisses after 2.2 seconds.
- */
-@Composable
-private fun BoxScope.TransientMessageToast() {
-    val app = LocalAppState.current
-    val message = app.transientMessage
-    // Held so the copy does not blank out mid-exit-animation.
-    var lastMessage by remember { mutableStateOf("") }
-    LaunchedEffect(message) { if (message != null) lastMessage = message }
-    LaunchedEffect(message) {
-        if (message != null) {
-            delay(2200)
-            app.transientMessage = null
-        }
-    }
-    // Anchored above the cart bar when there is one, and to the nav bar when
-    // there is not — the old fixed 120dp offset left the toast floating in
-    // mid-air on an empty cart, and was a magic number outside the token scale.
-    // Sits above whatever owns the bottom edge: the nav bar, plus the cart
-    // bar when there is one. Derived from the same tokens those use, so the
-    // three never drift apart.
-    val app2 = LocalAppState.current
-    // The SERVER cart's count in REMOTE (observed, so the toast moves with the bar), the local demo cart in MOCK.
-    val cartBarUp = if (com.tazzzo.app.data.repository.ServiceLocator.catalogMode == com.tazzzo.app.data.catalog.CatalogMode.REMOTE) {
-        val st by com.tazzzo.app.data.repository.ServiceLocator.cart.state.collectAsState()
-        ((st as? com.tazzzo.app.data.cart.CartState.Loaded)?.cart?.itemCount ?: 0) > 0
-    } else app2.cartItemCount > 0
-    val cartBarBand = 64.dp + TazSpace.md * 2          // bar height + its vertical padding
-    val bottomInset = TazSize.navBarHeight + TazSpace.lg +
-        (if (cartBarUp) cartBarBand else 0.dp)
-    AnimatedVisibility(
-        visible = message != null,
-        modifier = Modifier.align(Alignment.BottomCenter),
-        // Rises into place and fades out. A refusal that hard-cuts on screen
-        // reads as a glitch; the customer needs to see it arrive.
-        enter = slideInVertically(tween(TazMotion.fast)) { it / 2 } + fadeIn(tween(TazMotion.fast)),
-        exit = fadeOut(tween(TazMotion.fast))
-    ) {
-        Box(
-            Modifier
-                .padding(bottom = bottomInset)
-                .clip(TazRadius.pill)
-                .background(TazColors.TextPrimary)
-                .padding(horizontal = TazSpace.lg, vertical = TazSpace.sm)
-                // Announced to screen readers. Previously a customer using
-                // TalkBack or VoiceOver was never told the app had refused
-                // their tap — the only signal was a visual one they could not
-                // see. This is the accessibility half of the limit feedback.
-                .semantics { liveRegion = LiveRegionMode.Polite },
-        ) {
-            Text(
-                lastMessage,
-                color = TazColors.White,
-                fontSize = TazType.captionSize,
-                lineHeight = TazType.captionLine
-            )
-        }
-    }
-}
-
-
-

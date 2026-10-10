@@ -78,11 +78,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 @Composable
 fun rememberAuthFlow(onDone: () -> Unit): AuthFlow {
     val app = LocalAppState.current
-    val scope = rememberCoroutineScope()
+    val appScope = com.tazzzo.app.LocalAppScope.current
+    // Held on the app (its own child scope), not in this composable: opening Terms/Privacy from the OTP step and coming back
+    // returns to the same step, number and resend timer. Dropped when Login leaves the back stack (App.kt) or on logout.
     return remember {
-        AuthFlow(ServiceLocator.auth, scope) {
-            app.onSignedIn()
-            onDone()
+        app.authFlow ?: run {
+            val own = kotlinx.coroutines.CoroutineScope(appScope.coroutineContext + kotlinx.coroutines.SupervisorJob(appScope.coroutineContext[kotlinx.coroutines.Job]))
+            AuthFlow(ServiceLocator.auth, own) {
+                app.onSignedIn()
+                onDone()
+            }.also { app.attachAuthFlow(it, own) }
         }
     }
 }

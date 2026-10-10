@@ -133,7 +133,7 @@ class ReleaseHardeningTest {
         val c = com.tazzzo.app.config.BrandCopy
         val remote = listOf(
             com.tazzzo.app.ui.voice.GenieCopy.BODY, com.tazzzo.app.ui.voice.GenieCopy.STATUS,
-            com.tazzzo.app.ui.profile.ProfileCopy.SIGNED_OUT_BODY, com.tazzzo.app.ui.profile.ProfileCopy.HELP_UNAVAILABLE_BODY,
+            com.tazzzo.app.ui.profile.ProfileCopy.SIGNED_OUT_BODY, com.tazzzo.app.ui.profile.ProfileCopy.CONTACT_NONE,
             com.tazzzo.app.ui.order.OrderCopy.NO_ORDERS_BODY, com.tazzzo.app.ui.order.OrderCopy.SIGNED_OUT_BODY
         ).joinToString(" | ").lowercase()
         assertFalse(c.whatsappNumber.lowercase() in remote)

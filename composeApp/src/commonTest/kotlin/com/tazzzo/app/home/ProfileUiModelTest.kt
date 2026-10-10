@@ -7,7 +7,11 @@ import com.tazzzo.app.ui.profile.ProfileEntry
 import com.tazzzo.app.ui.profile.aboutTagline
 import com.tazzzo.app.ui.profile.coinsAvailable
 import com.tazzzo.app.ui.profile.configuredSupportChannels
-import com.tazzzo.app.ui.profile.legalLinks
+import com.tazzzo.app.ui.profile.message
+import com.tazzzo.app.ui.profile.nameProblem
+import com.tazzzo.app.data.account.CustomerProfile
+import com.tazzzo.app.data.account.NameSave
+import com.tazzzo.app.data.content.AppInfo
 import com.tazzzo.app.ui.profile.profileEntries
 import com.tazzzo.app.ui.profile.remoteIdentity
 import kotlin.test.Test
@@ -20,23 +24,32 @@ import kotlin.test.assertTrue
 class ProfileUiModelTest {
 
     @Test fun aSignedInProfileOffersOnlyRealDestinations() {
-        assertEquals(listOf(ProfileEntry.ADDRESSES, ProfileEntry.ORDERS, ProfileEntry.COINS, ProfileEntry.HELP, ProfileEntry.ABOUT, ProfileEntry.GENIE), profileEntries(true))
-        for (forbidden in listOf("Delete account", "Membership", "Club", "Notifications", "Language", "Wallet", "Refunds", "Gift"))
+        assertEquals(listOf(ProfileEntry.ADDRESSES, ProfileEntry.ORDERS, ProfileEntry.HELP, ProfileEntry.TERMS, ProfileEntry.PRIVACY, ProfileEntry.ABOUT), profileEntries(true))
+        for (forbidden in listOf("Delete account", "Membership", "Club", "Notifications", "Language", "Wallet", "Refunds", "Gift", "Coins", "Genie", "Voice"))
             assertFalse(ProfileEntry.entries.any { it.title.contains(forbidden, ignoreCase = true) }, forbidden)
-        assertEquals("Voice ordering is coming soon", ProfileEntry.GENIE.subtitle)   // truthful; the row opens the Genie page
+        assertTrue(ProfileEntry.entries.none { (it.subtitle ?: "").contains("coming soon", ignoreCase = true) || (it.subtitle ?: "").contains("not available", ignoreCase = true) })
     }
 
-    @Test fun aSignedOutProfileOffersHelpAndAboutOnlyAndNoCustomerData() {
-        assertEquals(listOf(ProfileEntry.HELP, ProfileEntry.ABOUT, ProfileEntry.GENIE), profileEntries(false))
+    @Test fun aSignedOutProfileOffersHelpLegalAndAboutOnlyAndNoCustomerData() {
+        assertEquals(listOf(ProfileEntry.HELP, ProfileEntry.TERMS, ProfileEntry.PRIVACY, ProfileEntry.ABOUT), profileEntries(false))
         assertEquals("Log in", ProfileCopy.LOG_IN)
     }
 
-    @Test fun noInternalIdentifierOrInventedIdentityIsEverShown() {
-        val id = remoteIdentity()
-        assertTrue(id.isEmpty); assertNull(id.name); assertNull(id.phone); assertNull(id.email)
-        // The signed-in card falls back to a neutral label, never "Guest", a customer id or a placeholder name.
+    @Test fun theIdentityIsTheProfilesDisplayNameAndEmailAndNeverAPhoneOrId() {
+        val none = remoteIdentity()
+        assertTrue(none.isEmpty); assertNull(none.name); assertNull(none.phone); assertNull(none.email)
+        val id = remoteIdentity(CustomerProfile(displayName = "Asha", email = "asha@example.com", version = 3))
+        assertEquals("Asha", id.name); assertEquals("asha@example.com", id.email); assertNull(id.phone)   // no phone in the contract
         assertEquals("Signed in", ProfileCopy.SIGNED_IN)
         assertFalse("id" in ProfileCopy.SIGNED_IN_BODY.lowercase())
+    }
+
+    @Test fun theNameEditorChecksTheBackendRuleLocally() {
+        assertNull(nameProblem("Asha Rao")); assertNull(nameProblem("   "))                // empty clears the name
+        assertNull(nameProblem("李明")); assertNull(nameProblem("x".repeat(80)))
+        assertEquals(ProfileCopy.NAME_TOO_LONG, nameProblem("x".repeat(81)))
+        assertEquals(ProfileCopy.NAME_INVALID, nameProblem("a\u0007b"))
+        assertEquals(ProfileCopy.NAME_STALE, NameSave.Stale.message()); assertNull(NameSave.Saved.message())
     }
 
     @Test fun savedAddressesAndOrdersAreRowsThatRouteToTheExistingSurfaces() {
@@ -44,33 +57,25 @@ class ProfileUiModelTest {
         assertEquals("Saved addresses", ProfileEntry.ADDRESSES.title); assertEquals("Orders", ProfileEntry.ORDERS.title)
     }
 
-    @Test fun coinsAreUnavailableInRemoteModeAndNothingIsFabricated() {
+    @Test fun coinsStayUnavailableInRemoteModeAndNothingIsFabricated() {
         assertFalse(coinsAvailable(remoteMode = true))
-        assertEquals("Not available yet", ProfileEntry.COINS.subtitle)
         val all = (ProfileCopy.COINS_UNAVAILABLE_TITLE + " " + ProfileCopy.COINS_UNAVAILABLE_BODY).lowercase()
         for (w in listOf("₹", "cashback", "%", "expire", "redeem", "saved")) assertFalse(w in all, w)
     }
 
-    @Test fun supportHasNoConfiguredChannelSoNoActionIsDrawn() {
-        val c = configuredSupportChannels()
-        assertFalse(c.any); assertNull(c.phone); assertNull(c.email); assertNull(c.whatsapp)
+    @Test fun supportChannelsComeOnlyFromAValidatedAppConfig() {
+        assertFalse(configuredSupportChannels().any)
+        val c = configuredSupportChannels(AppInfo("+918000000000", "help@tazzzo.com", true, null))
+        assertEquals("+918000000000", c.phone); assertEquals("help@tazzzo.com", c.email); assertNull(c.whatsapp)
         // The demo WhatsApp number in BrandCopy is never treated as support configuration.
-        assertFalse(BrandCopy.whatsappNumber in ProfileCopy.HELP_UNAVAILABLE_BODY)
-        for (w in listOf("24/7", "10 min", "refund", "instant")) assertFalse(w in ProfileCopy.HELP_UNAVAILABLE_BODY.lowercase(), w)
+        assertFalse(BrandCopy.whatsappNumber in (ProfileCopy.CONTACT_NONE + ProfileCopy.REQUESTS_EMPTY))
+        for (w in listOf("24/7", "10 min", "instant")) assertFalse(w in ProfileCopy.CONTACT_NONE.lowercase(), w)
     }
 
     @Test fun aboutShowsTheCanonicalTaglineAndNoUnsubstantiatedClaim() {
         assertEquals("Best Value. Smart Shopping.", aboutTagline())
         assertFalse("%" in ProfileCopy.ABOUT_DESCRIPTION); assertFalse("SAVE" in ProfileCopy.ABOUT_DESCRIPTION)
         assertFalse(BrandCopy.whatsappNumber in ProfileCopy.ABOUT_DESCRIPTION)
-    }
-
-    @Test fun legalLinksExistOnlyWhenARealHttpsUrlIsConfigured() {
-        assertFalse(legalLinks().any)
-        assertFalse(legalLinks(privacyUrl = "http://insecure.example/privacy").any)
-        assertFalse(legalLinks(privacyUrl = "javascript:alert(1)").any)
-        assertTrue(legalLinks(privacyUrl = "https://tazzzo.example/privacy").any)
-        assertNull(legalLinks(termsUrl = "ftp://x").termsUrl)
     }
 
     @Test fun logoutRequiresAnExplicitConfirmation() {
