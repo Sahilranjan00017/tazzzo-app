@@ -83,6 +83,17 @@ class OrderStore(
     private var historyEpoch = 0
 
     private var attemptQuoteId: String? = null
+    /** The quote's ADVISORY payable the customer reviewed for the current attempt (unknown after a process restart). */
+    private var attemptReviewedPayable: com.tazzzo.app.data.model.Money? = null
+
+    /**
+     * Per order placed in THIS session: the payable the customer reviewed, when it differs from the order's authoritative
+     * payable (memory only, cleared on sign-out). Read by [reviewedPayable] for the "Your total changed" notice.
+     */
+    private val _reviewedPayables = MutableStateFlow<Map<String, com.tazzzo.app.data.model.Money>>(emptyMap())
+
+    /** The reviewed (advisory) payable for [orderId] when it differed from the order's money; null otherwise. */
+    fun reviewedPayable(orderId: String): com.tazzzo.app.data.model.Money? = _reviewedPayables.value[orderId]
     private var generation = 0
     private var job: Job? = null
     private var launchReconcileDone = false
@@ -98,8 +109,9 @@ class OrderStore(
         if (!isAuthenticated()) { _state.value = OrderState.Failed(OrderFailure.Unauthenticated); return@command }
         if (!launchEnabled()) { _state.value = OrderState.Failed(OrderFailure.NotLaunched); return@command }
         val quote = (quotes.state.value as? CheckoutState.Ready)?.quote
-        // A quote without binding money (legacy) is never ordered: the customer has not seen an amount the backend will honour.
+        // A quote without a money preview (legacy) is never ordered: the customer has not reviewed any amount.
         if (quote == null || quote.money == null || !RemoteOrderDataSource.isValidQuoteId(quote.quoteId)) { _state.value = OrderState.Failed(OrderFailure.QuoteNotReady); return@command }
+        attemptReviewedPayable = quote.money?.payable           // what the customer reviewed (advisory), for the change notice
         begin(quote.quoteId, saveFirst = true)
         track(AnalyticsEvents.ORDER_PLACE_STARTED)
     }
@@ -160,6 +172,7 @@ class OrderStore(
         attemptQuoteId = null
         pending.clear()
         _recent.value = null
+        _reviewedPayables.value = emptyMap()
         forgetHistory()
         _state.value = OrderState.SignedOut
     }
@@ -175,6 +188,7 @@ class OrderStore(
         attemptQuoteId = null
         pending.clear()
         _recent.value = null
+        _reviewedPayables.value = emptyMap()
         forgetHistory()
         _state.value = OrderState.SignedOut
     }
@@ -245,9 +259,13 @@ class OrderStore(
         }
     }
 
-    private fun forgetAttempt() { attemptQuoteId = null; pending.clear() }
+    private fun forgetAttempt() { attemptQuoteId = null; attemptReviewedPayable = null; pending.clear() }
 
     private suspend fun succeed(order: CustomerOrder) {
+        // The order's money is the one that holds; remember what was reviewed only when it differs (the notice's input).
+        val reviewed = attemptReviewedPayable
+        val placed = order.money?.payable
+        if (reviewed != null && placed != null && reviewed != placed) _reviewedPayables.value = _reviewedPayables.value + (order.orderId to reviewed)
         quotes.resetNow()                         // 1. the quote is spent: reset BEFORE the cart moves, so no misleading "stale" state
         forgetAttempt()                           // 2. the outcome is known: delete the recovery record
         _recent.value = order

@@ -4,7 +4,8 @@ package com.tazzzo.app.data.model
  * The backend's V1 customer money: `payable = merchandiseSubtotal - benefitDiscount`, and nothing else. There is no
  * delivery/platform/handling fee, tax line, COD charge, coupon, Coins or wallet component, so none exists here.
  *
- *  - On a checkout quote (`moneyPreview`) it is BINDING: the order reproduces it exactly or is refused (PAYABLE_CHANGED).
+ *  - On a checkout quote (`moneyPreview`) it is ADVISORY: Order placement revalidates and computes its own money, which may
+ *    differ (not an error; the order's money holds). The app shows it as the total for review, never as "due".
  *  - On an order (`money`) it is AUTHORITATIVE: what was committed at placement. [payable] is DUE ON DELIVERY, never "paid".
  *
  * It can only exist consistent: `0 <= benefitDiscount <= merchandiseSubtotal` and `payable == subtotal - discount`. It is

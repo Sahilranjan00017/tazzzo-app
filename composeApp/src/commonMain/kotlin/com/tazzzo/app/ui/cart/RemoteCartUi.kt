@@ -374,7 +374,7 @@ class CartActions(
  * The cart (UI-05), in the approved language: editorial "Your cart", one rounded card per SERVER line with the real photo
  * through the shared pipeline, the backend's unit price / struck MRP / line total, and the deep-green stepper on the same
  * cart mutations as everywhere else. The summary shows the server's item subtotal only — never a delivery fee, tax,
- * savings or coupon — and says so; binding money belongs to checkout.
+ * savings or coupon — and says so; the money preview belongs to checkout.
  */
 @Composable
 fun CartScreenLayout(
