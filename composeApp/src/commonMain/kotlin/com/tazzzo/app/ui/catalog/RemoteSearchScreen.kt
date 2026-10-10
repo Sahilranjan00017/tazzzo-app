@@ -38,11 +38,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tazzzo.app.HomeTab
+import com.tazzzo.app.LocalAppScope
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.catalog.CatalogProduct
@@ -95,30 +97,35 @@ import com.tazzzo.app.ui.interaction.tazPressable
 @Composable
 fun RemoteSearchScreen() {
     val app = LocalAppState.current
-    val scope = rememberCoroutineScope()
-    val search = remember { productSearch(scope, ServiceLocator.remoteCatalog, ServiceLocator.launchContext.pin) }
+    // The holder lives on the app (not in this composable), so the query, results and paging survive opening a product and
+    // coming back; a query is added to "recent searches" only when its first page has arrived with products.
+    val appScope = LocalAppScope.current
+    val search = remember {
+        app.search ?: productSearch(appScope, ServiceLocator.remoteCatalog, ServiceLocator.launchContext.pin, onResults = { app.recordSearch(it) })
+            .also { app.attachSearch(it) }
+    }
     val input by search.input.collectAsState()
     val check by search.check.collectAsState()
     val results by search.results.collectAsState()
+    val stale by search.stale.collectAsState()
     val keyboard = LocalSoftwareKeyboardController.current
     var failures by remember { mutableStateOf(0) }
+    // Saveable, so the result list keeps its scroll position across a product page and back (state is kept per back-stack key).
+    val gridState = rememberSaveable(saver = LazyGridState.Saver) { LazyGridState() }
 
     fun run(query: String) {
-        search.submit(query)?.let { app.recordSearch(it) }
+        search.submit(query)
         keyboard?.hide()
     }
 
     // A `search:` banner (or any caller of openSearch) hands over a query: prefill it and run it once.
     LaunchedEffect(app.searchPrefill) { app.searchPrefill?.let { q -> app.searchPrefill = null; run(q) } }
-    // A query that produced products is remembered, once per query (the first page arriving, not every append).
-    val valid = (check as? SearchQueryCheck.Valid)?.text
-    LaunchedEffect(valid, results is PagedState.Content) { if (valid != null && results is PagedState.Content) app.recordSearch(valid) }
     LaunchedEffect(results is PagedState.FirstPageFailed) { if (results is PagedState.FirstPageFailed) failures++ else if (results is PagedState.Content) failures = 0 }
 
     SearchScreenLayout(
         input = input,
-        body = searchBody(check, results, app.recentSearches.toList()),
-        consecutiveFailures = failures,
+        body = searchBody(check, results, app.recentSearches.toList(), stale),
+        consecutiveFailures = failures, gridState = gridState,
         autoFocus = app.searchPrefill == null && input.isEmpty(),
         actions = SearchActions(
             back = { app.back() },
@@ -174,7 +181,8 @@ fun SearchScreenLayout(
                 SearchBody.Loading -> ProductGridSkeleton()
                 is SearchBody.Failed -> EditorialFailureState(body.failure, consecutiveFailures, onRetry = actions.retry)
                 SearchBody.NoResults -> EditorialEmptyState(TazIcons.Search, ShopCopy.NO_RESULTS_TITLE, ShopCopy.NO_RESULTS_BODY, actionLabel = ShopCopy.BACK_TO_SHOP, onAction = actions.shop)
-                is SearchBody.Results -> ResultsGrid(body.state, gridState, consecutiveFailures, actions)
+                // The previous query's results are dimmed while the new text waits for its run.
+                is SearchBody.Results -> Box(Modifier.fillMaxSize().alpha(if (body.stale) 0.45f else 1f)) { ResultsGrid(body.state, gridState, consecutiveFailures, actions) }
             }
         }
     }

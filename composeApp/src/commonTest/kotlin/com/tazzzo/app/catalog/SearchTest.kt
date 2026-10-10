@@ -25,6 +25,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -43,9 +44,10 @@ import kotlin.test.assertTrue
  * only q/page_size/cursor/pin (anonymous, installation id), typing is debounced, the cursor is bound to (query, PIN), and a 429
  * surfaces its Retry-After for the shared RetryPolicy.
  *
- * Mutation notes: dropping the trim fails [theQueryIsTrimmedAndSentExactlyOnce]; removing the debounce fails
- * [typingIsDebouncedAndOnlyTheLastQueryIsSent]; not resetting on an invalid input fails [anInvalidInputClearsResultsAndSendsNothing];
- * ignoring the PIN in the key fails [aPinChangeReRunsTheQuery]; letting the raw query through release analytics fails [theRawQueryIsStrippedFromReleaseAnalytics].
+ * Mutations actually run in the scratch harness (each made a test fail): DEBOUNCE_MILLIS = 0 →
+ * [typingIsDebouncedAndOnlyTheLastQueryIsSent]; never holding on a 429 → [aRateLimitedFirstPageHoldsEveryRequestUntilRetryAfterThenResumes];
+ * recording on every Content (no per-key guard) → [rapidTypingRecordsOnlyTheQueryThatRanAndOnlyAfterItsPageArrived].
+ * Other guards are pinned by the named tests but were not mutation-checked.
  */
 class SearchTest {
 
@@ -63,6 +65,12 @@ class SearchTest {
         assertEquals(SearchQueryCheck.TooManyWords, SearchQueryRules.check("aa bb cc dd ee ff"))
         assertIs<SearchQueryCheck.Valid>(SearchQueryRules.check("rice Rice RICE rice rice rice"))  // one distinct word
         assertIs<SearchQueryCheck.Valid>(SearchQueryRules.check("आटा"))
+        // The server keeps combining marks inside the word: "की" (क + ी) is ONE 2-character token, so it is sendable.
+        assertEquals(SearchQueryCheck.Valid("की"), SearchQueryRules.check("की"))
+        assertEquals(listOf("की", "चीनी"), SearchQueryRules.tokens("की चीनी"))
+        assertEquals(SearchQueryCheck.TooShort, SearchQueryRules.check("क ख"))
+        assertEquals(listOf("rice"), SearchQueryRules.tokens("RICE rice"))     // lower-cased, distinct
+        assertEquals(SearchQueryCheck.TooLong, SearchQueryRules.check("कि".repeat(17)))   // a 34-unit token is refused locally
     }
 
     // ---- data source ------------------------------------------------------------------------------------------------------
@@ -94,11 +102,17 @@ class SearchTest {
     private class Rig(scope: TestScope) {
         val calls = mutableListOf<Triple<String, String?, String?>>()
         val queue = ArrayDeque<() -> Page<CatalogProduct>>()
+        /** Per-query gates: a response for that query waits until its gate completes. */
+        val gates = HashMap<String, CompletableDeferred<Unit>>()
+        /** Per-query answers (used before [queue]). */
+        val answers = HashMap<String, Page<CatalogProduct>>()
+        val recorded = mutableListOf<String>()
         val pin = MutableStateFlow(Pincode.parse("560102")!!)
         val search = ProductSearch(scope.backgroundScope, PagedLoader(scope.backgroundScope, { it.skuId }) { key, cursor ->
             calls += Triple(key.query, key.pin?.value, cursor)
-            (queue.removeFirstOrNull() ?: { Page(listOf(cp("TZP-1")), null, false) })()
-        }, pin)
+            gates[key.query]?.await()
+            answers[key.query] ?: (queue.removeFirstOrNull() ?: { Page(listOf(cp("TZP-1")), null, false) })()
+        }, pin, onResults = { recorded += it })
         fun queries() = calls.map { it.first }
     }
 
@@ -153,14 +167,71 @@ class SearchTest {
         assertEquals(listOf("TZP-1", "TZP-2"), (r.search.results.value as PagedState.Content).items.map { it.skuId })
     }
 
-    @Test fun aRateLimitedFirstPageFailsTypedAndResubmittingRetries() = runTest {
+    @Test fun aRateLimitedFirstPageHoldsEveryRequestUntilRetryAfterThenResumes() = runTest {
         val r = Rig(this)
         r.queue.addLast { throw ApiException(ApiError.Http(429, "RATE_LIMITED", retryAfterSeconds = 30)) }
         r.search.submit("rice"); runCurrent()
         assertEquals(PagedState.FirstPageFailed(CatalogFailure.RateLimited(30)), r.search.results.value)
-        r.search.submit("rice"); runCurrent()                                  // the same query again is an explicit retry
+        r.search.submit("rice"); runCurrent()                                  // an explicit retry inside the window: held
+        r.search.onInput("rice dal"); advanceTimeBy(1_000); runCurrent()       // typing inside the window: held too
+        r.search.refresh(); runCurrent()
+        assertEquals(1, r.calls.size)
+        assertEquals(PagedState.FirstPageFailed(CatalogFailure.RateLimited(30)), r.search.results.value)   // countdown stays on screen
+        advanceTimeBy(30_000); runCurrent()                                    // the window closes: the LATEST query runs by itself
+        assertEquals(listOf("rice", "rice dal"), r.queries())
         assertIs<PagedState.Content<CatalogProduct>>(r.search.results.value)
+    }
+
+    // ---- recent searches are fed only by a query whose page arrived with products (review M1) --------------------------------
+
+    @Test fun rapidTypingRecordsOnlyTheQueryThatRanAndOnlyAfterItsPageArrived() = runTest {
+        val r = Rig(this)
+        val gate = CompletableDeferred<Unit>(); r.gates["rice"] = gate
+        r.answers["rice"] = Page(listOf(cp("SKU-1", "TZP-1")), "c2", true)     // more pages exist: loadMore below really appends
+        for (t in listOf("r", "ri", "ric", "rice")) { r.search.onInput(t); advanceTimeBy(100) }
+        advanceTimeBy(400); runCurrent()
+        assertEquals(listOf<String?>("rice"), r.queries())                     // no prefix was ever sent
+        assertTrue(r.recorded.isEmpty())                                       // sent, but its page has not arrived
+        gate.complete(Unit); runCurrent()
+        assertEquals(listOf("rice"), r.recorded)
+        r.search.loadMore(); runCurrent()
         assertEquals(2, r.calls.size)
+        assertEquals(listOf("rice"), r.recorded)                               // once per query, not per page
+    }
+
+    @Test fun aNewTextIsNotRecordedWhileThePreviousResultsAreShown() = runTest {
+        val r = Rig(this)
+        r.search.submit("ric"); runCurrent()
+        assertEquals(listOf("ric"), r.recorded)
+        val gate = CompletableDeferred<Unit>(); r.gates["rice"] = gate
+        r.search.onInput("rice"); advanceTimeBy(100); runCurrent()
+        assertTrue(r.search.stale.value)                                       // the "ric" results are dimmed under "rice"
+        assertEquals(SearchBody.Results(r.search.results.value as PagedState.Content<CatalogProduct>, stale = true),
+            searchBody(r.search.check.value, r.search.results.value, emptyList(), r.search.stale.value))
+        advanceTimeBy(400); runCurrent()
+        assertEquals(listOf("ric"), r.recorded)                                // debounced and sent, page not yet back
+        gate.complete(Unit); runCurrent()
+        assertEquals(listOf("ric", "rice"), r.recorded); assertFalse(r.search.stale.value)
+    }
+
+    @Test fun aZeroResultQueryIsNotRecorded() = runTest {
+        val r = Rig(this)
+        r.answers["zzzz"] = Page(emptyList(), null, false)
+        r.search.submit("zzzz"); runCurrent()
+        assertEquals(PagedState.Empty, r.search.results.value)
+        assertTrue(r.recorded.isEmpty())
+    }
+
+    @Test fun aSlowResponseForTheOldQueryNeverOverwritesTheNewOne() = runTest {
+        val r = Rig(this)
+        val slow = CompletableDeferred<Unit>(); r.gates["atta"] = slow
+        r.answers["atta"] = Page(listOf(cp("OLD-1", "TZP-9")), null, false)
+        r.answers["rice"] = Page(listOf(cp("NEW-1", "TZP-8")), null, false)
+        r.search.submit("atta"); runCurrent()
+        r.search.submit("rice"); runCurrent()
+        slow.complete(Unit); runCurrent()                                      // the old response lands last
+        assertEquals(listOf("NEW-1"), (r.search.results.value as PagedState.Content).items.map { it.skuId })
+        assertEquals(listOf("rice"), r.recorded)
     }
 
     @Test fun anEmptyResultIsNoResults() = runTest {
@@ -191,5 +262,19 @@ class SearchTest {
     @Test fun theRawQueryIsStrippedFromReleaseAnalytics() {
         // recordSearch tracks {"query": text}; the release policy drops the key (developer logging only keeps it).
         assertFalse("query" in AnalyticsPolicy.releaseSafe(mapOf("query" to "my secret query")))
+    }
+
+    @Test fun aBannerQueryNotConsumedIsDroppedOnAnyOtherNavigation() {
+        val app = TazzzoAppState(PersistentStore(MapSettings()))
+        app.openSearch("atta"); assertEquals("atta", app.searchPrefill)
+        app.back(); assertNull(app.searchPrefill)
+        app.openSearch("atta"); app.navigate(com.tazzzo.app.Screen.Cart); assertNull(app.searchPrefill)
+        app.openSearch("atta"); app.goHome(); assertNull(app.searchPrefill)
+    }
+
+    @Test fun recentSearchesDedupeIgnoringCaseAndKeepTheLatestCasing() {
+        val app = TazzzoAppState(PersistentStore(MapSettings()))
+        app.recordSearch("Rice"); app.recordSearch("milk"); app.recordSearch("rice")
+        assertEquals(listOf("rice", "milk"), app.recentSearches.toList())
     }
 }

@@ -116,16 +116,17 @@ sealed interface SearchBody {
     data object Loading : SearchBody
     data class Failed(val failure: com.tazzzo.app.data.catalog.CatalogFailure) : SearchBody
     data object NoResults : SearchBody
-    data class Results(val state: PagedState.Content<CatalogProduct>) : SearchBody
+    /** [stale] = these belong to the previous query (the new text is still debouncing): the screen dims them. */
+    data class Results(val state: PagedState.Content<CatalogProduct>, val stale: Boolean = false) : SearchBody
 }
 
-fun searchBody(check: SearchQueryCheck, results: PagedState<CatalogProduct>, recent: List<String>): SearchBody = when (check) {
+fun searchBody(check: SearchQueryCheck, results: PagedState<CatalogProduct>, recent: List<String>, stale: Boolean = false): SearchBody = when (check) {
     SearchQueryCheck.Blank -> SearchBody.Start(recent)
     is SearchQueryCheck.Valid -> when (results) {
         PagedState.Idle, PagedState.LoadingFirst -> SearchBody.Loading      // Idle = the debounce has not fired yet
         is PagedState.FirstPageFailed -> SearchBody.Failed(results.failure)
         PagedState.Empty -> SearchBody.NoResults
-        is PagedState.Content -> SearchBody.Results(results)
+        is PagedState.Content -> SearchBody.Results(results, stale)
     }
     else -> SearchBody.Invalid(check.hint()!!)
 }
