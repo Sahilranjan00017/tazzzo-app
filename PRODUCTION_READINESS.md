@@ -34,6 +34,13 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-10 RELEASE ORDERING ON + ADVISORY MONEY (`feature/app-orders-checkout-release`). REMOTE places real COD orders
+  (`orderIntegration = true`, debug opt-in removed) and shows real order history. The backend quote `moneyPreview` is ADVISORY
+  (the order computes its own money, may differ, placed with 200; PAYABLE_CHANGED is never sent): checkout shows "Total" +
+  "Final amount is confirmed when you place your order.", and the confirmation/detail always display the order's money with
+  "Your total changed from ₹X to ₹Y" when it differs from what was reviewed (PayableDriftTest). Verified only in a scratch JVM
+  harness (non-Compose code + tests); Compose UI and platform builds are CI-only; NOT run on a device.
+
 - 2026-10-10 PUBLISHED HOME CONTENT — product-read 429 handling (PR #24, review M1). A 429 from
   `GET /v1/products/{id}` used to fail one rail and carry on with the next, up to 400 charged reads per cold start. Now
   it ends the sweep at once and opens a window for all product reads (`Retry-After`, capped 120 s, floor 60 s) that

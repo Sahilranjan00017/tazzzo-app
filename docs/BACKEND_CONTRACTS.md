@@ -113,6 +113,13 @@ so no existing call site breaks). `OrderRepository.placeOrder` accepts it and
 **Backend impact:** `POST /orders/v1/orders` already receives `payment`; the
 order payload it returns must echo it back as `payment: "COD" | "UPI" | "CARD"`.
 
+## Order money (2026-10-10)
+
+Release ordering is ON for REMOTE. The quote's `moneyPreview` is ADVISORY (backend openapi: "not binding on Order placement … it may
+differ"); the order's `money` is AUTHORITATIVE. The app shows the preview as "Total" with "Final amount is confirmed when you place your
+order.", always displays the order's money after placement, and shows "Your total changed from ₹X to ₹Y" when they differ. The
+`PAYABLE_CHANGED` 409 mapping below is kept defensively only — the running backend does not send it.
+
 ## Order error contract (`/v1/customer/orders`)
 
 Verified against backend main `5caee8ec` (`OrderExceptionHandler.java`, `docs/api/v1/openapi.yaml`). The app maps every

@@ -7,7 +7,7 @@ import com.tazzzo.app.data.checkout.PAYABLE_CHANGED_VIEW
 import com.tazzzo.app.data.model.PayableMoney
 
 /*
- * Presentation-only bindings for the UI-05 purchase flow. Every decision (what a quote is, what money is binding, which
+ * Presentation-only bindings for the UI-05 purchase flow. Every decision (what a quote is, how its advisory money is shown, which
  * action is safe after which failure, idempotency, PAYABLE_CHANGED precedence) stays in data/checkout and data/order;
  * this file only chooses words and arrangement for the surfaces, and is unit-tested.
  */
@@ -76,11 +76,13 @@ fun CheckoutAction.label(): String = when (this) {
 data class PaymentCardView(val method: String, val dueLine: String?, val hint: String)
 
 fun paymentCard(money: PayableMoney?): PaymentCardView =
-    PaymentCardView(PurchaseCopy.COD, money?.let { CheckoutCopy.dueOnDelivery(it) }, PurchaseCopy.COD_HINT)
+    PaymentCardView(PurchaseCopy.COD, money?.let { CheckoutCopy.PREVIEW_PAYMENT }, PurchaseCopy.COD_HINT)
 
-/** The sticky bar's headline for binding money: `₹0` reads as intentional ("Nothing due on delivery"), never as an error. */
+/**
+ * The sticky bar's headline: the quote's ADVISORY total "for review" (`₹0` reads as an amount, never as an error). Never
+ * "due on delivery" — only the placed order's authoritative money is due.
+ */
 data class DueHeadline(val amount: String, val caption: String)
 
 fun dueHeadline(money: PayableMoney): DueHeadline =
-    if (money.isNothingDue) DueHeadline(PurchaseCopy.ZERO_DUE_HEADLINE, CheckoutCopy.NOTHING_DUE)
-    else DueHeadline(money.payable.format(), "due on delivery")
+    DueHeadline(if (money.isNothingDue) PurchaseCopy.ZERO_DUE_HEADLINE else money.payable.format(), CheckoutCopy.PREVIEW_CAPTION)

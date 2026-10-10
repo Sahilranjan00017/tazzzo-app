@@ -605,6 +605,12 @@ shown; there is no slot, payment, coupon, coin or Club UI; the order button is d
 true for REMOTE, new `orderIntegration` stays false; the mock checkout, `OrderPlacement` and `OrderSuccess` are unreachable in REMOTE. The
 server cart is never cleared or mutated by checkout.
 
+> **Superseded 2026-10-10 (product-closure release):** `orderIntegration` and `orderHistoryIntegration` are TRUE for REMOTE (release
+> ordering ON, real `GET /v1/customer/orders` history), the debug switch (`debugEnabled` / `-Ptazzzo.debugRealOrdering`) is removed and
+> `OrderLaunchGate.enabled(caps) = caps.orderIntegration`. The quote's `moneyPreview` is ADVISORY on the backend (the order's money may
+> differ and holds): checkout labels it "Total" with "Final amount is confirmed when you place your order."; the confirmation/detail
+> show the order's money and "Your total changed from ₹X to ₹Y" when it differs. The text below is the historical record.
+
 **BACKEND CONTRACT IMPROVEMENT REQUEST — PAYABLE TOTAL:** expose delivery fee, taxes, other charges, the authoritative benefit/discount and a
 final payable total, or explicitly contract that the quote is merchandise-subtotal only.
 **BACKEND CONTRACT IMPROVEMENT REQUEST — ADDRESS SNAPSHOT:** return a safe address snapshot (at least the postal code) in the quote.
@@ -660,6 +666,12 @@ backend order: "Order confirmed", "Cash on delivery", "Payment due on delivery",
 address; an unrecognized payment condition fails closed to neutral copy and nothing ever says "paid". Benefit, coins and Club are not shown or
 changed. REMOTE Orders shows "Order history isn't available yet" plus this session's order if one was placed; Coins and Club are unavailable;
 the mock orders/coins are guarded; Order again stays hidden (`orderHistoryIntegration = false`).
+
+> **Superseded 2026-10-10 (product-closure release):** `orderIntegration` and `orderHistoryIntegration` are TRUE for REMOTE (release
+> ordering ON, real `GET /v1/customer/orders` history), the debug switch (`debugEnabled` / `-Ptazzzo.debugRealOrdering`) is removed and
+> `OrderLaunchGate.enabled(caps) = caps.orderIntegration`. The quote's `moneyPreview` is ADVISORY on the backend (the order's money may
+> differ and holds): checkout labels it "Total" with "Final amount is confirmed when you place your order."; the confirmation/detail
+> show the order's money and "Your total changed from ₹X to ₹Y" when it differs. The text below is the historical record.
 
 **Production gate:** `orderIntegration = false` for REMOTE; `OrderLaunchGate.enabled(caps) = caps.orderIntegration || debugEnabled` (the debug
 switch is a no-op in a release build). With the gate closed the Place order button is disabled with "Ordering will be available once the final
