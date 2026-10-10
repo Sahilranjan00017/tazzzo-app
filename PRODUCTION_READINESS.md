@@ -34,6 +34,92 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-10 PUBLISHED HOME CONTENT — product-read 429 handling (PR #24, review M1). A 429 from
+  `GET /v1/products/{id}` used to fail one rail and carry on with the next, up to 400 charged reads per cold start. Now
+  it ends the sweep at once and opens a window for all product reads (`Retry-After`, capped 120 s, floor 60 s) that
+  refuses a pull (toast) and blocks foreground re-reads and PIN changes; failed ids are not re-asked for 60 s; a sweep
+  reads at most 120 distinct cards (rest carried to the next sweep). Added 4 holder tests and fixed a vacuous
+  assertion. NOT verified locally: no Android SDK/Xcode in the sandbox, so compile and tests rely on CI. Follow-up:
+  `/v1/products:batch` (BACKEND_CONTRACTS §7).
+
+- 2026-10-09 PUBLISHED HOME CONTENT — grid tiles named by id (PR #24). The
+  taxonomy walk (up to 13 admission-charged reads per resolution) is replaced
+  by ONE `GET /v1/categories/{id}` per grid id (backend #109): sequential, ≤ 12
+  per resolution, names cached 300 s, 404 remembered 300 s and drops the tile,
+  first failure ends the resolution (60 s backoff), a 429 stops every node read
+  for `Retry-After` capped at 120 s. No walk fallback. Verified: Android JVM
+  unit tests 1,104 / 0 and iOS simulator tests 1,104 / 0 (new: 10 resolver,
+  4 contract, 1 holder). NOT verified on an emulator/simulator: pull gesture,
+  foreground re-read, banner navigation, image fallback, TalkBack/VoiceOver
+  semantics — the run was stopped by the < 4 GB free-disk guardrail before
+  the local backend or emulator started (the app also has no local-backend
+  override yet; the debug-only override was written but not committed
+  because it could not be run).
+
+- 2026-10-08 PUBLISHED HOME CONTENT — re-review follow-ups (PR #24). A pull
+  re-reads only cards older than 30 s (≤ one card sweep per 30 s; a superseded
+  sweep keeps the cards it finished); the grid walk stops at the first failed
+  read (429 included) and does not retry an unnamed id for 5 min (1 min after a
+  failure); `Retry-After` is capped at 120 s like `RetryPolicy`; a pull refused
+  by a 429 window shows the transient toast. Numeric-only `TZP-` ids restored
+  in BACKEND_CONTRACTS §7. Verified: Android JVM unit tests 1,096 / 0 (7 new),
+  iOS simulator tests 1,096 / 0 and the framework linked;
+  7 mutation probes all killed.
+
+- 2026-10-08 PUBLISHED HOME CONTENT — review remediation (PR #24). Grids name
+  node ids at any level (TZS/TZC/TZG/TZV) by a bounded, sequential walk of the
+  existing taxonomy reads (≤ 12 children reads, cached 300 s); an unnamed id
+  skips its tile, not the grid. Pull-to-refresh on Home and a re-read on return
+  to the foreground once the last success is > 60 s old; failures back off
+  10 → 20 → 40 → 60 s and honour 429 `Retry-After`. Rails no longer flash on a
+  re-read: per-PIN card cache, only new ids or cards > 5 min old are read, a
+  failed re-read keeps the rail; a PIN change still reloads. Holder state is
+  confined to a single-threaded scope (as the cart store). Rails render all 20
+  ids the backend allows; the 20-block cap is documented. Banners render
+  `subtitle`, describe the image with `altText`, are one accessibility node
+  (button role when tappable). `search:` stays untappable (no query-capable
+  Search screen). Verified: Android JVM unit tests 1,089 / 0 failures (24 new),
+  iOS simulator tests 1,089 / 0, `linkDebugFrameworkIosSimulatorArm64` and
+  `assembleDebug` built; 16 mutation probes, 15 killed (the survivor removes
+  one of two equivalent no-flash branches; removing both is killed). Not verified on a
+  device: pull gesture, foreground re-read and TalkBack/VoiceOver reading
+  (no reachable non-prod backend; emulator run abandoned for disk space).
+
+- 2026-10-07 PUBLISHED HOME CONTENT (backend P6 / app-integration). Home now
+  renders the CMS-published blocks of `GET /v1/content/home?channel=app`
+  (`data/content/`: DTO → `HomeContent` mapping, `RemoteContentDataSource`,
+  `HomeContentHolder`; `RemoteHomeScreen` renders banners, product rails and
+  category grids in the backend's order before the editorial plates). Truthful
+  by construction: a banner without an https image is not shown; a link outside
+  the closed grammar (`product:` | `category:` | `search:`) leaves the banner
+  untappable, and `search:` is untappable until the Search screen can open on
+  a query; rails load at most 12 cards through the PIN-aware product read
+  (404 = absent, bounded parallelism 4); grids show only loaded root nodes; a
+  failed or empty read shows NOTHING (no error surface, the catalogue sections
+  stand alone). A copy OR a failure younger than 60 s is not re-requested
+  (visiting the Home tab repeatedly against a backend that cannot serve it
+  sends nothing more); a stale copy stays on screen while re-read and survives
+  a failed re-read; rail loading is serialised (a PIN change and a content
+  load never run two loaders). Verified: Android JVM unit tests 1,065 / 0
+  failures (19 new in `HomeContentMappingTest`, `RemoteContentDataSourceTest`,
+  `HomeContentHolderTest`: link grammar, order, block dedupe within the cap,
+  20-block / 12-id / 80-char title bounds, wire nulls treated as absent,
+  request shape, 400/429/503 mapping, single-flight + 60 s freshness for
+  copies and failures, stale copy kept, rail 404 handling, bounded
+  parallelism, PIN change reload, anonymous even with a session);
+  `assembleDebug` built (24.7 MB debug APK); iOS simulator tests 1,061 / 0 and
+  `linkDebugFrameworkIosSimulatorArm64` linked (Xcode 26.4.1) at the first
+  head; 14 mutation probes (http image allowed, open link grammar, rail cap
+  dropped, channel=web, authenticated read, no freshness window, rail failure
+  fails Home, unbounded parallelism, no block dedupe, grid cap, block cap,
+  title trim, re-fetch after failure, stale copy blanked) all killed by the
+  tests. Independent review of the first head (PASS, 2 MEDIUM) led to the
+  failure-window, stale-copy and rail-serialisation changes above. Backend dependency:
+  `channel` exists from backend PR #96; an older backend answers 400 and the
+  app shows no published blocks (the documented degraded state). Not done:
+  banner desktop/mobile variants (backend D4), `search:` deep link, click
+  analytics.
+
 - 2026-09-01 PRE-BACKEND PREPARATION — Wave 0. Project placed under git for the
   first time; baseline commit "PRE-BACKEND BASELINE" records the verified state
   (56 Kotlin files, 11,767 lines, 41 tests / 0 failures) as the rollback point.

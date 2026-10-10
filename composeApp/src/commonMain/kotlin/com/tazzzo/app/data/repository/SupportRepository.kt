@@ -11,7 +11,7 @@ import kotlinx.coroutines.delay
  * repository at all — HelpScreen read the fixtures directly, so it would have
  * kept rendering seed FAQs after every other surface moved to the backend.
  *
- * Contract: `GET /support/v1/faqs` (docs/BACKEND_INTEGRATION_READINESS.md §1,
+ * Contract: `GET /v1/content/faqs` (docs/BACKEND_INTEGRATION_READINESS.md §1,
  * docs/BACKEND_CONTRACTS.md). Search stays client-side over the returned list,
  * which is what the screen does today; no search endpoint is assumed.
  */

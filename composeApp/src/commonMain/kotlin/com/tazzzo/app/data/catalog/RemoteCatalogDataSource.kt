@@ -38,6 +38,16 @@ class RemoteCatalogDataSource(
     }
 
     /**
+     * `GET /v1/categories/{id}` (backend PR #109): ONE consumer-visible node at any level, to name it without walking the
+     * tree. Unknown, hidden and consumer-empty are the same 404 (thrown, like every error status). No `If-None-Match`:
+     * the backend charges a 304 like a 200, so revalidating saves bytes but not admission; callers cache instead.
+     */
+    suspend fun node(nodeId: String): CatalogNode {
+        requireNodeId(nodeId)
+        return api.execute<NodeDetailDto>(get("/v1/categories/$nodeId")).body.toDomain(nodeId)
+    }
+
+    /**
      * `GET /v1/categories/{id}/products`. [cursor] is the opaque `nextCursor` of the previous page
      * for the SAME node, page size and PIN; the app passes it back untouched.
      */
@@ -76,7 +86,6 @@ class RemoteCatalogDataSource(
         const val DEFAULT_PAGE_SIZE = 20
         const val MAX_PAGE_SIZE = 50
         private val NODE_ID = Regex("^TZ[SCGV]-[0-9]{6}$")
-        private val PRODUCT_ID = Regex("^TZP-[0-9]+$")
 
         private fun requireNodeId(id: String) = require(NODE_ID.matches(id)) { "invalid category id" }
     }

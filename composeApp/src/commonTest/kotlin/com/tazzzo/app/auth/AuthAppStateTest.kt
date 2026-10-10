@@ -50,4 +50,23 @@ class AuthAppStateTest {
         app.onSignedIn(); app.logout(FakeAuthRepository()) // the normal path too
         assertFalse(app.isAuthenticated)
     }
+
+    // Mutation note: removing clearRecentSearches() from markLoggedOut()/applyAuthState(false) makes both tests fail.
+    @Test fun logoutClearsRecentSearchesFromStateAndFromThePersistedKey() = kotlinx.coroutines.test.runTest {
+        val settings = MapSettings(); val app = TazzzoAppState(store = PersistentStore(settings))
+        app.onSignedIn(); app.recordSearch("milk")
+        assertEquals(listOf("milk"), app.recentSearches.toList())
+        assertTrue(settings.getStringOrNull("tazzzo.searches.v1") != null)
+        app.logout(FakeAuthRepository())
+        assertTrue(app.recentSearches.isEmpty())
+        assertTrue(PersistentStore(settings).loadRecentSearches().isEmpty())
+        assertEquals(null, settings.getStringOrNull("tazzzo.searches.v1"))
+    }
+
+    @Test fun aSessionEndingElsewhereAlsoClearsRecentSearches() {
+        val settings = MapSettings(); val app = TazzzoAppState(store = PersistentStore(settings))
+        app.onSignedIn(); app.recordSearch("milk")
+        app.applyAuthState(false)
+        assertTrue(app.recentSearches.isEmpty()); assertEquals(null, settings.getStringOrNull("tazzzo.searches.v1"))
+    }
 }
