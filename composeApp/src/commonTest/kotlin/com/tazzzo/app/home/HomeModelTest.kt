@@ -67,11 +67,10 @@ class HomeModelTest {
             for (w in listOf("%", "free delivery", "minutes", "guaranteed", "organic", "farm")) assertFalse(w in t.lowercase(), "'$w' in '$t'")
     }
 
-    @Test fun theBottomNavIsHomeShopOrdersProfileInProductionAndOrdersStaysTruthful() {
+    @Test fun theBottomNavIsHomeShopOrdersProfileInProductionAndOrdersIsRealHistory() {
         assertEquals(listOf(HomeTab.HOME, HomeTab.SHOP, HomeTab.ORDERS, HomeTab.PROFILE), visibleHomeTabs(CatalogCapabilities.REMOTE))
         assertEquals(listOf("Home", "Shop", "Orders", "Profile"), visibleHomeTabs(CatalogCapabilities.REMOTE).map { it.label })
-        assertFalse(CatalogCapabilities.REMOTE.orderHistoryIntegration)                 // so ORDERS can only show the honest state
-        assertTrue("isn't available yet" in HomeCopy.ORDERS_UNAVAILABLE_TITLE)
-        assertFalse(CatalogCapabilities.REMOTE.orderIntegration)
+        assertTrue(CatalogCapabilities.REMOTE.orderHistoryIntegration)                  // ORDERS lists the real history
+        assertTrue(CatalogCapabilities.REMOTE.orderIntegration)
     }
 }

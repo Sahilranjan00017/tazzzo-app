@@ -118,7 +118,7 @@ class PdpModelTest {
         assertEquals("Back to Shop", PdpCopy.BACK_TO_SHOP)
     }
 
-    @Test fun productionOrderingStaysOff() {
-        assertFalse(CatalogCapabilities.REMOTE.orderIntegration)
+    @Test fun productionOrderingIsOn() {
+        assertTrue(CatalogCapabilities.REMOTE.orderIntegration)
     }
 }

@@ -6,8 +6,10 @@ import com.tazzzo.app.data.model.PayableMoney
 import kotlin.time.Duration
 
 /**
- * Customer wording is fixed here. The amount due is the backend's BINDING money (quote) or AUTHORITATIVE money (order), shown
- * as-is: never estimated, never recomputed, never "paid". Only [SUBTOTAL_LABEL] appears when no binding money exists.
+ * Customer wording is fixed here. A quote's `moneyPreview` is ADVISORY (backend contract: Order placement revalidates and
+ * computes its own money, which may differ — not an error), so checkout shows it as the total FOR REVIEW with [PREVIEW_NOTE],
+ * never as an amount "due on delivery". Only the order's AUTHORITATIVE money is "due on delivery". Amounts are shown as-is:
+ * never estimated, never recomputed, never "paid". Only [SUBTOTAL_LABEL] appears when a quote has no money preview.
  */
 object CheckoutCopy {
     const val SUBTOTAL_LABEL = "Item subtotal"
@@ -16,9 +18,20 @@ object CheckoutCopy {
     /** Cash on delivery with nothing to collect (a full discount). Never "Payment due" for ₹0. */
     const val NOTHING_DUE = "Nothing due on delivery"
     const val ORDER_CTA = "Place order"
-    /** Shown while production order placement is not launch-enabled (deployment / end-to-end sign-off), never about money. */
-    const val LAUNCH_GATED = "Ordering isn't available yet."
-    /** An order was refused because its binding money is no longer the current money (PAYABLE_CHANGED). */
+    /** The quote's advisory payable, as the checkout review labels it (an order's money is "Amount due"). */
+    const val PREVIEW_TOTAL_LABEL = "Total"
+    /** Always shown with a quote's money: the order computes the amount that holds when it is placed. */
+    const val PREVIEW_NOTE = "Final amount is confirmed when you place your order."
+    /** The sticky Place-order bar's caption under the advisory total. */
+    const val PREVIEW_CAPTION = "Total for review"
+    /** The payment card on checkout: how the (order's) amount is paid, without asserting the preview is that amount. */
+    const val PREVIEW_PAYMENT = "Pay your order total in cash when it arrives."
+    /** Fail-closed copy when the order capability is off (a kill switch; REMOTE and MOCK have it on). Never about money. */
+    const val ORDERING_PAUSED = "We can't take orders right now."
+    /**
+     * 409 PAYABLE_CHANGED. Kept only as a defensive mapping: the running backend does NOT send it (its money preview is advisory
+     * and a differing order is placed with 200 — see [payableChangeNotice]).
+     */
     const val PAYABLE_CHANGED = "Your order amount changed. Review checkout again."
     /** A quote that violates the contract. */
     const val CONTRACT_FAILURE = "Checkout couldn't be loaded correctly."
@@ -34,7 +47,7 @@ sealed interface CheckoutAction {
     data object TryAgain : CheckoutAction
     /** A NEW attempt (new key): "Review checkout". */
     data object ReviewCheckout : CheckoutAction
-    /** Also a NEW attempt (new key), worded "Refresh checkout": after a contract failure or for a quote with no binding money. */
+    /** Also a NEW attempt (new key), worded "Refresh checkout": after a contract failure or for a quote with no money preview. */
     data object RefreshCheckout : CheckoutAction
     data object ChooseAddress : CheckoutAction
     data object ChangeAddress : CheckoutAction
@@ -94,7 +107,7 @@ fun StaleReason.view(): FailureView = when (this) {
 /** PAYABLE_CHANGED, for both the refused order and the invalidated quote. Only a NEW quote is offered. */
 val PAYABLE_CHANGED_VIEW = FailureView(CheckoutCopy.PAYABLE_CHANGED, "", listOf(CheckoutAction.ReviewCheckout))
 
-/** A Ready quote without binding money (legacy): it can never be ordered, only refreshed into a new quote. */
+/** A Ready quote without a money preview (legacy): it can never be ordered, only refreshed into a new quote. */
 val NO_BINDING_MONEY_VIEW = FailureView("Checkout needs to be refreshed", "Refresh checkout to see the amount due.", listOf(CheckoutAction.RefreshCheckout))
 
 val EXPIRED_VIEW = FailureView("This checkout expired", "Refresh checkout to continue.", listOf(CheckoutAction.ReviewCheckout))
@@ -136,16 +149,28 @@ fun moneyLines(money: PayableMoney?, subtotal: Money): List<MoneyLine> =
     )
 
 /**
- * The review summary, from the quote's BINDING money only. [benefit] is never shown (the discount row comes from the money).
- * [dueNote] is null when there is no binding money (such a quote is never orderable).
+ * The review summary, from the quote's ADVISORY money preview only. [benefit] is never shown (the discount row comes from the
+ * money). The last row is the "Total" for review, never "Amount due"; [reviewNote] ([CheckoutCopy.PREVIEW_NOTE]) is shown with
+ * it. [reviewNote] is null when there is no money preview (such a quote is never orderable).
  */
-data class CheckoutSummaryView(val itemsLabel: String, val lines: List<MoneyLine>, val dueNote: String?)
+data class CheckoutSummaryView(val itemsLabel: String, val lines: List<MoneyLine>, val reviewNote: String?)
 
 fun CheckoutQuote.summary(): CheckoutSummaryView = CheckoutSummaryView(
     itemsLabel = if (itemCount == 1) "1 item" else "$itemCount items",
-    lines = moneyLines(money, subtotal),
-    dueNote = money?.let { CheckoutCopy.dueOnDelivery(it) }
+    lines = moneyLines(money, subtotal).map { if (it.label == CheckoutCopy.AMOUNT_DUE_LABEL) it.copy(label = CheckoutCopy.PREVIEW_TOTAL_LABEL) else it },
+    reviewNote = money?.let { CheckoutCopy.PREVIEW_NOTE }
 )
+
+/**
+ * The total-changed notice for a placed order (mirrors the storefront's `order-total-changed`): the quote's advisory payable the
+ * customer reviewed vs the order's AUTHORITATIVE payable. Null when either is unknown or they are equal. Not an error: the
+ * order's amount is the one that holds and is the one displayed everywhere else.
+ */
+fun payableChangeNotice(reviewedPayable: Money?, orderPayable: Money?): String? {
+    if (reviewedPayable == null || orderPayable == null || reviewedPayable == orderPayable) return null
+    return "Your total changed from ${reviewedPayable.format()} to ${orderPayable.format()}. Benefits and prices are checked again " +
+        "when an order is placed, and this is the amount of your order."
+}
 
 fun DeliveryContent.displayLines(): List<String> = listOfNotNull(
     recipientName, addressLine1, addressLine2?.takeIf { it.isNotBlank() }, landmark?.takeIf { it.isNotBlank() },

@@ -82,9 +82,9 @@ class BrandFoundationTest {
 
     // ---- what this UI pass must not touch -------------------------------------------------------------------------------
 
-    @Test fun productionOrderingStaysOff() {
-        assertFalse(CatalogCapabilities.REMOTE.orderIntegration)
-        assertFalse(CatalogCapabilities.REMOTE.orderHistoryIntegration)
+    @Test fun productionOrderingAndHistoryAreOn() {
+        assertTrue(CatalogCapabilities.REMOTE.orderIntegration)
+        assertTrue(CatalogCapabilities.REMOTE.orderHistoryIntegration)
     }
 
     @Test fun theWordmarkAspectMatchesTheMasterSvg() {

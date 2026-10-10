@@ -53,43 +53,57 @@ class CheckoutPresentationTest {
         StaleReason.entries.forEach { all += it.view().title; all += it.view().hint }
         all += listOf(EXPIRED_VIEW.title, EXPIRED_VIEW.hint, NO_BINDING_MONEY_VIEW.title, NO_BINDING_MONEY_VIEW.hint)
         all += listOf(CheckoutCopy.SUBTOTAL_LABEL, CheckoutCopy.DISCOUNT_LABEL, CheckoutCopy.AMOUNT_DUE_LABEL, CheckoutCopy.NOTHING_DUE,
-            CheckoutCopy.ORDER_CTA, CheckoutCopy.LAUNCH_GATED, CheckoutCopy.PAYABLE_CHANGED, CheckoutCopy.CONTRACT_FAILURE)
-        listOf(m(10_000, 1_000, 9_000), m(4_950, 0, 4_950), m(10_000, 10_000, 0)).forEach { mm ->
-            quote(money = mm).summary().let { all += texts(it); all += it.dueNote.orEmpty() }
-        }
+            CheckoutCopy.ORDER_CTA, CheckoutCopy.ORDERING_PAUSED, CheckoutCopy.PAYABLE_CHANGED, CheckoutCopy.CONTRACT_FAILURE)
         all += texts(quote(money = null).summary())
         return all
     }
 
-    @Test fun theSummaryShowsTheItemSubtotalAndTheAmountDueFromTheBindingMoney() {
-        val s = quote(money = m(9_900, 0, 9_900)).summary()
-        assertEquals(listOf("Item subtotal ₹99", "Amount due ₹99"), texts(s))
-        assertEquals(listOf(false, true), s.lines.map { it.emphasised })
-        assertEquals("₹99 due on delivery", s.dueNote)
+    /** The checkout REVIEW of a quote's advisory money: its rows and note (checked against its own rules below). */
+    private fun previewCopy(): List<String> = listOf(m(10_000, 1_000, 9_000), m(4_950, 0, 4_950), m(10_000, 10_000, 0)).flatMap { mm ->
+        quote(money = mm).summary().let { texts(it) + it.reviewNote.orEmpty() }
     }
 
-    @Test fun theDiscountRowAppearsOnlyWhenTheBindingDiscountIsPositive() {
-        assertEquals(listOf("Item subtotal ₹100", "Benefit discount -₹10", "Amount due ₹90"), texts(quote(money = m(10_000, 1_000, 9_000)).summary()))
-        assertEquals("₹90 due on delivery", quote(money = m(10_000, 1_000, 9_000)).summary().dueNote)
+    // The quote's moneyPreview is ADVISORY on the backend (the order computes its own money, which may differ): the review shows
+    // it as the "Total" with the confirmation note, never as an amount "due". (Replaces the binding-money guards.)
+
+    @Test fun theSummaryShowsTheAdvisoryTotalForReviewWithTheConfirmationNote() {
+        val s = quote(money = m(9_900, 0, 9_900)).summary()
+        assertEquals(listOf("Item subtotal ₹99", "Total ₹99"), texts(s))
+        assertEquals(listOf(false, true), s.lines.map { it.emphasised })
+        assertEquals("Final amount is confirmed when you place your order.", s.reviewNote)
+    }
+
+    @Test fun theDiscountRowAppearsOnlyWhenThePreviewDiscountIsPositive() {
+        assertEquals(listOf("Item subtotal ₹100", "Benefit discount -₹10", "Total ₹90"), texts(quote(money = m(10_000, 1_000, 9_000)).summary()))
+        assertEquals(CheckoutCopy.PREVIEW_NOTE, quote(money = m(10_000, 1_000, 9_000)).summary().reviewNote)
         assertFalse(texts(quote(money = m(9_900, 0, 9_900)).summary()).any { "discount" in it.lowercase() })
     }
 
     @Test fun paiseAreShownExactly() {
-        assertEquals(listOf("Item subtotal ₹49.50", "Amount due ₹49.50"), texts(quote(money = m(4_950, 0, 4_950)).summary()))
-        assertEquals(listOf("Item subtotal ₹99.25", "Benefit discount -₹0.25", "Amount due ₹99"), texts(quote(money = m(9_925, 25, 9_900)).summary()))
+        assertEquals(listOf("Item subtotal ₹49.50", "Total ₹49.50"), texts(quote(money = m(4_950, 0, 4_950)).summary()))
+        assertEquals(listOf("Item subtotal ₹99.25", "Benefit discount -₹0.25", "Total ₹99"), texts(quote(money = m(9_925, 25, 9_900)).summary()))
     }
 
-    @Test fun aZeroAmountDueReadsNothingDueOnDeliveryNeverPaymentDue() {
+    @Test fun aZeroPreviewIsATotalOfZeroWithTheNoteNeverNothingDue() {
         val s = quote(money = m(10_000, 10_000, 0)).summary()
-        assertEquals(listOf("Item subtotal ₹100", "Benefit discount -₹100", "Amount due ₹0"), texts(s))
-        assertEquals("Nothing due on delivery", s.dueNote)
-        assertFalse("payment due" in s.dueNote!!.lowercase())
+        assertEquals(listOf("Item subtotal ₹100", "Benefit discount -₹100", "Total ₹0"), texts(s))
+        assertEquals(CheckoutCopy.PREVIEW_NOTE, s.reviewNote)
     }
 
-    @Test fun aQuoteWithoutBindingMoneyShowsTheItemSubtotalAloneAndNoAmountDue() {
+    @Test fun thePreviewNeverClaimsCertaintyAboutWhatIsDue() {
+        val preview = previewCopy()
+        for (t in preview) for (w in listOf("due on delivery", "nothing due", "amount due", "payment due", "guaranteed", "locked"))
+            assertFalse(w in t.lowercase(), "'$w' in '$t'")
+        // ...and every preview with money carries the note that the order confirms the final amount.
+        assertEquals(3, preview.count { it == CheckoutCopy.PREVIEW_NOTE })
+        for (t in preview) for (w in listOf("estimated", "approximate", "provisional", "fee", "tax", "coupon", "coins", "wallet", "paid"))
+            assertFalse(w in t.lowercase(), "'$w' in '$t'")
+    }
+
+    @Test fun aQuoteWithoutAMoneyPreviewShowsTheItemSubtotalAloneAndNoNote() {
         val s = quote(money = null).summary()
         assertEquals(listOf("Item subtotal ₹99"), texts(s))
-        assertNull(s.dueNote)
+        assertNull(s.reviewNote)
         assertEquals(listOf(CheckoutAction.RefreshCheckout), NO_BINDING_MONEY_VIEW.actions)
     }
 

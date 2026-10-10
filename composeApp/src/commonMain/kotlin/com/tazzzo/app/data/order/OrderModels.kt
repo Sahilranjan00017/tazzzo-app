@@ -8,13 +8,24 @@ import com.tazzzo.app.data.remote.ApiException
 /*
  * The REAL customer order (`/v1/customer/orders`). The backend order is the only truth: nothing here comes from the
  * mock `Order`, the local cart or `BillCalculator`. Its money is the AUTHORITATIVE `money` block committed at placement
- * (equal to the quote's binding money). No delivery/platform fee, tax, COD charge, coupon, Coins or wallet exists on the
+ * (computed independently at placement; it may differ from the quote's advisory preview). No delivery/platform fee, tax, COD charge, coupon, Coins or wallet exists on the
  * wire, so none exists here.
  */
 
-/** The backend only ever returns `CONFIRMED`. Anything else is kept as unrecognized and never guessed at. */
-enum class CustomerOrderStatus { CONFIRMED, UNRECOGNIZED;
-    companion object { fun of(raw: String?) = if (raw == "CONFIRMED") CONFIRMED else UNRECOGNIZED }
+/**
+ * The customer-visible statuses of the backend state machine (`OrderStatus`): CONFIRMED (placed, COD due), OUT_FOR_DELIVERY,
+ * DELIVERED, CANCELLED. `CREATED` is never customer-visible. Anything else is kept as unrecognized and never guessed at.
+ */
+enum class CustomerOrderStatus { CONFIRMED, OUT_FOR_DELIVERY, DELIVERED, CANCELLED, UNRECOGNIZED;
+    companion object {
+        fun of(raw: String?) = when (raw) {
+            "CONFIRMED" -> CONFIRMED
+            "OUT_FOR_DELIVERY" -> OUT_FOR_DELIVERY
+            "DELIVERED" -> DELIVERED
+            "CANCELLED" -> CANCELLED
+            else -> UNRECOGNIZED
+        }
+    }
 }
 
 enum class CustomerPaymentMethod { COD, UNRECOGNIZED;
@@ -23,7 +34,7 @@ enum class CustomerPaymentMethod { COD, UNRECOGNIZED;
 
 /**
  * `COD_DUE` = confirmed, inventory consumed, payment OWED ON DELIVERY, nothing collected. It is NEVER "paid". An unknown
- * value fails closed to neutral copy.
+ * value fails closed to neutral copy. A CANCELLED order carries no payment condition (nothing is due): that is UNRECOGNIZED.
  */
 enum class OrderPaymentCondition { COD_DUE, UNRECOGNIZED;
     companion object { fun of(raw: String?) = if (raw == "COD_DUE") COD_DUE else UNRECOGNIZED }
@@ -65,15 +76,37 @@ data class CustomerOrder(
     val money: PayableMoney?,
     val deliveryAddress: OrderDeliveryAddress?,
     val createdAtMillis: Long?,
-    val confirmedAtMillis: Long?
+    val confirmedAtMillis: Long?,
+    /** The chosen delivery window's label, only when the order has one (the default checkout has no slot step). */
+    val deliverySlotLabel: String? = null,
+    val outForDeliveryAtMillis: Long? = null,
+    val deliveredAtMillis: Long? = null,
+    val cancelledAtMillis: Long? = null
 ) {
     override fun toString(): String = "CustomerOrder(${items.size} lines)"
+}
+
+/**
+ * One row of the REAL order history (`GET /v1/customer/orders`, newest first). [payable] is the order's AUTHORITATIVE payable,
+ * null for an order created before the money model (never zero, never derived from [subtotal]).
+ */
+data class CustomerOrderSummary(
+    val orderId: String,
+    val status: CustomerOrderStatus,
+    val paymentMethod: CustomerPaymentMethod,
+    val itemCount: Int,
+    val subtotal: Money,
+    val payable: Money?,
+    val createdAtMillis: Long?,
+    val deliverySlotLabel: String? = null
+) {
+    override fun toString(): String = "CustomerOrderSummary(***)"
 }
 
 /** Everything that can go wrong placing an order, as data. Never carries server text. */
 sealed interface OrderFailure {
     // ---- decided by the app before any request ----
-    /** Production order placement is not launch-enabled (deployment / end-to-end sign-off pending). */
+    /** The order capability is off (fail-closed kill switch; true in REMOTE and MOCK). No request is sent. */
     data object NotLaunched : OrderFailure
     /** There is no Ready, current quote to order from. */
     data object QuoteNotReady : OrderFailure
@@ -89,8 +122,8 @@ sealed interface OrderFailure {
     data object StockUnavailable : OrderFailure
     data object ReservationExpired : OrderFailure
     /**
-     * 409 PAYABLE_CHANGED: the quote's binding money is no longer the current money (or the quote has none). NO order was
-     * created. Definitive: the pending attempt is deleted, the quote is invalidated, and only a NEW quote (new key) that the
+     * 409 PAYABLE_CHANGED — a defensive mapping only: the running backend does NOT send this code (the quote money is advisory
+     * and a differing order is placed with 200). If it ever arrived it would mean NO order was created. Definitive: the pending attempt is deleted, the quote is invalidated, and only a NEW quote (new key) that the
      * customer reviews and confirms may be ordered. Never Ambiguous, never "Check order", never re-sent.
      */
     data object PayableChanged : OrderFailure

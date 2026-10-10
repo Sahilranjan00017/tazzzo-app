@@ -38,6 +38,7 @@ import com.tazzzo.app.ui.onboarding.LoginScreen
 import com.tazzzo.app.ui.onboarding.ShowcaseScreen
 import com.tazzzo.app.ui.splash.SplashScreen
 import com.tazzzo.app.ui.home.MasterListScreen
+import com.tazzzo.app.ui.order.opensConfirmation
 
 @Composable
 fun App() {
@@ -188,8 +189,10 @@ private fun OrderStateRunner(app: TazzzoAppState) {
     LaunchedEffect(state) {
         when (val s = state) {
             is com.tazzzo.app.data.order.OrderState.Placed -> {
-                val target = Screen.OrderSuccess(s.order.orderId)
+                // An already-cancelled order (found by "Check order") opens its detail, not the "Order placed" confirmation.
+                val target = if (s.order.opensConfirmation()) Screen.OrderSuccess(s.order.orderId) else Screen.OrderDetail(s.order.orderId)
                 if (app.current != target) { app.goHome(); app.navigate(target) }
+                if (target is Screen.OrderDetail) ServiceLocator.orderStore.acknowledge()
             }
             is com.tazzzo.app.data.order.OrderState.Ambiguous -> if (app.current !is Screen.Checkout) app.navigate(Screen.Checkout)
             else -> Unit

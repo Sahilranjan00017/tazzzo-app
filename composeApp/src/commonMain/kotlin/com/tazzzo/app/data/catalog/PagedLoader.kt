@@ -61,6 +61,15 @@ class PagedLoader<K : Any, T>(
     /** Reload page 1 for the current key (pull-to-refresh, "retry" after a first-page failure). */
     fun refresh() { if (key != null) restart() }
 
+    /** Forget the key, the items and the cursor (e.g. sign-out); any in-flight response is discarded. Back to [PagedState.Idle]. */
+    fun reset() {
+        job?.cancel(); job = null
+        generation++
+        key = null
+        cursor = null
+        _state.value = PagedState.Idle
+    }
+
     fun loadMore() {
         val s = _state.value as? PagedState.Content ?: return
         if (!s.hasMore || s.append == AppendState.Loading || s.append is AppendState.Failed) return

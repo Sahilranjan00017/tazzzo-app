@@ -114,10 +114,10 @@ class ReleaseHardeningTest {
 
     // ---- 13. capability locks -----------------------------------------------------------------------------------
 
-    @Test fun productionOrderingAndHistoryStayOffAndNothingElseIsActivated() {
+    @Test fun productionOrderingAndHistoryAreOnAndNothingMockIsActivated() {
         val c = CatalogCapabilities.REMOTE
-        assertFalse(c.orderIntegration); assertFalse(c.orderHistoryIntegration)
-        assertFalse(c.search); assertFalse(c.deals); assertFalse(c.banners)
+        assertTrue(c.orderIntegration); assertTrue(c.orderHistoryIntegration)
+        assertFalse(c.reorder); assertFalse(c.deals); assertFalse(c.banners); assertFalse(c.bestsellers)
     }
 
     // ---- 9. production REMOTE mode exposes no mock or demo content --------------------------------------------
@@ -134,7 +134,7 @@ class ReleaseHardeningTest {
         val remote = listOf(
             com.tazzzo.app.ui.voice.GenieCopy.BODY, com.tazzzo.app.ui.voice.GenieCopy.STATUS,
             com.tazzzo.app.ui.profile.ProfileCopy.SIGNED_OUT_BODY, com.tazzzo.app.ui.profile.ProfileCopy.HELP_UNAVAILABLE_BODY,
-            com.tazzzo.app.ui.order.OrderCopy.HISTORY_UNAVAILABLE_BODY, com.tazzzo.app.ui.home.HomeCopy.ORDERS_UNAVAILABLE_BODY
+            com.tazzzo.app.ui.order.OrderCopy.NO_ORDERS_BODY, com.tazzzo.app.ui.order.OrderCopy.SIGNED_OUT_BODY
         ).joinToString(" | ").lowercase()
         assertFalse(c.whatsappNumber.lowercase() in remote)
         for (leak in listOf("whatsapp", "say hi", "minutes", "delivered in", "tz-", "ord_", "asha", "demo", "sample"))
