@@ -189,14 +189,14 @@ Summary count (existing code vs blueprint): **EXISTS 22 · PARTIAL 14 · MISSING
 | Specification file | blueprint §B/T08 · MISSING (TZ-008) |
 | Implementation files | `ui/home/SearchScreen.kt` (443 L): `SearchHeader`, recent searches (persisted, removable), `SearchChipRows` (popular), trending rail · `data/search/SearchEngine.kt` |
 | Reusable components | `TazChip`, `MicButton`, `ProductRail` · NEW: grouped suggestions (Products/Categories/Brands) |
-| Required APIs | search API — local `SearchEngine` over `MockCatalog` [MOCKED] · LOCAL recents (`PersistentStore`) [IMPLEMENTED] |
+| Required APIs | REMOTE (release): `GET /v1/search` [REAL, 2026-10-10 — products only; `ui/catalog/RemoteSearchScreen.kt` + `data/catalog/ProductSearch.kt`; recents recorded only after a query's page returns products] · MOCK: local `SearchEngine` over `MockCatalog` · LOCAL recents (`PersistentStore`) [IMPLEMENTED] |
 | Implementation status | **EXISTS** — entry and results share one screen; recents persist across process death (verified `p9_recents_after_kill.png`) |
 | Android screenshot | baseline: `docs/screenshots/android-phase4/p7_recents.png` · PENDING |
 | iOS screenshot | baseline: `docs/screenshots/phase6-after/r1_search.png` · PENDING |
 | Visual comparison | N/A — no reference |
 | Functional test | UI: `NavigationJourneyTest` (query survives navigation) · Unit: `ShoppingListTest`, search-evidence log |
 | Accessibility | Mic action is independent and actionable (F4 regression fixed) |
-| Remaining issues | No grouped suggestions · "trending" chips are fixture — must be removed or grounded `[BACKEND REQUIRED]` · Hindi synonyms/typo tolerance partial (`SearchEngine` has synonym table; no fuzzy) · analytics tracks raw query (`AppState.recordSearch`) — **privacy defect vs blueprint §B/T08**, fix in Batch when touched |
+| Remaining issues | No grouped suggestions · "trending" chips are fixture — must be removed or grounded `[BACKEND REQUIRED]` · Hindi synonyms/typo tolerance partial (`SearchEngine` has synonym table; no fuzzy) · analytics: `AppState.recordSearch` passes the query, but `AnalyticsPolicy.releaseSafe` strips the `query` key in release (debug log only) |
 
 | Field | T09 — Search results [P0] |
 |---|---|
@@ -205,7 +205,7 @@ Summary count (existing code vs blueprint): **EXISTS 22 · PARTIAL 14 · MISSING
 | Specification file | blueprint §B/T09 · MISSING (TZ-009) |
 | Implementation files | `ui/home/SearchScreen.kt` results grid · `ui/common/Filters.kt` (`FilterBar`, `SortSheet`) |
 | Reusable components | `ProductCard`, `FilterBar`, `SortSheet`, `EmptyState` |
-| Required APIs | CAT search [MOCKED] · INV/PRC via product fixture |
+| Required APIs | REMOTE: `GET /v1/search` [REAL — cursor-paged product cards with price/MRP/stock; 429 Retry-After honoured] · MOCK: CAT search fixture |
 | Implementation status | **EXISTS** — count, sort/filter, empty-state recovery; query/filter/scroll preserved via `SaveableStateHolder` |
 | Android screenshot | baseline: `docs/screenshots/android-phase4/p8_aata_results.png` · PENDING |
 | iOS screenshot | baseline: `docs/screenshots/phase6-after/r2_search_results.png` · PENDING |

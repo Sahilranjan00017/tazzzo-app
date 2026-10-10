@@ -48,7 +48,8 @@ fun App() {
     // build is REMOTE unless a developer/demo/test EXPLICITLY asks for the mock catalogue.
     remember { applyDevCatalogMode() }
     val appState = remember { TazzzoAppState() }
-    CompositionLocalProvider(LocalAppState provides appState) {
+    val appScope = rememberCoroutineScope()
+    CompositionLocalProvider(LocalAppState provides appState, LocalAppScope provides appScope) {
         PlatformBackHandler(
             enabled = appState.canHandleSystemBack,
             onBack = { appState.handleSystemBack() }
@@ -84,6 +85,7 @@ fun App() {
                 LaunchedEffect(liveKeys.joinToString("|")) {
                     val live = liveKeys.toSet()
                     (knownKeys - live).forEach { stateHolder.removeState(it) }
+                    if (Screen.Search.stateKey !in live) appState.dropSearch()   // Search left the stack: its query/results go too
                     knownKeys = live
                 }
 
@@ -139,6 +141,9 @@ fun App() {
         }
     }
 }
+
+/** A scope that lives as long as the app's composition: holders that must outlive one screen (Search) run on it. */
+val LocalAppScope = staticCompositionLocalOf<kotlinx.coroutines.CoroutineScope> { error("App scope not provided") }
 
 /**
  * Restores the secure session at start-up and keeps [TazzzoAppState] in step

@@ -151,7 +151,9 @@ against `Tazzzo_Taxonomy_V1_Master.csv` (293 rows), `Tazzzo_Taxonomy_V1_Master.j
 and `tazzzo-catalog-service/docs/openapi.json` (29 paths, 8 GET). None of these
 is an app defect. All need a decision or backend work.
 
-- [ ] **No browse, list or search endpoint. Blocks the category screen and
+- [x] RESOLVED 2026-10-10: the REMOTE app browses on `/v1/categories…` and searches on the real
+      `GET /v1/search` (products only, prefix match on name/brand; `ui/catalog/RemoteSearchScreen.kt`,
+      `data/catalog/ProductSearch.kt`). Historical entry: **No browse, list or search endpoint. Blocks the category screen and
       search entirely.** Verified: `GET /api/v1/products` *requires*
       `canonicalKey` and returns a single `ProductResponse`, not a page. There
       is no node-children endpoint. The app currently renders both screens from
