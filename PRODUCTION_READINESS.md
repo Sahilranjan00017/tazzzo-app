@@ -34,6 +34,14 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-10 PUBLISHED HOME CONTENT — product-read 429 handling (PR #24, review M1). A 429 from
+  `GET /v1/products/{id}` used to fail one rail and carry on with the next, up to 400 charged reads per cold start. Now
+  it ends the sweep at once and opens a window for all product reads (`Retry-After`, capped 120 s, floor 60 s) that
+  refuses a pull (toast) and blocks foreground re-reads and PIN changes; failed ids are not re-asked for 60 s; a sweep
+  reads at most 120 distinct cards (rest carried to the next sweep). Added 4 holder tests and fixed a vacuous
+  assertion. NOT verified locally: no Android SDK/Xcode in the sandbox, so compile and tests rely on CI. Follow-up:
+  `/v1/products:batch` (BACKEND_CONTRACTS §7).
+
 - 2026-10-09 PUBLISHED HOME CONTENT — grid tiles named by id (PR #24). The
   taxonomy walk (up to 13 admission-charged reads per resolution) is replaced
   by ONE `GET /v1/categories/{id}` per grid id (backend #109): sequential, ≤ 12

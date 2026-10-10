@@ -43,9 +43,10 @@ sealed interface HomeContentState {
  * read yet, when the last success is older than [freshMs] (the backend advertises `max-age=60`), or after a failure once
  * its backoff has passed: [retryBaseMs], doubling per consecutive failure, capped at [freshMs], and never sooner than a
  * 429's `Retry-After` (itself capped at [RetryPolicy.MAX_RATE_LIMIT_WAIT_SECONDS], as everywhere in the app).
- * [refresh] (pull-to-refresh) reads now whatever the age — except inside a 429 window, which is announced on
- * [pullRefused] — and re-reads every rail card older than [pullCardMinAgeMs], so repeated pulls cost at most one full
- * card sweep per [pullCardMinAgeMs]. A stale copy stays on screen while it is re-read and survives a failed re-read.
+ * [refresh] (pull-to-refresh) reads now whatever the age — except inside a 429 window (the content call's, which lasts
+ * its `Retry-After` but at least [retryBaseMs] = 10 s; or the product reads', below), announced on [pullRefused] — and
+ * re-reads every rail card older than [pullCardMinAgeMs], so repeated pulls cost at most one full card sweep per
+ * [pullCardMinAgeMs]. A stale copy stays on screen while it is re-read and survives a failed re-read.
  *
  * **Rails.** Cards come from the same per-product read the PDP uses (`GET /v1/products/{id}`, PIN-aware, 404 = not
  * shown) with bounded parallelism, through a per-PIN card cache: a re-read keeps every rail on screen, renders ids it
@@ -53,6 +54,15 @@ sealed interface HomeContentState {
  * cannot stay stale for the life of the process). A PIN change drops the cache (prices and serviceability are
  * PIN-aware) and shows the rails loading again — old cards would describe the wrong PIN. A rail whose products are all
  * missing is simply absent; nothing is filled in.
+ *
+ * **Product-read budget (every card read is admission-charged).** A sweep reads at most [maxCardReads] distinct ids
+ * (default 120; the Home can publish 20 blocks x 20 ids), in published order; the rest are read by the next sweep, not
+ * penalised, and a rail with nothing to show yet stays loading until then. The first failed read of a sweep ends that
+ * batch, and the ids it did not get are not asked again for [cardFailureMs] (60 s, like [CategoryNodeResolver]), so
+ * another rail does not re-ask them. A **429** from a product read additionally ends the whole sweep at once and opens
+ * ONE window for ALL product reads for its `Retry-After` (capped at [RetryPolicy.MAX_RATE_LIMIT_WAIT_SECONDS]), never
+ * under [cardFailureMs]: inside it a pull is refused (announced on [pullRefused]) and a re-read or a PIN change sends no
+ * product read at all. Rails that already show cards stay on screen; the others show nothing.
  *
  * **Grids.** Published node ids are named through [resolveNodes] (see [CategoryNodeResolver]); an id that cannot be
  * named is a skipped tile, never a skipped grid. Grids on screen stay while a re-read resolves again; a node named
@@ -70,7 +80,9 @@ class HomeContentHolder(
     private val resolveNodes: suspend (Collection<String>) -> Map<String, CatalogNode?> = { emptyMap() },
     private val retryBaseMs: Long = 10_000L,
     private val cardFreshMs: Long = 300_000L,
-    private val pullCardMinAgeMs: Long = 30_000L
+    private val pullCardMinAgeMs: Long = 30_000L,
+    private val maxCardReads: Int = DEFAULT_MAX_CARD_READS,
+    private val cardFailureMs: Long = 60_000L
 ) {
     private val _state = MutableStateFlow<HomeContentState>(HomeContentState.Idle)
     val state: StateFlow<HomeContentState> = _state
@@ -97,7 +109,9 @@ class HomeContentHolder(
     private var succeededAtMs = 0L          // 0 = never
     private var failures = 0                // consecutive
     private var retryNotBeforeMs = 0L
-    private var rateLimitedUntilMs = 0L
+    private var rateLimitedUntilMs = 0L     // the content call's 429 window
+    private var cardsBlockedUntilMs = 0L    // a product read's 429 window: no product read at all until then
+    private val cardFailedUntil = HashMap<String, Long>()   // ids whose read failed (or was cut short): not re-asked until then
 
     private class Card(val product: CatalogProduct?, val atMs: Long)
     private val cards = HashMap<String, Card>()
@@ -110,9 +124,9 @@ class HomeContentHolder(
     /** Read if due (see the class comment); a no-op while loading, while fresh, or inside a failure's backoff. */
     fun ensure() = command { if (!loading && due(nowMs())) start() }
 
-    /** Pull-to-refresh: read now and re-read every card; joins a read already in flight; nothing inside a 429 window. */
+    /** Pull-to-refresh: read now and re-read every card; joins a read already in flight; nothing inside a 429 window (content or cards). */
     fun refresh() = command {
-        if (nowMs() < rateLimitedUntilMs) { _pullRefused.tryEmit(CatalogFailure.RateLimited(null)); return@command }
+        if (nowMs() < maxOf(rateLimitedUntilMs, cardsBlockedUntilMs)) { _pullRefused.tryEmit(CatalogFailure.RateLimited(null)); return@command }
         customerWaiting = true
         _refreshing.value = true
         if (!loading) start()
@@ -185,6 +199,9 @@ class HomeContentHolder(
         val rails = content.blocks.filterIsInstance<HomeBlock.ProductRail>()
         cards.keys.retainAll(rails.flatMapTo(HashSet()) { it.productIds })
         val startedAt = nowMs()
+        cardFailedUntil.entries.removeAll { it.value <= startedAt }
+        if (pinChanged) cardFailedUntil.clear()     // a failure for the old PIN says nothing about the new one (a 429 window stays)
+        val blocked = startedAt < cardsBlockedUntilMs
         val maxAge = if (refetchAll) pullCardMinAgeMs else cardFreshMs
         fun needsRead(id: String): Boolean = cards[id].let { it == null || startedAt - it.atMs >= maxAge }
 
@@ -193,15 +210,21 @@ class HomeContentHolder(
             r.blockId to when {
                 r.productIds.all { it in cards } -> verdict(r)                                            // known: show now
                 !pinChanged && previous[r.blockId] is PagedState.Content -> previous.getValue(r.blockId)   // keep while reading
+                blocked -> PagedState.FirstPageFailed(CatalogFailure.RateLimited(null))                    // shows nothing, not a skeleton
                 else -> PagedState.LoadingFirst
             }
         }
-        if (rails.none { r -> r.productIds.any(::needsRead) }) return
+        if (blocked || rails.none { r -> r.productIds.any(::needsRead) }) return
         railJob = scope.launch {
             val gate = Semaphore(parallelism)
             val read = HashSet<String>()
+            var budget = maxCardReads
+            var limited: CatalogFailure? = null     // the 429 that ended this sweep
             for (rail in rails) {
-                val ids = rail.productIds.filter { it !in read && needsRead(it) }
+                val wanted = rail.productIds.distinct().filter { it !in read && needsRead(it) }
+                val remembered = wanted.any { it in cardFailedUntil }
+                val ids = if (limited != null) emptyList() else wanted.filter { it !in cardFailedUntil }.take(budget.coerceAtLeast(0))
+                budget -= ids.size
                 val got: List<Pair<String, CatalogProduct?>>? = if (ids.isEmpty()) emptyList() else try {
                     coroutineScope {
                         ids.map { id ->
@@ -217,16 +240,30 @@ class HomeContentHolder(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
+                    if (gen == railGen) {
+                        val failure = e.toCatalogFailure()
+                        val t = nowMs()
+                        if (failure is CatalogFailure.RateLimited) {
+                            limited = failure
+                            cardsBlockedUntilMs = t + maxOf(cardFailureMs, RetryPolicy.waitSeconds(failure, 1) * 1000L)
+                        }
+                        val until = if (failure is CatalogFailure.RateLimited) cardsBlockedUntilMs else t + cardFailureMs
+                        for (id in ids) if (id !in cards) cardFailedUntil[id] = until
+                    }
                     null
                 }
                 if (gen != railGen) return@launch          // superseded (PIN change or a newer content load)
                 val shown = _rails.value[rail.blockId]
-                val v = if (got == null) {
-                    // a failed re-read keeps the rail already on screen; with nothing on screen the rail fails (not the Home)
-                    if (shown is PagedState.Content) shown else PagedState.FirstPageFailed(CatalogFailure.Unknown)
-                } else {
-                    read += ids
-                    verdict(rail)
+                val failure: CatalogFailure? = limited ?: if (got == null || remembered) CatalogFailure.Unknown else null
+                if (got != null) read += ids
+                val v: PagedState<CatalogProduct> = when {
+                    rail.productIds.all { it in cards } -> verdict(rail)
+                    // a failed read keeps the rail already on screen; with nothing on screen the rail fails (not the Home)
+                    failure != null -> if (shown is PagedState.Content) shown else PagedState.FirstPageFailed(failure)
+                    // cut short by the budget only: what is known stays up, the rest comes with the next sweep
+                    shown is PagedState.Content -> shown
+                    else -> rail.productIds.mapNotNull { cards[it]?.product }
+                        .let { items -> if (items.isEmpty()) PagedState.LoadingFirst else PagedState.Content(items, hasMore = false) }
                 }
                 _rails.value = _rails.value + (rail.blockId to v)
             }
@@ -236,6 +273,11 @@ class HomeContentHolder(
     private fun verdict(rail: HomeBlock.ProductRail): PagedState<CatalogProduct> {
         val items = rail.productIds.mapNotNull { cards[it]?.product }
         return if (items.isEmpty()) PagedState.Empty else PagedState.Content(items, hasMore = false)
+    }
+
+    companion object {
+        /** Distinct product reads per rail sweep: six full rails; the rest wait for the next sweep. */
+        const val DEFAULT_MAX_CARD_READS = 120
     }
 
     private fun resolveGrids(content: HomeContent) {

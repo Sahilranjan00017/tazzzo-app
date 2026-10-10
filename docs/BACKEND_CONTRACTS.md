@@ -67,6 +67,13 @@ Every product payload must include:
   the app has not got, or cards older than 5 min, are read again; a pull re-reads every card; a PIN change reloads the
   rails (old cards would describe the wrong PIN). A pull re-reads only cards older than 30 s, so repeated pulls cost at
   most one card sweep per 30 s; a pull that supersedes a sweep in flight keeps the cards already read.
+  Every product read is admission-charged, so a sweep is bounded: at most 120 distinct card reads (ids beyond that are
+  read by the next sweep, not penalised; rails already showing cards stay up). A failed batch ends there and its ids are
+  not re-asked by another rail or a pull for 60 s. A **429** from a product read stops the whole sweep at once and opens
+  ONE window for ALL product reads for `Retry-After` (`RetryPolicy`, capped at 120 s, never under 60 s, as the node
+  resolver); inside it a pull is refused with the transient toast, and a foreground re-read or PIN change sends no product
+  read (rails with no cards show nothing). **Follow-up, not in this PR:** replace the per-id reads with
+  `/v1/products:batch` (one charged read per rail) and drop the budget.
 - Product ids: the platform grammar `TZP-[A-Za-z0-9-]{1,40}` (backend `ContentBlock.PRODUCT_ID`, CMS, storefront),
   numeric ids included. The app validates rail ids, `product:` links, the `GET /v1/products/{id}` path and the cart
   `skuId` (`PUT` / `DELETE /v1/customer/cart/items/{skuId}`, backend `CartController` since tazzzo-backend #110) with

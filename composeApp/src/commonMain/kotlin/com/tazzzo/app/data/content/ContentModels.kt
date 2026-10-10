@@ -8,8 +8,9 @@ import kotlinx.serialization.Serializable
  * `GET /v1/content/home`: the CMS-published Home blocks for the APP channel, in the backend's display order. The app
  * renders exactly what the backend publishes and nothing it does not: a banner without an https image is not shown, a
  * link outside the closed grammar makes the banner untappable, an unknown block type is skipped, and ids are capped so a
- * CMS mistake cannot fan out into hundreds of product requests. A banner's optional `desktopImageUrl` is for the desktop
- * website only: the app ignores it (the shared Json drops unknown fields) and always renders `imageUrl`.
+ * CMS mistake cannot fan out into hundreds of product requests: a rail sweep reads at most 120 distinct cards (the rest
+ * on the next sweep) and stops at the first 429 (see `HomeContentHolder`). A banner's optional `desktopImageUrl` is for
+ * the desktop website only: the app ignores it (the shared Json drops unknown fields) and always renders `imageUrl`.
  */
 
 /** Wire shape of the running backend (`content/PublicContentController`). Unknown fields are ignored by the shared Json. */

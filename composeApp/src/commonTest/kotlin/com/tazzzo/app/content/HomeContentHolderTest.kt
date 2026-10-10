@@ -187,14 +187,17 @@ class HomeContentHolderTest {
     }
 
     @Test fun aStaleCopyStaysOnScreenWhileItIsReReadAndSurvivesAFailedReRead() = runTest {
-        var fail = false
-        val h = HomeContentHolder(backgroundScope, { if (fail) throw ApiException(ApiError.Network) else rail }, { id, _ -> detail(id) }, pin, { now })
+        var fail = false; var loads = 0
+        var gate: CompletableDeferred<Unit>? = null
+        val h = HomeContentHolder(backgroundScope, { loads++; gate?.await(); if (fail) throw ApiException(ApiError.Network) else rail }, { id, _ -> detail(id) }, pin, { now })
         h.ensure(); runCurrent()
         assertIs<HomeContentState.Content>(h.state.value)
         now += 61_000; fail = true
-        h.ensure()
+        val inFlight = CompletableDeferred<Unit>(); gate = inFlight
+        h.ensure(); runCurrent()                                        // the re-read is now suspended on the gate
+        assertEquals(2, loads, "the re-read is really in flight")
         assertIs<HomeContentState.Content>(h.state.value, "the blocks do not blank out while the re-read is in flight")
-        runCurrent()
+        inFlight.complete(Unit); runCurrent()
         assertIs<HomeContentState.Content>(h.state.value, "a failed re-read keeps the published copy")
         assertIs<PagedState.Content<CatalogProduct>>(h.rails.value["R1"], "and its rails")
     }
@@ -321,5 +324,83 @@ class HomeContentHolderTest {
         assertEquals(PagedState.LoadingFirst, h.rails.value["R1"])
         gate.complete(Unit); runCurrent()
         assertIs<PagedState.Content<CatalogProduct>>(h.rails.value["R1"])
+    }
+
+    // ---- M1: product reads are admission-charged; a 429 must not fan out into hundreds of retries ----
+
+    private fun limited429() = ApiException(ApiError.Http(429, "RATE_LIMITED", null, true, 30))
+    private fun threeRails() = HomeContent(listOf(
+        HomeBlock.ProductRail("R1", "a", listOf("TZP-1", "TZP-2", "TZP-3")),
+        HomeBlock.ProductRail("R2", "b", listOf("TZP-4", "TZP-5", "TZP-6")),
+        HomeBlock.ProductRail("R3", "c", listOf("TZP-7", "TZP-8", "TZP-9"))
+    ))
+
+    // Mutation: make `ids` ignore `limited` in loadRails (keep reading the remaining rails) -> asked grows past TZP-3.
+    @Test fun a429OnTheThirdCardStopsTheWholeSweepAndKeepsTheCardsAlreadyRead() = runTest {
+        val asked = mutableListOf<String>()
+        val h = HomeContentHolder(backgroundScope, { threeRails() },
+            { id, _ -> asked += id; if (id == "TZP-3") throw limited429() else detail(id) }, pin, { now }, parallelism = 1)
+        h.ensure(); runCurrent()
+        assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), asked, "nothing is asked after the 429")
+        assertIs<HomeContentState.Content>(h.state.value, "a rail failure never fails the Home")
+        for (r in listOf("R1", "R2", "R3")) assertIs<PagedState.FirstPageFailed>(h.rails.value[r], "$r shows nothing")
+    }
+
+    // Mutation: drop `cardsBlockedUntilMs` from refresh() -> the pull is not refused; drop `blocked` in loadRails -> the PIN change reads.
+    // Mutation: use only `retryAfterSeconds` (no 60 s floor) -> the read at +30 s below would not be refused.
+    @Test fun theWindowBlocksAPullAndAPinChangeAndReadsResumeAfterIt() = runTest {
+        val asked = mutableListOf<String>(); var loads = 0; var limited = true
+        val h = HomeContentHolder(backgroundScope, { loads++; threeRails() },
+            { id, _ -> asked += id; if (limited && id == "TZP-3") throw limited429() else detail(id) }, pin, { now }, parallelism = 1)
+        val refused = mutableListOf<CatalogFailure>()
+        backgroundScope.launch { h.pullRefused.collect { refused += it } }
+        h.ensure(); runCurrent()
+        assertEquals(3, asked.size); assertEquals(1, loads)
+        now += 30_000                                                   // Retry-After was 30 s; the floor is 60 s
+        h.refresh(); runCurrent()
+        assertEquals(1, refused.size); assertIs<CatalogFailure.RateLimited>(refused.single())
+        assertEquals(1, loads, "a refused pull does not even re-read the content"); assertEquals(3, asked.size); assertEquals(false, h.refreshing.value)
+        pin.value = Pincode.parse("560001")!!; h.onPinChanged(); runCurrent()
+        assertEquals(3, asked.size, "a PIN change inside the window sends no product read")
+        assertIs<PagedState.FirstPageFailed>(h.rails.value["R1"], "and shows nothing rather than a skeleton that never ends")
+        now += 29_999; h.refresh(); runCurrent()
+        assertEquals(2, refused.size); assertEquals(3, asked.size, "still inside the window, 1 ms before its end")
+        limited = false; now += 1; h.refresh(); runCurrent()
+        assertEquals(2, refused.size); assertEquals(2, loads)
+        assertEquals((1..9).map { "TZP-$it" }.toSet(), asked.toSet(), "reads resume once the window has passed")
+        assertEquals(3, (h.rails.value["R3"] as PagedState.Content).items.size)
+    }
+
+    // Mutation: remove `cardFailedUntil` (the memo) -> TZP-2 is asked a second time by R2, and again by the pull.
+    @Test fun aFailedIdIsRememberedSoAnotherRailAndAPullDoNotReAskIt() = runTest {
+        val asked = mutableListOf<String>()
+        val h = HomeContentHolder(backgroundScope, {
+            HomeContent(listOf(HomeBlock.ProductRail("R1", "a", listOf("TZP-1", "TZP-2")), HomeBlock.ProductRail("R2", "b", listOf("TZP-2", "TZP-3"))))
+        }, { id, _ -> asked += id; if (id == "TZP-2") throw ApiException(ApiError.Network) else detail(id) }, pin, { now }, parallelism = 1)
+        h.ensure(); runCurrent()
+        assertEquals(listOf("TZP-1", "TZP-2", "TZP-3"), asked, "R2 does not re-ask TZP-2 but still reads its own TZP-3")
+        assertIs<PagedState.FirstPageFailed>(h.rails.value["R1"]); assertIs<PagedState.FirstPageFailed>(h.rails.value["R2"])
+        now += 10_000; h.refresh(); runCurrent()
+        assertEquals(3, asked.size, "a pull inside the 60 s memo does not re-ask it")
+        now += 50_000; h.refresh(); runCurrent()
+        assertEquals(6, asked.size, "after 60 s it is asked again (once), and the stale cards with it")
+        assertEquals(2, asked.count { it == "TZP-2" })
+    }
+
+    // Mutation: drop `.take(budget)` -> the first sweep asks all eight; drop the `read`/needsRead carry -> the second sweep re-asks 1..5.
+    @Test fun aSweepIsBoundedByTheBudgetAndTheRestIsReadByTheNextSweepWithoutPenalty() = runTest {
+        val asked = mutableListOf<String>()
+        val two = HomeContent(listOf(
+            HomeBlock.ProductRail("R1", "a", listOf("TZP-1", "TZP-2", "TZP-3", "TZP-4")),
+            HomeBlock.ProductRail("R2", "b", listOf("TZP-5", "TZP-6", "TZP-7", "TZP-8"))
+        ))
+        val h = HomeContentHolder(backgroundScope, { two }, { id, _ -> asked += id; detail(id) }, pin, { now }, parallelism = 1, maxCardReads = 5)
+        h.ensure(); runCurrent()
+        assertEquals((1..5).map { "TZP-$it" }, asked, "at most five distinct reads in the first sweep")
+        assertEquals(4, (h.rails.value["R1"] as PagedState.Content).items.size)
+        assertEquals(listOf("TZP-5"), (h.rails.value["R2"] as PagedState.Content).items.map { it.skuId }, "a rail with some cards shows them meanwhile")
+        asked.clear(); now += 61_000; h.ensure(); runCurrent()
+        assertEquals(listOf("TZP-6", "TZP-7", "TZP-8"), asked, "the next sweep reads exactly what was left over")
+        assertEquals(4, (h.rails.value["R2"] as PagedState.Content).items.size)
     }
 }
