@@ -49,6 +49,11 @@ fun OrderFailure.view(): FailureView = when (this) {
     // Definitive: no order exists and this quote is dead. Only a NEW quote — never "Check order", never the same quote.
     OrderFailure.PayableChanged -> PAYABLE_CHANGED_VIEW
     OrderFailure.CartAlreadyPurchased -> FailureView("This cart was already ordered", "Check your cart for what is left.", listOf(CheckoutAction.GoToCart))
+    OrderFailure.SlotUnavailable -> FailureView("That delivery slot isn't available", "Review checkout and choose another slot.", listOf(CheckoutAction.ReviewCheckout))
+    OrderFailure.StaleVersion -> FailureView("This order changed", "Review checkout to see the latest.", listOf(CheckoutAction.ReviewCheckout))
+    OrderFailure.InvalidTransition -> FailureView("That change isn't possible now", "Nothing was changed.", listOf(CheckoutAction.GoToCart))
+    OrderFailure.NotCancellable -> FailureView("This order can't be cancelled", "Nothing was changed.", listOf(CheckoutAction.GoToCart))
+    OrderFailure.CancellationWindowClosed -> FailureView("The cancellation window has closed", "Nothing was changed.", listOf(CheckoutAction.GoToCart))
     OrderFailure.ClientBug -> FailureView("Something went wrong", "Please update the app and try again.", listOf(CheckoutAction.GoToCart))
     OrderFailure.Unavailable, OrderFailure.Server, OrderFailure.Network, OrderFailure.Timeout, OrderFailure.Unknown ->
         FailureView("We couldn't confirm your order", "Your order may have been placed. Check before trying anything else.", listOf(CheckoutAction.CheckOrder))

@@ -58,6 +58,22 @@ so no existing call site breaks). `OrderRepository.placeOrder` accepts it and
 **Backend impact:** `POST /orders/v1/orders` already receives `payment`; the
 order payload it returns must echo it back as `payment: "COD" | "UPI" | "CARD"`.
 
+## Order error contract (`/v1/customer/orders`)
+
+Verified against backend main `5caee8ec` (`OrderExceptionHandler.java`, `docs/api/v1/openapi.yaml`). The app maps every
+documented code to a typed `OrderFailure`; none of these is `Unknown`/ambiguous (no order exists, nothing was changed).
+
+| Status | Code | `OrderFailure` | Copy path |
+|---|---|---|---|
+| 409 | `DELIVERY_SLOT_UNAVAILABLE` | `SlotUnavailable` | review checkout, pick another slot |
+| 409 | `STALE_VERSION` | `StaleVersion` | review checkout |
+| 409 | `INVALID_TRANSITION` | `InvalidTransition` | neutral, nothing changed |
+| 409 | `ORDER_NOT_CANCELLABLE` | `NotCancellable` | neutral (no cancel path in the app yet) |
+| 409 | `CANCELLATION_WINDOW_CLOSED` | `CancellationWindowClosed` | neutral (no cancel path in the app yet) |
+| 413 | `PAYLOAD_TOO_LARGE` (flat `request_id` envelope, 64 KiB bound) | `ClientBug` | same as 400/415 |
+
+An unrecognised 409 code still maps to `Unknown` (ambiguous: pending-order recovery).
+
 ## Later phases (checkout — do not build yet)
 
 - `POST /carts/v1/validate` — revalidate lines (price drift, stock) before checkout.

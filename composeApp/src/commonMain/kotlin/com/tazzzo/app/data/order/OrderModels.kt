@@ -96,7 +96,20 @@ sealed interface OrderFailure {
     data object PayableChanged : OrderFailure
     /** 409 CART_VERSION_ALREADY_PURCHASED — reconciled against the original quote before it is reported. */
     data object CartAlreadyPurchased : OrderFailure
-    /** 400 / 415: the app sent something the contract forbids (including an unsupported payment method). */
+    /**
+     * 409 DELIVERY_SLOT_UNAVAILABLE: the chosen slot is full, closed or unknown; nothing was written. Definitive: review checkout
+     * (a new quote) and pick another slot.
+     */
+    data object SlotUnavailable : OrderFailure
+    /** 409 STALE_VERSION: the order changed under the caller; nothing was applied. Definitive: reload and review. */
+    data object StaleVersion : OrderFailure
+    /** 409 INVALID_TRANSITION: the order's status does not allow that change. Definitive; nothing was changed. */
+    data object InvalidTransition : OrderFailure
+    /** 409 ORDER_NOT_CANCELLABLE: the order's status no longer allows cancellation. Definitive (no cancel path in the app yet). */
+    data object NotCancellable : OrderFailure
+    /** 409 CANCELLATION_WINDOW_CLOSED: the customer cancellation window has passed or is closed. Definitive (no cancel path yet). */
+    data object CancellationWindowClosed : OrderFailure
+    /** 400 / 413 / 415: the app sent something the contract forbids (including an unsupported payment method or an oversized body). */
     data object ClientBug : OrderFailure
 
     // ---- ambiguous: the order may or may not exist ----
@@ -124,7 +137,7 @@ fun Throwable.toOrderFailure(): OrderFailure {
             401 -> OrderFailure.Unauthenticated
             404 -> OrderFailure.NotFound
             410 -> OrderFailure.QuoteExpired
-            400, 415 -> OrderFailure.ClientBug
+            400, 413, 415 -> OrderFailure.ClientBug
             409 -> when (api.code) {
                 "ADDRESS_CHANGED" -> OrderFailure.AddressChanged
                 "NOT_SERVICEABLE" -> OrderFailure.NotServiceable
@@ -134,6 +147,11 @@ fun Throwable.toOrderFailure(): OrderFailure {
                 "RESERVATION_EXPIRED" -> OrderFailure.ReservationExpired
                 "CART_VERSION_ALREADY_PURCHASED" -> OrderFailure.CartAlreadyPurchased
                 "PAYABLE_CHANGED" -> OrderFailure.PayableChanged
+                "DELIVERY_SLOT_UNAVAILABLE" -> OrderFailure.SlotUnavailable
+                "STALE_VERSION" -> OrderFailure.StaleVersion
+                "INVALID_TRANSITION" -> OrderFailure.InvalidTransition
+                "ORDER_NOT_CANCELLABLE" -> OrderFailure.NotCancellable
+                "CANCELLATION_WINDOW_CLOSED" -> OrderFailure.CancellationWindowClosed
                 else -> OrderFailure.Unknown
             }
             503 -> OrderFailure.Unavailable

@@ -25,7 +25,8 @@ class OrderPresentationTest {
     private val allFailures = listOf(
         OrderFailure.NotLaunched, OrderFailure.QuoteNotReady, OrderFailure.Unauthenticated, OrderFailure.QuoteExpired, OrderFailure.NotFound, OrderFailure.AddressChanged,
         OrderFailure.NotServiceable, OrderFailure.PriceChanged, OrderFailure.ProductUnavailable, OrderFailure.StockUnavailable, OrderFailure.ReservationExpired,
-        OrderFailure.PayableChanged, OrderFailure.CartAlreadyPurchased, OrderFailure.ClientBug, OrderFailure.Unavailable, OrderFailure.Server, OrderFailure.Network, OrderFailure.Timeout, OrderFailure.Unknown
+        OrderFailure.PayableChanged, OrderFailure.CartAlreadyPurchased, OrderFailure.ClientBug, OrderFailure.Unavailable, OrderFailure.Server, OrderFailure.Network, OrderFailure.Timeout, OrderFailure.Unknown,
+        OrderFailure.SlotUnavailable, OrderFailure.StaleVersion, OrderFailure.InvalidTransition, OrderFailure.NotCancellable, OrderFailure.CancellationWindowClosed
     )
 
     // ---- COD wording -----------------------------------------------------------------------------------------------
