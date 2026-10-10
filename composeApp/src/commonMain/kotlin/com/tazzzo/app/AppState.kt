@@ -33,8 +33,14 @@ sealed interface Screen {
     data object ClubCheckout : Screen
     /** Permanent receipt + service centre for one order. */
     data class OrderDetail(val orderId: String) : Screen
-    /** Tazzzo Genie: the voice-ordering surface (truthful "coming soon" until a real capability exists). */
+    /** Tazzzo Genie: the voice-ordering surface (truthful "coming soon" until a real capability exists). MOCK-only entry. */
     data object Voice : Screen
+    /** A legal document (`terms` | `privacy`), rendered as plain text from `GET /v1/content/legal/{slug}`. Works signed out. */
+    data class Legal(val slug: String) : Screen
+    /** One of the customer's support requests: its message thread and the reply box. */
+    data class SupportCase(val caseId: String) : Screen
+    /** "Contact us": a new support request, optionally about one order. */
+    data class SupportNew(val orderId: String? = null) : Screen
 }
 
 /**
@@ -70,6 +76,9 @@ val Screen.stateKey: String
         is Screen.ClubCheckout -> "clubCheckout"
         is Screen.OrderDetail -> "order:$orderId"
         is Screen.Voice -> "voice"
+        is Screen.Legal -> "legal:$slug"
+        is Screen.SupportCase -> "support:$caseId"
+        is Screen.SupportNew -> "supportNew:${orderId ?: ""}"
     }
 
 /** Which way the customer is travelling. Drives the transition, nothing else. */

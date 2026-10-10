@@ -31,8 +31,26 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 | Persistence (cart/session/addresses/searches) | ✅ | ✅ 11 unit tests | ✅ 8 process-death tests | ✅ restore notice | ✅ id+qty only | n/a | 🟡 mock-backed |
 | Analytics event boundary | ✅ 13 events | 🟡 log-verified | ✅ shared code | n/a | ✅ vendor-neutral | n/a | 🟡 sink pending vendor |
 | Voice commerce | teaser only | n/a | ✅ renders | n/a | ❌ | ❌ | ❌ by design |
+| REMOTE release: COD order placement (release-enabled 2026-10-10) | ✅ | ✅ unit (store/gate/data source) | ❌ not run on device | ✅ 409/ambiguous recovery | ✅ | ❌ | 🟡 needs device run |
+| REMOTE release: order history + detail | ✅ | ✅ unit (paging/reset/presentation) | ❌ not run on device | ✅ empty/failure/signed-out | ✅ | ❌ | 🟡 needs device run |
+| REMOTE release: product search (`/v1/search`) | ✅ | ✅ unit (grammar/debounce/PIN/429) | ❌ not run on device | ✅ loading/empty/error/429 | ✅ | 🟡 field labelled | 🟡 needs device run |
+| REMOTE release: profile / help & support / legal | ✅ | ✅ unit (data sources/rules/presentation) | ❌ not run on device | ✅ | ✅ (legal endpoint pending merge) | 🟡 | 🟡 needs device run + published CMS content |
 
 ## Verification log (never remove a row — record how each was verified)
+
+- 2026-10-10 PRODUCT-CLOSURE RELEASE PATH (branches `feature/app-orders-checkout-release`, `feature/app-search-release`,
+  `feature/app-account-help-legal-nav`). REMOTE (every release build) now: places real COD orders (capability on, debug
+  opt-in removed, iOS included), lists real order history (paging, empty/failure/signed-out states) and order detail
+  with the lifecycle statuses; real product search on `/v1/search`; Profile identity from `/v1/customer/profile` (display
+  name editable); Help & support with FAQs, app-config contacts (tel:/mailto: only for strictly validated values), the
+  customer's support requests (list, thread, reply, new request, "Contact us about this order"); in-app Terms/Privacy;
+  no Coins/Genie rows; toast host at the App root; Android/iOS back on the OTP step returns to the phone step; iOS
+  edge-swipe back wired through Compose Multiplatform's `BackHandler`. Verified LOCALLY (scratch JVM harness, Kotlin
+  2.2.20 + kotlinx/ktor JVM jars, NOT the project build): the non-Compose commonMain subset type-checks and the
+  commonTest subset that compiles without Compose UI passes (1,113 tests). NOT verified locally: any Compose UI file,
+  Android/iOS compilation, the Gradle build — CI is the gate. NOT run on any device, emulator or simulator; no
+  screenshots. Needs on-device checks before launch: place order → confirmation → detail; history paging; search
+  debounce/keyboard; tel:/mailto: launch; iOS swipe-back; OTP back; toast placement over pushed screens.
 
 - 2026-10-10 PUBLISHED HOME CONTENT — product-read 429 handling (PR #24, review M1). A 429 from
   `GET /v1/products/{id}` used to fail one rail and carry on with the next, up to 400 charged reads per cold start. Now

@@ -117,10 +117,12 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
 - [x] Banner carousel — HorizontalPager landed 2026-08-30 (fixes opaque-
       crossfade ghosting AND adds swipe).
 - [ ] Brand filter as multi-select sheet ("Brand ⌄" pattern) once catalogue grows.
-- [ ] Terms of Service & Privacy Policy pages (legal content required before
-      launch — link affordance removed until real pages exist). ← arguably P0 at launch.
+- [x] Terms of Service & Privacy Policy pages — 2026-10-10: in-app Legal screen on
+      `GET /v1/content/legal/{slug}` (plain text; "This document isn't available yet" on 404),
+      linked from Login, Profile and About. Content must be PUBLISHED in the CMS before launch.
 - [ ] Splash warm-start: prefetch home data during the logo beat.
-- [ ] OfflineBanner is built but not wired. Blocked on THREE things, recorded
+- [x] OfflineBanner — DELETED 2026-10-10 (dead code; per-screen failure states remain the
+      honest signal). The original blockers, kept for the record: OfflineBanner was built but not wired. Blocked on THREE things, recorded
       2026-09-01: (a) no connectivity source exists — needs an expect/actual
       ConnectivityObserver over ConnectivityManager / NWPathMonitor, verified on
       physical devices; (b) a placement decision on frozen screens, which is the

@@ -41,6 +41,7 @@ object OrderCopy {
     const val SECTION_TIMELINE = "Status"
     const val SLOT_LABEL = "Delivery slot"
     const val PLACED_LABEL = "Placed"
+    const val NEED_HELP = "Contact us about this order"
     /** A legacy order without the money snapshot: never ₹0, never derived. */
     const val AMOUNT_UNAVAILABLE = "Amount details unavailable"
     const val SECTION_ITEMS = "Items"

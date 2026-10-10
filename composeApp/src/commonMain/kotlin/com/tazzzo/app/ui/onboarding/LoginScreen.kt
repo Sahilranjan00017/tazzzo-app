@@ -2,6 +2,7 @@ package com.tazzzo.app.ui.onboarding
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,7 +52,10 @@ import tazzzo.resources.bg_auth_phone
 object LoginCopy {
     const val PHONE_SUPPORT = "We’ll send you a 6-digit OTP\nto get started."
     const val OTP_SUPPORT = "We’ve sent a code to"
-    const val LEGAL = "By continuing, you agree to our\nTerms of Service and Privacy Policy."
+    const val LEGAL = "By continuing, you agree to our"
+    const val TERMS = "Terms of Service"
+    const val AND = "and"
+    const val PRIVACY = "Privacy Policy"
     const val DIAL_PREFIX = "+91"
 }
 
@@ -68,6 +72,9 @@ fun LoginScreen() {
         app.requestGuidedTourIfFirstTime()
         app.goHome()
     })
+    // System back (Android) / edge swipe (iOS) on the OTP step returns to the phone step, like the on-screen back arrow.
+    // Registered after the app-level handler, so it is the innermost one and wins while enabled.
+    com.tazzzo.app.PlatformBackHandler(enabled = flow.step == AuthStep.Otp, onBack = flow::changeNumber)
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // Short screens (≈570dp tall) get a tighter headline block so the form starts above the fold.
         val compact = maxHeight < 700.dp
@@ -122,12 +129,34 @@ fun LoginScreen() {
             AuthEntry(flow = flow, phoneCta = "Continue", otpCta = "", modifier = Modifier.widthIn(max = FORM_MAX_WIDTH).padding(horizontal = TazSpace.xxl))
 
             VSpace(TazSpace.md)
+            // The two documents open in-app (public endpoint: works before login), rendered as plain text.
             Text(
                 LoginCopy.LEGAL, fontSize = TazType.captionSize, lineHeight = TazType.captionLine, color = TazColors.TextTertiary,
                 textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = TazSpace.xxxl)
             )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = TazSpace.lg)) {
+                LegalLink(LoginCopy.TERMS) { app.navigate(com.tazzzo.app.Screen.Legal(com.tazzzo.app.data.content.LegalSlug.TERMS.path)) }
+                Text(LoginCopy.AND, fontSize = TazType.captionSize, color = TazColors.TextTertiary)
+                LegalLink(LoginCopy.PRIVACY) { app.navigate(com.tazzzo.app.Screen.Legal(com.tazzzo.app.data.content.LegalSlug.PRIVACY.path)) }
+            }
             Spacer(Modifier.height(TazSpace.xxl).navigationBarsPadding())
         }
+    }
+}
+
+/** A tappable legal document name in the login footer (a 44dp-tall touch target, underlined like a link). */
+@Composable
+private fun LegalLink(text: String, onClick: () -> Unit) {
+    Box(
+        Modifier.height(TazSize.touchTarget).clip(TazRadius.pill)
+            .tazPressable(onClick = onClick, pressScale = TazPress.compact, role = androidx.compose.ui.semantics.Role.Button)
+            .padding(horizontal = TazSpace.xs),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text, fontSize = TazType.captionSize, color = TazColors.BrandEditorial,
+            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+        )
     }
 }
 

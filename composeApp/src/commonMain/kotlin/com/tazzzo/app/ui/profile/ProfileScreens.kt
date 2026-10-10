@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -42,7 +45,10 @@ import com.tazzzo.app.HomeTab
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.config.appVersionLabel
+import com.tazzzo.app.data.account.NameSave
+import com.tazzzo.app.data.account.ProfileState
 import com.tazzzo.app.data.address.BookState
+import com.tazzzo.app.data.content.LegalSlug
 import com.tazzzo.app.data.repository.ServiceLocator
 import com.tazzzo.app.theme.TazColors
 import com.tazzzo.app.theme.TazIcons
@@ -63,8 +69,8 @@ import com.tazzzo.app.ui.interaction.tazPressable
 import kotlinx.coroutines.launch
 
 /*
- * Profile, Help, About and Coins in REMOTE mode (UI-07). Every row is a real destination; every state is truthful (see
- * ProfileUiModel.kt for the capability audit). Logout goes through the existing `TazzzoAppState.logout()` (server revoke,
+ * Profile and About in REMOTE mode (UI-07). Every row is a real destination; every state is truthful (see ProfileUiModel.kt for
+ * the capability audit). Help & support and Legal live in ui/support. Logout goes through the existing `TazzzoAppState.logout()` (server revoke,
  * then unconditional local sign-out) behind an explicit confirmation sheet.
  */
 
@@ -76,40 +82,58 @@ fun RemoteProfileContent() {
     val app = LocalAppState.current
     val scope = rememberCoroutineScope()
     val book by ServiceLocator.addressBook.state.collectAsState()
+    val profileStore = ServiceLocator.profileStore
+    val profile by profileStore.state.collectAsState()
+    val save by profileStore.save.collectAsState()
     var confirmLogout by remember { mutableStateOf(false) }
+    var editingName by remember { mutableStateOf(false) }
+    LaunchedEffect(app.isAuthenticated) { if (app.isAuthenticated) profileStore.ensureLoaded() }
+    // A save that went through closes the editor.
+    LaunchedEffect(save) { if (save == NameSave.Saved) { editingName = false; profileStore.acknowledgeSave() } }
+    val loaded = (profile as? ProfileState.Loaded)?.profile
     ProfileLayout(
         signedIn = app.isAuthenticated,
-        identity = remoteIdentity(),
+        identity = remoteIdentity(loaded),
         addressCount = (book as? BookState.Loaded)?.addresses?.size,
         version = appVersionLabel(),
         confirmLogout = confirmLogout,
+        canEditName = loaded != null,
         actions = ProfileActions(
             login = { app.navigate(Screen.Login) },
             open = { e ->
                 when (e) {
                     ProfileEntry.ADDRESSES -> app.navigate(Screen.Addresses)
                     ProfileEntry.ORDERS -> app.homeTab = HomeTab.ORDERS
-                    ProfileEntry.COINS -> app.navigate(Screen.Coins)
                     ProfileEntry.HELP -> app.navigate(Screen.Help)
+                    ProfileEntry.TERMS -> app.navigate(Screen.Legal(LegalSlug.TERMS.path))
+                    ProfileEntry.PRIVACY -> app.navigate(Screen.Legal(LegalSlug.PRIVACY.path))
                     ProfileEntry.ABOUT -> app.navigate(Screen.About)
-                    ProfileEntry.GENIE -> app.navigate(Screen.Voice)
                 }
             },
             askLogout = { confirmLogout = true },
             cancelLogout = { confirmLogout = false },
-            confirmLogoutNow = { confirmLogout = false; scope.launch { app.logout() } }
+            confirmLogoutNow = { confirmLogout = false; scope.launch { app.logout() } },
+            editName = { profileStore.acknowledgeSave(); editingName = true }
         )
     )
+    if (editingName && loaded != null) {
+        NameEditor(
+            initial = loaded.displayName.orEmpty(), saving = save == NameSave.Saving, serverMessage = save.message(),
+            onSave = { profileStore.saveDisplayName(it) }, onDismiss = { editingName = false; profileStore.acknowledgeSave() }
+        )
+    }
 }
 
 class ProfileActions(
     val login: () -> Unit, val open: (ProfileEntry) -> Unit,
-    val askLogout: () -> Unit, val cancelLogout: () -> Unit, val confirmLogoutNow: () -> Unit
+    val askLogout: () -> Unit, val cancelLogout: () -> Unit, val confirmLogoutNow: () -> Unit,
+    val editName: () -> Unit = {}
 )
 
 @Composable
 fun ProfileLayout(
-    signedIn: Boolean, identity: ProfileIdentity, addressCount: Int?, version: String, confirmLogout: Boolean, actions: ProfileActions
+    signedIn: Boolean, identity: ProfileIdentity, addressCount: Int?, version: String, confirmLogout: Boolean, actions: ProfileActions,
+    canEditName: Boolean = false
 ) {
     Box(Modifier.fillMaxSize().background(TazColors.Cream).testTag("profile")) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = TazSpace.lg)) {
@@ -117,13 +141,13 @@ fun ProfileLayout(
                 EditorialText(listOf(plain(ProfileCopy.TITLE)), size = TazType.editorialHeadlineSize, lineHeight = TazType.editorialHeadlineLine, color = TazColors.BrandEditorial, textAlign = TextAlign.Start)
             }
             if (signedIn) {
-                IdentityCard(identity)
+                IdentityCard(identity, onEdit = if (canEditName) actions.editName else null)
                 Spacer(Modifier.height(TazSpace.xl))
                 SectionLabel(ProfileCopy.SECTION_ACCOUNT)
-                RowsCard(listOf(ProfileEntry.ADDRESSES, ProfileEntry.ORDERS, ProfileEntry.COINS), addressCount, actions.open)
+                RowsCard(ACCOUNT_ENTRIES, addressCount, actions.open)
                 Spacer(Modifier.height(TazSpace.xl))
                 SectionLabel(ProfileCopy.SECTION_MORE)
-                RowsCard(listOf(ProfileEntry.HELP, ProfileEntry.ABOUT, ProfileEntry.GENIE), addressCount, actions.open)
+                RowsCard(MORE_ENTRIES, addressCount, actions.open)
                 Spacer(Modifier.height(TazSpace.xl))
                 LogoutRow(onClick = actions.askLogout)
             } else {
@@ -140,9 +164,12 @@ fun ProfileLayout(
     }
 }
 
-/** Who is signed in. The REMOTE session carries no name/phone/email in the app, so the card says "Signed in" and nothing invented. */
+/**
+ * Who is signed in: the profile's display name and email when set (`GET /v1/customer/profile`), otherwise "Signed in". The
+ * contract has no phone number, so none is shown; nothing is invented. [onEdit] (when the profile loaded) adds "Edit name".
+ */
 @Composable
-private fun IdentityCard(identity: ProfileIdentity) {
+private fun IdentityCard(identity: ProfileIdentity, onEdit: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().clip(TazRadius.tile).background(TazColors.Surface).padding(TazSpace.lg), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(56.dp).clip(CircleShape).background(TazColors.GreenSoft), contentAlignment = Alignment.Center) {
             TazIcon(TazIcons.Profile, null, size = TazSize.iconLg, tint = TazColors.BrandEditorial)
@@ -152,8 +179,37 @@ private fun IdentityCard(identity: ProfileIdentity) {
             EditorialText(listOf(plain(identity.name ?: ProfileCopy.SIGNED_IN)), size = TazType.editorialSectionSize, lineHeight = TazType.editorialSectionLine, color = TazColors.TextPrimary, textAlign = TextAlign.Start)
             val line = listOfNotNull(identity.phone, identity.email).joinToString(" · ").ifBlank { ProfileCopy.SIGNED_IN_BODY }
             Text(line, fontSize = TazType.captionSize, lineHeight = TazType.captionLine, color = TazColors.TextSecondary)
+            if (onEdit != null) {
+                Spacer(Modifier.height(TazSpace.xs))
+                TextAction(if (identity.name == null) ProfileCopy.ADD_NAME else ProfileCopy.EDIT_NAME, onClick = onEdit)
+            }
         }
     }
+}
+
+/** Set or clear the display name. Checked locally with the backend's rule before PATCH; server outcomes are app-written copy. */
+@Composable
+private fun NameEditor(initial: String, saving: Boolean, serverMessage: String?, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf(initial) }
+    val problem = nameProblem(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TazColors.Surface,
+        title = { Text(ProfileCopy.NAME_TITLE, fontSize = TazType.titleSize, fontWeight = FontWeight.SemiBold, color = TazColors.TextPrimary) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text, onValueChange = { text = it }, singleLine = true, isError = problem != null,
+                    modifier = Modifier.fillMaxWidth().testTag("displayNameField")
+                )
+                Spacer(Modifier.height(TazSpace.xs))
+                Text(problem ?: serverMessage ?: ProfileCopy.NAME_HINT, fontSize = TazType.captionSize,
+                    color = if (problem != null || serverMessage != null) TazColors.Danger else TazColors.TextSecondary)
+            }
+        },
+        confirmButton = { TextAction(ProfileCopy.SAVE, enabled = problem == null && !saving, onClick = { onSave(text) }) },
+        dismissButton = { TextAction(ProfileCopy.CANCEL, TazColors.TextSecondary, onClick = onDismiss) }
+    )
 }
 
 @Composable
@@ -191,10 +247,9 @@ private fun RowsCard(entries: List<ProfileEntry>, addressCount: Int?, onOpen: (P
 private fun iconFor(e: ProfileEntry): ImageVector = when (e) {
     ProfileEntry.ADDRESSES -> TazIcons.Location
     ProfileEntry.ORDERS -> TazIcons.Receipt
-    ProfileEntry.COINS -> TazIcons.Coin
     ProfileEntry.HELP -> TazIcons.Help
+    ProfileEntry.TERMS, ProfileEntry.PRIVACY -> TazIcons.Info
     ProfileEntry.ABOUT -> TazIcons.Info
-    ProfileEntry.GENIE -> TazIcons.Mic
 }
 
 @Composable
@@ -245,36 +300,17 @@ private fun LogoutSheet(onCancel: () -> Unit, onConfirm: () -> Unit) {
     }
 }
 
-// ---- Help ---------------------------------------------------------------------------------------------------------------
-
-/** REMOTE Help: no configured support channel and no backed FAQs, so the page says so and offers the real surfaces. */
-@Composable
-fun RemoteHelpScreen() {
-    val app = LocalAppState.current
-    HelpLayout(configuredSupportChannels(), onBack = { app.back() }, onOrders = { app.homeTab = HomeTab.ORDERS; app.goHome() })
-}
-
-@Composable
-fun HelpLayout(channels: SupportChannels, onBack: () -> Unit, onOrders: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(TazColors.Cream).testTag("help")) {
-        Header(ProfileCopy.HELP_TITLE, onBack = onBack)
-        if (!channels.any) {
-            EditorialEmptyState(TazIcons.Help, ProfileCopy.HELP_UNAVAILABLE_TITLE, ProfileCopy.HELP_UNAVAILABLE_BODY, ProfileCopy.HELP_GO_TO_ORDERS, onAction = onOrders)
-        }
-        // Configured channels would render here as real actions; none exist today, so no button is drawn.
-    }
-}
-
 // ---- About --------------------------------------------------------------------------------------------------------------
 
 @Composable
 fun RemoteAboutScreen() {
     val app = LocalAppState.current
-    AboutLayout(version = appVersionLabel(), legal = legalLinks(), onBack = { app.back() })
+    AboutLayout(version = appVersionLabel(), onBack = { app.back() }, openLegal = { app.navigate(Screen.Legal(it.path)) })
 }
 
+/** Truthful About: the wordmark, the canonical tagline, the version, and the two legal documents (in-app, plain text). */
 @Composable
-fun AboutLayout(version: String, legal: LegalLinks, onBack: () -> Unit) {
+fun AboutLayout(version: String, onBack: () -> Unit, openLegal: (LegalSlug) -> Unit = {}) {
     Column(Modifier.fillMaxSize().background(TazColors.Cream).verticalScroll(rememberScrollState()).testTag("about")) {
         Header(ProfileCopy.ABOUT_TITLE, onBack = onBack)
         Column(Modifier.fillMaxWidth().padding(horizontal = TazSpace.lg), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -288,15 +324,14 @@ fun AboutLayout(version: String, legal: LegalLinks, onBack: () -> Unit) {
             }
             Spacer(Modifier.height(TazSpace.lg))
             Column(Modifier.fillMaxWidth().clip(TazRadius.tile).background(TazColors.Surface)) {
-                AboutRow("${ProfileCopy.VERSION_PREFIX}", version, tag = "aboutVersion")
-                if (legal.any) {
-                    // Real, configured destinations only. None are configured today, so this branch is dormant.
-                    legal.privacyUrl?.let { Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder)); AboutRow("Privacy Policy", "Opens in your browser") }
-                    legal.termsUrl?.let { Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder)); AboutRow("Terms of Service", "Opens in your browser") }
-                } else {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(TazColors.CardBorder))
-                    Text(ProfileCopy.LEGAL_UNAVAILABLE, fontSize = TazType.captionSize, lineHeight = TazType.captionLine, color = TazColors.TextTertiary, modifier = Modifier.padding(horizontal = TazSpace.lg, vertical = TazSpace.md).testTag("legalUnavailable"))
-                }
+                AboutRow(ProfileCopy.VERSION_PREFIX, version, tag = "aboutVersion")
+            }
+            Spacer(Modifier.height(TazSpace.lg))
+            Text(ProfileCopy.LEGAL_SECTION, fontSize = TazType.captionSize, fontWeight = FontWeight.SemiBold, color = TazColors.TextSecondary, modifier = Modifier.fillMaxWidth().padding(start = TazSpace.xs, bottom = TazSpace.sm))
+            Column(Modifier.fillMaxWidth().clip(TazRadius.tile).background(TazColors.Surface)) {
+                ProfileRow(TazIcons.Info, ProfileCopy.TERMS, null, onClick = { openLegal(LegalSlug.TERMS) })
+                Box(Modifier.fillMaxWidth().padding(start = 64.dp).height(1.dp).background(TazColors.CardBorder))
+                ProfileRow(TazIcons.Info, ProfileCopy.PRIVACY, null, onClick = { openLegal(LegalSlug.PRIVACY) })
             }
             Spacer(Modifier.navigationBarsPadding().height(TazSpace.xxl))
         }
@@ -310,21 +345,3 @@ private fun AboutRow(label: String, value: String, tag: String? = null) {
         Text(value, fontSize = TazType.bodySize, fontWeight = FontWeight.Medium, color = TazColors.TextPrimary, modifier = if (tag != null) Modifier.testTag(tag) else Modifier)
     }
 }
-
-// ---- Coins ---------------------------------------------------------------------------------------------------------------
-
-/** REMOTE Coins: no contract, so a truthful unavailable page — no balance, no ledger, no value or expiry claims. */
-@Composable
-fun RemoteCoinsScreen() {
-    val app = LocalAppState.current
-    CoinsUnavailableLayout(onBack = { app.back() })
-}
-
-@Composable
-fun CoinsUnavailableLayout(onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(TazColors.Cream).testTag("coins")) {
-        Header(ProfileCopy.COINS_TITLE, onBack = onBack)
-        EditorialEmptyState(TazIcons.Coin, ProfileCopy.COINS_UNAVAILABLE_TITLE, ProfileCopy.COINS_UNAVAILABLE_BODY, ProfileCopy.BACK_TO_PROFILE, onAction = onBack)
-    }
-}
-

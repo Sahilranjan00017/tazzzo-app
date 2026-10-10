@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import com.tazzzo.app.ui.interaction.tazNavTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -74,7 +75,6 @@ fun App() {
                 // customer left off.
                 val stateHolder = rememberSaveableStateHolder()
                 val liveKeys = appState.backStack.map { it.stateKey }
-                val remoteCatalog = ServiceLocator.catalogMode == CatalogMode.REMOTE
 
                 // Drop retained state for destinations that are no longer
                 // reachable, so a long session cannot accumulate them.
@@ -85,48 +85,52 @@ fun App() {
                     knownKeys = live
                 }
 
+                Box(Modifier.fillMaxSize()) {
                 AnimatedContent(
                     targetState = appState.current,
                     transitionSpec = { tazNavTransition(appState.navDirection) },
                     label = "navigation"
                 ) { screen ->
                     stateHolder.SaveableStateProvider(screen.stateKey) {
+                    // One routing decision for every destination (RouteTable.kt): REMOTE never renders a MOCK screen.
+                    val mock = routeImpl(screen, ServiceLocator.catalogMode) == RouteImpl.MOCK
+                    val unavailable = routeImpl(screen, ServiceLocator.catalogMode) == RouteImpl.UNAVAILABLE
                     when (screen) {
                         is Screen.Splash -> SplashScreen()
                         is Screen.Onboarding -> ShowcaseScreen()   // the 3-page brand carousel; Login follows
                         is Screen.Login -> LoginScreen()
                         is Screen.Home -> MainScaffold()
                         is Screen.CategoryDetail ->
-                            if (remoteCatalog) RemoteCategoryScreen(screen.categoryId, screen.subcategoryId)
-                            else CategoryDetailScreen(screen.categoryId, screen.subcategoryId)
-                        is Screen.ProductDetail ->
-                            if (remoteCatalog) RemoteProductDetailScreen(screen.productId)
-                            else ProductDetailScreen(screen.productId)
-                        is Screen.Search -> if (remoteCatalog) com.tazzzo.app.ui.catalog.RemoteSearchScreen() else SearchScreen()
-                        is Screen.Cart ->
-                            if (ServiceLocator.catalogMode == CatalogMode.REMOTE) com.tazzzo.app.ui.cart.RemoteCartScreen() else CartScreen()
-                        is Screen.Checkout ->
-                            // REMOTE: the real quote review only; the 4-step mock checkout is MOCK-mode only.
-                            if (!remoteCatalog) CheckoutScreen()
-                            else if (ServiceLocator.catalogCapabilities.checkoutIntegration) com.tazzzo.app.ui.checkout.RemoteCheckoutScreen()
-                            else com.tazzzo.app.ui.catalog.UnavailableSurface("Checkout")
-                        is Screen.OrderSuccess ->
-                            // REMOTE: the confirmation is built ONLY from the real backend order (the mock screen reads `lastOrder`).
-                            if (remoteCatalog) com.tazzzo.app.ui.order.RemoteOrderSuccessScreen(screen.orderId) else OrderSuccessScreen(screen.orderId)
-                        is Screen.Orders -> if (remoteCatalog) com.tazzzo.app.ui.order.RemoteOrdersScreen() else OrdersScreen()
-                        is Screen.Coins -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteCoinsScreen() else CoinsScreen()
-                        is Screen.Help -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteHelpScreen() else HelpScreen()
-                        is Screen.Addresses -> if (remoteCatalog) RemoteAddressesScreen() else AddressesScreen()
+                            if (mock) CategoryDetailScreen(screen.categoryId, screen.subcategoryId)
+                            else RemoteCategoryScreen(screen.categoryId, screen.subcategoryId)
+                        is Screen.ProductDetail -> if (mock) ProductDetailScreen(screen.productId) else RemoteProductDetailScreen(screen.productId)
+                        is Screen.Search -> if (mock) SearchScreen() else com.tazzzo.app.ui.catalog.RemoteSearchScreen()
+                        is Screen.Cart -> if (mock) CartScreen() else com.tazzzo.app.ui.cart.RemoteCartScreen()
+                        // REMOTE: the real quote review only; the 4-step mock checkout is MOCK-mode only.
+                        is Screen.Checkout -> if (mock) CheckoutScreen() else com.tazzzo.app.ui.checkout.RemoteCheckoutScreen()
+                        // REMOTE: the confirmation is built ONLY from the real backend order (the mock screen reads `lastOrder`).
+                        is Screen.OrderSuccess -> if (mock) OrderSuccessScreen(screen.orderId) else com.tazzzo.app.ui.order.RemoteOrderSuccessScreen(screen.orderId)
+                        is Screen.Orders -> if (mock) OrdersScreen() else com.tazzzo.app.ui.order.RemoteOrdersScreen()
+                        is Screen.Help -> if (mock) HelpScreen() else com.tazzzo.app.ui.support.RemoteHelpScreen()
+                        is Screen.Addresses -> if (mock) AddressesScreen() else RemoteAddressesScreen()
                         is Screen.AddressForm -> RemoteAddressFormScreen(screen.addressId)
-                        // The shopping list is built from MOCK order history: MOCK-only (REMOTE has search now, but no list contract).
-                        is Screen.MasterList -> if (!remoteCatalog) MasterListScreen() else UnavailableSurface("Shopping list")
-                        is Screen.About -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteAboutScreen() else AboutScreen()
-                        is Screen.Club -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubScreen()
-                        is Screen.ClubCheckout -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubCheckoutScreen()
-                        is Screen.Voice -> com.tazzzo.app.ui.voice.GenieScreen()
-                        is Screen.OrderDetail -> if (remoteCatalog) com.tazzzo.app.ui.order.RemoteOrderDetailScreen(screen.orderId) else OrderDetailScreen(screen.orderId)
+                        is Screen.About -> if (mock) AboutScreen() else com.tazzzo.app.ui.profile.RemoteAboutScreen()
+                        is Screen.OrderDetail -> if (mock) OrderDetailScreen(screen.orderId) else com.tazzzo.app.ui.order.RemoteOrderDetailScreen(screen.orderId)
+                        is Screen.Legal -> com.tazzzo.app.ui.support.LegalScreen(screen.slug)
+                        is Screen.SupportCase -> com.tazzzo.app.ui.support.SupportCaseScreen(screen.caseId)
+                        is Screen.SupportNew -> com.tazzzo.app.ui.support.NewSupportRequestScreen(screen.orderId)
+                        // MOCK-only features. REMOTE has no caller; if one is ever reached it is a truthful "not available" page.
+                        is Screen.Coins -> if (unavailable) UnavailableSurface("Tazzzo Coins") else CoinsScreen()
+                        is Screen.MasterList -> if (unavailable) UnavailableSurface("Shopping list") else MasterListScreen()
+                        is Screen.Club -> if (unavailable) UnavailableSurface("Tazzzo Club") else ClubScreen()
+                        is Screen.ClubCheckout -> if (unavailable) UnavailableSurface("Tazzzo Club") else ClubCheckoutScreen()
+                        is Screen.Voice -> if (unavailable) UnavailableSurface("Voice ordering") else com.tazzzo.app.ui.voice.GenieScreen()
                     }
                     }
+                }
+                // The transient notice ("Only 3 left", cart refusals) is hosted HERE, above every screen, so a notice raised on
+                // the PDP, the cart or the address book shows at once (it used to render only while Home was on top).
+                com.tazzzo.app.ui.common.TransientMessageToast(aboveNav = appState.current is Screen.Home)
                 }
             }
         }

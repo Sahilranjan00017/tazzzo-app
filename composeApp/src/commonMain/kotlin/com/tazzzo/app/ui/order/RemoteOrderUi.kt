@@ -115,7 +115,7 @@ fun RemoteOrderSuccessScreen(orderId: String) {
     )
 }
 
-class OrderActions(val back: () -> Unit, val continueShopping: () -> Unit, val viewOrder: () -> Unit = {}, val retry: () -> Unit = {})
+class OrderActions(val back: () -> Unit, val continueShopping: () -> Unit, val viewOrder: () -> Unit = {}, val retry: () -> Unit = {}, val help: (() -> Unit)? = null)
 
 /**
  * The premium confirmation: green success mark, "Order placed", support line, the order number, the payment fact with
@@ -186,7 +186,11 @@ fun RemoteOrderDetailScreen(orderId: String) {
     val app = LocalAppState.current
     var attempt by remember(orderId) { mutableStateOf(0) }
     val load = rememberOrder(orderId, attempt)
-    OrderDetailLayout(orderId, load, OrderActions(back = { app.back() }, continueShopping = { app.goHome() }, retry = { attempt++ }))
+    OrderDetailLayout(orderId, load, OrderActions(
+        back = { app.back() }, continueShopping = { app.goHome() }, retry = { attempt++ },
+        // "Contact us about this order": a support request linked to this order (signed-in only; the form says so otherwise).
+        help = { app.navigate(Screen.SupportNew(orderId)) }
+    ))
 }
 
 /** Order detail: Checkout after placement — status, items, delivery address, payment, summary, order number. */
@@ -208,6 +212,9 @@ fun OrderDetailLayout(orderId: String, load: OrderLoad, actions: OrderActions) {
                     PaymentCard(v, amount)
                     SummaryCard(v, amount)
                     OrderNumberCard(v, load.order)
+                    actions.help?.let { help ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) { TextAction(OrderCopy.NEED_HELP, onClick = help) }
+                    }
                     Spacer(Modifier.navigationBarsPadding().height(TazSpace.xxl))
                 }
             }
