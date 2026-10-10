@@ -2,6 +2,8 @@ package com.tazzzo.app.ui.catalog
 
 import com.tazzzo.app.data.catalog.CatalogCapabilities
 import com.tazzzo.app.data.catalog.CatalogProduct
+import com.tazzzo.app.data.catalog.PagedState
+import com.tazzzo.app.data.catalog.SearchQueryCheck
 import com.tazzzo.app.data.catalog.StockTone
 import com.tazzzo.app.data.catalog.discountPercentLabel
 import com.tazzzo.app.data.catalog.mrpLabel
@@ -26,8 +28,18 @@ object ShopCopy {
     const val EMPTY_SECTION_BODY = "There are no products in this section right now."
     const val BACK_TO_SHOP = "Browse the Shop"
     const val SEARCH_TITLE = "Search"
-    const val SEARCH_UNAVAILABLE_TITLE = "Search isn't available yet"
-    const val SEARCH_UNAVAILABLE_BODY = "We're building it. Until then, every product is a few taps away in the Shop."
+    /** `GET /v1/search` returns PRODUCTS only, matched on product name and brand: the copy says exactly that. */
+    const val SEARCH_PLACEHOLDER = "Search products by name or brand"
+    const val SEARCH_FIELD_DESCRIPTION = "Search products"
+    const val SEARCH_START_TITLE = "Find a product"
+    const val SEARCH_START_BODY = "Type a product name or brand. Results show products only."
+    const val RECENT_SEARCHES = "Recent searches"
+    const val CLEAR_RECENT = "Clear"
+    const val NO_RESULTS_TITLE = "No products found"
+    const val NO_RESULTS_BODY = "Try a different word, or browse the Shop."
+    const val QUERY_TOO_SHORT = "Type at least 2 letters or numbers."
+    const val QUERY_TOO_LONG = "That's too long. Use up to 64 characters and shorter words."
+    const val QUERY_TOO_MANY_WORDS = "Use up to 5 words."
     const val END_OF_LIST = "You've seen everything here"
     const val PRICE_UNAVAILABLE = "Price unavailable"
 }
@@ -86,6 +98,38 @@ enum class SearchSurface { Unavailable, Available }
 
 fun searchSurface(caps: CatalogCapabilities): SearchSurface =
     if (caps.search) SearchSurface.Available else SearchSurface.Unavailable
+
+/** The inline hint for a query that cannot be sent (null when it can, or when nothing is typed). */
+fun SearchQueryCheck.hint(): String? = when (this) {
+    is SearchQueryCheck.Valid, SearchQueryCheck.Blank -> null
+    SearchQueryCheck.TooShort -> ShopCopy.QUERY_TOO_SHORT
+    SearchQueryCheck.TooLong -> ShopCopy.QUERY_TOO_LONG
+    SearchQueryCheck.TooManyWords -> ShopCopy.QUERY_TOO_MANY_WORDS
+}
+
+/** What the Search body shows, decided once from the query check and the results. */
+sealed interface SearchBody {
+    /** Nothing typed: recent searches (chips) when there are any, otherwise the start prompt. */
+    data class Start(val recent: List<String>) : SearchBody
+    /** A query that cannot be sent: only the inline hint. */
+    data class Invalid(val hint: String) : SearchBody
+    data object Loading : SearchBody
+    data class Failed(val failure: com.tazzzo.app.data.catalog.CatalogFailure) : SearchBody
+    data object NoResults : SearchBody
+    /** [stale] = these belong to the previous query (the new text is still debouncing): the screen dims them. */
+    data class Results(val state: PagedState.Content<CatalogProduct>, val stale: Boolean = false) : SearchBody
+}
+
+fun searchBody(check: SearchQueryCheck, results: PagedState<CatalogProduct>, recent: List<String>, stale: Boolean = false): SearchBody = when (check) {
+    SearchQueryCheck.Blank -> SearchBody.Start(recent)
+    is SearchQueryCheck.Valid -> when (results) {
+        PagedState.Idle, PagedState.LoadingFirst -> SearchBody.Loading      // Idle = the debounce has not fired yet
+        is PagedState.FirstPageFailed -> SearchBody.Failed(results.failure)
+        PagedState.Empty -> SearchBody.NoResults
+        is PagedState.Content -> SearchBody.Results(results, stale)
+    }
+    else -> SearchBody.Invalid(check.hint()!!)
+}
 
 /** Grid cards adapt to the width: two columns from 320dp up, more on wide screens. */
 const val PRODUCT_GRID_MIN_CELL_DP = 140

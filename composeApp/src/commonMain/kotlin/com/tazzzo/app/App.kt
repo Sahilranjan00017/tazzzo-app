@@ -46,7 +46,8 @@ fun App() {
     // build is REMOTE unless a developer/demo/test EXPLICITLY asks for the mock catalogue.
     remember { applyDevCatalogMode() }
     val appState = remember { TazzzoAppState() }
-    CompositionLocalProvider(LocalAppState provides appState) {
+    val appScope = rememberCoroutineScope()
+    CompositionLocalProvider(LocalAppState provides appState, LocalAppScope provides appScope) {
         PlatformBackHandler(
             enabled = appState.canHandleSystemBack,
             onBack = { appState.handleSystemBack() }
@@ -83,6 +84,7 @@ fun App() {
                 LaunchedEffect(liveKeys.joinToString("|")) {
                     val live = liveKeys.toSet()
                     (knownKeys - live).forEach { stateHolder.removeState(it) }
+                    if (Screen.Search.stateKey !in live) appState.dropSearch()   // Search left the stack: its query/results go too
                     knownKeys = live
                 }
 
@@ -119,7 +121,8 @@ fun App() {
                         is Screen.Help -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteHelpScreen() else HelpScreen()
                         is Screen.Addresses -> if (remoteCatalog) RemoteAddressesScreen() else AddressesScreen()
                         is Screen.AddressForm -> RemoteAddressFormScreen(screen.addressId)
-                        is Screen.MasterList -> if (ServiceLocator.catalogCapabilities.search) MasterListScreen() else UnavailableSurface("Shopping list")
+                        // The shopping list is built from MOCK order history: MOCK-only (REMOTE has search now, but no list contract).
+                        is Screen.MasterList -> if (!remoteCatalog) MasterListScreen() else UnavailableSurface("Shopping list")
                         is Screen.About -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteAboutScreen() else AboutScreen()
                         is Screen.Club -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubScreen()
                         is Screen.ClubCheckout -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubCheckoutScreen()
@@ -133,6 +136,9 @@ fun App() {
         }
     }
 }
+
+/** A scope that lives as long as the app's composition: holders that must outlive one screen (Search) run on it. */
+val LocalAppScope = staticCompositionLocalOf<kotlinx.coroutines.CoroutineScope> { error("App scope not provided") }
 
 /**
  * Restores the secure session at start-up and keeps [TazzzoAppState] in step

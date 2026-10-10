@@ -116,6 +116,8 @@ class TazzzoAppState(
      * because the top of the stack differs by then.
      */
     fun navigate(screen: Screen) {
+        // A banner's query is only for the Search it opened: any other navigation means it was not consumed — drop it.
+        if (screen != Screen.Search) searchPrefill = null
         if (backStack.lastOrNull() == screen) return
         navDirection = NavDirection.Forward
         backStack.add(screen)
@@ -147,6 +149,7 @@ class TazzzoAppState(
         get() = showVoiceSheet || guidedJourneyPending ||
             backStack.size > 1 || current is Screen.Checkout || homeTab != HomeTab.HOME
     fun back() {
+        searchPrefill = null
         if (backStack.size > 1) {
             navDirection = NavDirection.Backward
             backStack.removeAt(backStack.lastIndex)
@@ -154,6 +157,7 @@ class TazzzoAppState(
     }
 
     fun resetTo(screen: Screen) {
+        searchPrefill = null
         navDirection = NavDirection.Replace
         backStack.clear()
         backStack.add(screen)
@@ -186,7 +190,7 @@ class TazzzoAppState(
 
     /** Called with the secure session's state at start-up and whenever it changes. */
     fun applyAuthState(authenticated: Boolean) {
-        if (isAuthenticated && !authenticated) clearRecentSearches()   // session ended (logout or rejection): next person must not see them
+        if (isAuthenticated && !authenticated) { clearRecentSearches(); dropSearch() }   // session ended: next person must not see them
         isAuthenticated = authenticated
         _user.value = _user.value.copy(isGuest = !authenticated)
     }
@@ -221,7 +225,31 @@ class TazzzoAppState(
         }
 
     // --- search ----------------------------------------------------------
-    /** Most-recent-first, deduplicated, capped. Session-only until persistence lands. */
+    /**
+     * A query the Search screen should run when it is shown (a `search:` banner). Consumed (set back to null) by the screen.
+     * Only a query that passes [com.tazzzo.app.data.catalog.SearchQueryRules] is ever set.
+     */
+    var searchPrefill by mutableStateOf<String?>(null)
+
+    /**
+     * The Search screen's holder, kept ABOVE the screen so the query, results and paging survive opening a result and coming
+     * back. Created by the screen; closed and dropped when Search leaves the back stack or the session ends.
+     */
+    var search: com.tazzzo.app.data.catalog.ProductSearch? = null
+        internal set
+
+    internal fun attachSearch(holder: com.tazzzo.app.data.catalog.ProductSearch) { search?.close(); search = holder }
+
+    /** Search is no longer on the back stack (or the session ended): forget its query and results. */
+    fun dropSearch() { search?.close(); search = null }
+
+    /** Opens Search; with [query], prefilled and run at once. An unsendable query opens an empty Search. */
+    fun openSearch(query: String? = null) {
+        searchPrefill = query?.let { com.tazzzo.app.data.catalog.SearchQueryRules.check(it) as? com.tazzzo.app.data.catalog.SearchQueryCheck.Valid }?.text
+        navigate(Screen.Search)
+    }
+
+    /** Most-recent-first, deduplicated, capped; persisted per device and cleared on logout. */
     val recentSearches = mutableStateListOf<String>()
     fun clearRecentSearches() {
         recentSearches.clear()
@@ -230,7 +258,7 @@ class TazzzoAppState(
     fun recordSearch(query: String) {
         val q = query.trim()
         if (q.length < 2) return
-        recentSearches.remove(q)
+        recentSearches.removeAll { it.equals(q, ignoreCase = true) }   // one entry per query, whatever the casing; the latest wins
         recentSearches.add(0, q)
         while (recentSearches.size > 8) recentSearches.removeAt(recentSearches.lastIndex)
         store?.saveRecentSearches(recentSearches.toList())
@@ -294,6 +322,7 @@ class TazzzoAppState(
     fun markLoggedOut() {
         isAuthenticated = false
         clearRecentSearches()
+        dropSearch()
         store?.onboarded = false
         user = UserProfile(name = "Guest", phone = "", isGuest = true,
             coinBalance = user.coinBalance, address = user.address)

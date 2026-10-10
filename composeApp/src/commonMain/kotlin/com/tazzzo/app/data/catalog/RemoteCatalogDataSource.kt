@@ -58,6 +58,18 @@ class RemoteCatalogDataSource(
         return api.execute<PagedProductsDto>(get("/v1/categories/$nodeId/products", query)).body.toDomain()
     }
 
+    /**
+     * `GET /v1/search` (backend PR-G): PRODUCT results only (the same paged card shape as a category list), every query word a
+     * prefix match, deterministic sku order (no relevance ranking). [query] must pass [SearchQueryRules]; [cursor] is the
+     * previous page's opaque `nextCursor` for the SAME query, page size and PIN (it is bound to all three server-side).
+     */
+    suspend fun search(query: String, pin: Pincode?, cursor: String? = null, pageSize: Int = DEFAULT_PAGE_SIZE): ProductPage {
+        require(SearchQueryRules.check(query) == SearchQueryCheck.Valid(query)) { "invalid search query" }
+        require(pageSize in 1..MAX_PAGE_SIZE) { "page_size must be 1..$MAX_PAGE_SIZE" }
+        val q = linkedMapOf<String, String?>("q" to query, "page_size" to pageSize.toString(), "cursor" to cursor, "pin" to pin?.value)
+        return api.execute<PagedProductsDto>(get("/v1/search", q)).body.toDomain()
+    }
+
     /** `GET /v1/products/{id}`. The flat body is the card plus `gallery` / `attributes`. */
     suspend fun product(productId: String, pin: Pincode?): CatalogProductDetail {
         require(PRODUCT_ID.matches(productId)) { "invalid product id" }

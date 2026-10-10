@@ -29,7 +29,7 @@ import kotlin.test.assertTrue
 class UiPolicyTest {
     private val copy: List<Pair<String, String>> = listOf(
         "HomeCopy" to listOf(HomeCopy.SEARCH_PLACEHOLDER, HomeCopy.HERO_EYEBROW, HomeCopy.HERO_CTA, HomeCopy.QUALITY_EYEBROW, HomeCopy.QUALITY_CTA, HomeCopy.RAIL_TITLE, HomeCopy.BULK_EYEBROW, HomeCopy.BULK_CTA, HomeCopy.CONTINUE_SHOPPING).joinToString(" | "),
-        "ShopCopy" to listOf(ShopCopy.TITLE, ShopCopy.NO_CATEGORIES_TITLE, ShopCopy.NO_CATEGORIES_BODY, ShopCopy.EMPTY_SECTION_TITLE, ShopCopy.EMPTY_SECTION_BODY, ShopCopy.SEARCH_UNAVAILABLE_TITLE, ShopCopy.SEARCH_UNAVAILABLE_BODY, ShopCopy.CATALOGUE_UNAVAILABLE_TITLE, ShopCopy.CATALOGUE_UNAVAILABLE_BODY, ShopCopy.END_OF_LIST, ShopCopy.PRICE_UNAVAILABLE).joinToString(" | "),
+        "ShopCopy" to listOf(ShopCopy.TITLE, ShopCopy.NO_CATEGORIES_TITLE, ShopCopy.NO_CATEGORIES_BODY, ShopCopy.EMPTY_SECTION_TITLE, ShopCopy.EMPTY_SECTION_BODY, ShopCopy.SEARCH_START_TITLE, ShopCopy.SEARCH_START_BODY, ShopCopy.NO_RESULTS_TITLE, ShopCopy.NO_RESULTS_BODY, ShopCopy.CATALOGUE_UNAVAILABLE_TITLE, ShopCopy.CATALOGUE_UNAVAILABLE_BODY, ShopCopy.END_OF_LIST, ShopCopy.PRICE_UNAVAILABLE).joinToString(" | "),
         "PdpCopy" to listOf(PdpCopy.ADD_TO_CART, PdpCopy.NOT_FOUND_TITLE, PdpCopy.NOT_FOUND_BODY, PdpCopy.BACK_TO_SHOP, PdpCopy.PRICE_UNAVAILABLE).joinToString(" | "),
         "PurchaseCopy" to listOf(PurchaseCopy.CART_EMPTY_TITLE, PurchaseCopy.CART_EMPTY_BODY, PurchaseCopy.CART_SIGNED_OUT_BODY, PurchaseCopy.ADDRESS_EMPTY_BODY, PurchaseCopy.ADDRESS_LIMIT_TITLE, PurchaseCopy.COD, PurchaseCopy.COD_HINT, PurchaseCopy.PLACING, PurchaseCopy.PAYABLE_CHANGED_TITLE, PurchaseCopy.PAYABLE_CHANGED_SUPPORT, PurchaseCopy.AMBIGUOUS_TITLE).joinToString(" | "),
         "OrderCopy" to listOf(OrderCopy.CONFIRMATION_TITLE, OrderCopy.CONFIRMATION_SUPPORT, OrderCopy.NO_ORDERS_TITLE, OrderCopy.HISTORY_FAILED_TITLE, OrderCopy.SIGNED_OUT_BODY, OrderCopy.NO_ORDERS_BODY, OrderCopy.LOAD_FAILED_BODY, OrderCopy.AMOUNT_UNAVAILABLE).joinToString(" | "),
@@ -71,7 +71,7 @@ class UiPolicyTest {
         assertFalse(coinsAvailable(remoteMode = true))
         assertFalse(configuredSupportChannels().any)
         assertFalse(legalLinks().any)
-        assertEquals(SearchSurface.Unavailable, searchSurface(CatalogCapabilities.REMOTE))
+        assertEquals(SearchSurface.Available, searchSurface(CatalogCapabilities.REMOTE))     // real product search
     }
 
     @Test fun voiceIsTruthfullyComingSoonAndHasNoTapToSpeak() {
@@ -88,7 +88,7 @@ class UiPolicyTest {
 
     @Test fun productionCapabilityGatesAreUnchanged() {
         val c = CatalogCapabilities.REMOTE
-        assertTrue(c.orderIntegration); assertTrue(c.orderHistoryIntegration); assertFalse(c.reorder); assertFalse(c.search); assertFalse(c.deals); assertFalse(c.banners)
+        assertTrue(c.orderIntegration); assertTrue(c.orderHistoryIntegration); assertFalse(c.reorder); assertTrue(c.search); assertFalse(c.deals); assertFalse(c.banners)
         assertTrue(c.cartIntegration); assertTrue(c.checkoutIntegration)
     }
 }

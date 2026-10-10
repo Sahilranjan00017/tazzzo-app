@@ -139,7 +139,8 @@ class CatalogPresentationTest {
         assertTrue(remote.cartIntegration)
         assertTrue(remote.checkoutIntegration)
         assertTrue(remote.orderIntegration)
-        assertFalse(remote.search || remote.deals || remote.bestsellers || remote.banners || remote.counts || remote.sorting)
+        assertTrue(remote.search)
+        assertFalse(remote.deals || remote.bestsellers || remote.banners || remote.counts || remote.sorting)
     }
 
     // ---- serviceability: all five states, no invented ETA ------------------------------------------------------------

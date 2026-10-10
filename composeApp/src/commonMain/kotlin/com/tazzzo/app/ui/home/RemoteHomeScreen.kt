@@ -64,6 +64,8 @@ import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
 import com.tazzzo.app.data.address.BookState
 import com.tazzzo.app.data.catalog.CatalogNode
+import com.tazzzo.app.data.catalog.SearchQueryCheck
+import com.tazzzo.app.data.catalog.SearchQueryRules
 import com.tazzzo.app.data.content.ContentLink
 import com.tazzzo.app.data.content.HomeBlock
 import com.tazzzo.app.data.content.HomeContentState
@@ -156,7 +158,7 @@ fun RemoteHomeContent() {
                 when (link) {
                     is ContentLink.Product -> app.navigate(Screen.ProductDetail(link.productId))
                     is ContentLink.Category -> app.navigate(Screen.CategoryDetail(link.nodeId))
-                    is ContentLink.Search -> app.navigate(Screen.Search)   // the search screen has no pre-filled query yet (see linkIsTappable)
+                    is ContentLink.Search -> app.openSearch(link.query)   // prefilled and run (only a sendable query is tappable)
                 }
             }
         ),
@@ -188,11 +190,14 @@ data class HomeContentUi(
 
 /**
  * A banner is tappable only when its link leads somewhere this app can actually open with the link's own meaning.
- * `search:<text>` is published for the website's search page; the app's Search screen cannot yet open on a query (in
- * REMOTE mode it has no search contract at all — `RemoteSearchScreen`), so sending the customer to an empty search would
- * misrepresent the banner — it stays a picture until that exists.
+ * `search:<text>` opens Search prefilled with that text and runs it — but only when the text is a query `GET /v1/search`
+ * accepts ([SearchQueryRules]); anything else would open an empty or failing search, so it stays a picture.
  */
-fun linkIsTappable(link: ContentLink?): Boolean = link is ContentLink.Product || link is ContentLink.Category
+fun linkIsTappable(link: ContentLink?): Boolean = when (link) {
+    is ContentLink.Product, is ContentLink.Category -> true
+    is ContentLink.Search -> SearchQueryRules.check(link.query) is SearchQueryCheck.Valid
+    null -> false
+}
 
 /** The reference layout, independent of where its data comes from (so evidence/tests can render it with sample state). */
 @OptIn(ExperimentalMaterial3Api::class)
