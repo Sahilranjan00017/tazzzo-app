@@ -4,6 +4,7 @@ import com.tazzzo.app.data.catalog.ImageRole
 import com.tazzzo.app.data.catalog.InstallationId
 import com.tazzzo.app.data.catalog.Pincode
 import com.tazzzo.app.data.catalog.StockState
+import com.tazzzo.app.data.catalog.toCatalogFailure
 import com.tazzzo.app.data.remote.Conditional
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
@@ -55,6 +56,44 @@ class CatalogContractTest {
         assertTrue(page.items.isEmpty())
     }
 
+    /** `GET /v1/categories/{id}` (backend #109): the flat `{id, name, resolvedReleaseId, requestId}` node, any level. */
+    @Test fun nodeByIdReadsOneNodeAnonymouslyWithoutRevalidation() = runTest {
+        for (id in listOf("TZS-000001", "TZC-000010", "TZG-000108", "TZV-000037")) {
+            var seen: HttpRequestData? = null
+            val ds = dataSource { seen = it; respond("""{"id":"$id","name":"Basmati Rice","resolvedReleaseId":"rel_1","requestId":"req_n"}""", HttpStatusCode.OK, JSON) }
+            assertEquals(com.tazzzo.app.data.catalog.CatalogNode(id, "Basmati Rice"), ds.node(id))
+            assertEquals("/v1/categories/$id", seen!!.url.encodedPath); seen!!.assertPublicShape()
+            assertTrue(seen!!.url.parameters.isEmpty()); assertNull(seen!!.headers[HttpHeaders.IfNoneMatch])
+        }
+    }
+
+    @Test fun aNodeBodyNamingAnotherNodeOrMissingItsNameIsADecodingError() = runTest {
+        for (body in listOf("""{"id":"TZC-000099","name":"Other","resolvedReleaseId":"rel_1"}""", """{"id":"TZC-000010","resolvedReleaseId":"rel_1"}""")) {
+            val e = assertFailsWith<com.tazzzo.app.data.remote.ApiException> { dataSource { respond(body, HttpStatusCode.OK, JSON) }.node("TZC-000010") }
+            assertIs<com.tazzzo.app.data.remote.ApiError.Decoding>(e.error)
+        }
+    }
+
+    @Test fun aNodeIdIsValidatedBeforeItReachesThePath() = runTest {
+        var calls = 0
+        val ds = dataSource { calls++; respond("{}", HttpStatusCode.OK, JSON) }
+        for (bad in listOf("", "TZC-1", "TZP-000001", "TZC-000010/children", "../x", "TZC-00001%2F", "tzc-000010")) {
+            assertFailsWith<IllegalArgumentException>("must refuse <$bad>") { ds.node(bad) }
+        }
+        assertEquals(0, calls)
+    }
+
+    @Test fun theReaderAnswersNullForA404AndThrowsEveryOtherFailure() = runTest {
+        assertNull(reader { respond(errorFlat("NOT_FOUND"), HttpStatusCode.NotFound, JSON) }.node("TZC-000010"))
+        val e = assertFailsWith<com.tazzzo.app.data.remote.ApiException> {
+            reader { respond(errorFlat("RATE_LIMITED", retryable = true, retryAfter = 30), HttpStatusCode.TooManyRequests, JSON) }.node("TZC-000010")
+        }
+        assertEquals(com.tazzzo.app.data.catalog.CatalogFailure.RateLimited(30), e.toCatalogFailure())
+        assertFailsWith<com.tazzzo.app.data.remote.ApiException> {
+            reader { respond(errorFlat("SERVICE_UNAVAILABLE"), HttpStatusCode.ServiceUnavailable, JSON) }.node("TZC-000010")
+        }
+    }
+
     @Test fun productListSuccessSendsPageSizeCursorAndPin() = runTest {
         var seen: HttpRequestData? = null
         val ds = dataSource { seen = it; respond(pageJson(listOf(cardJson("TZP-1"), cardJson("TZP-2")), next = "CUR_opaque"), HttpStatusCode.OK, JSON) }
@@ -94,6 +133,16 @@ class CatalogContractTest {
         assertEquals(listOf("weight", "veg"), d.attributes.map { it.key }); assertEquals("g", d.attributes[0].unit)
     }
 
+    /** The platform's product-id grammar `TZP-[A-Za-z0-9-]{1,40}`: alphanumeric ids reach the path as ONE segment, unescaped. */
+    @Test fun alphanumericProductIdsReachThePathAsOneSegment() = runTest {
+        for (id in listOf("TZP-MED-3", "TZP-" + "A".repeat(40))) {
+            var seen: HttpRequestData? = null
+            val d = dataSource { seen = it; respond(detailJson(id), HttpStatusCode.OK, JSON) }.product(id, pin)
+            assertEquals("/v1/products/$id", seen!!.url.encodedPath); seen!!.assertPublicShape()
+            assertEquals(id, d.product.productId)
+        }
+    }
+
     @Test fun serviceabilityTrue() = runTest {
         var seen: HttpRequestData? = null
         val r = serviceabilitySource { seen = it; respond(serviceabilityJson(true), HttpStatusCode.OK, JSON) }.check(pin)
@@ -120,6 +169,9 @@ class CatalogContractTest {
         assertFailsWith<IllegalArgumentException> { ds.children("../auth") }
         assertFailsWith<IllegalArgumentException> { ds.products("TZC-1", pin) }
         assertFailsWith<IllegalArgumentException> { ds.product("TZP-1/../x", pin) }
+        for (bad in listOf("", "TZP-", "TZP-" + "A".repeat(41), "TZP-../x", "TZP-a b", "TZP-1\n", "TZP-1?pin=1", "TZP-1%2F")) {
+            assertFailsWith<IllegalArgumentException>("must refuse <$bad>") { ds.product(bad, pin) }
+        }
         assertFailsWith<IllegalArgumentException> { ds.products("TZC-000010", pin, pageSize = 0) }
         assertFailsWith<IllegalArgumentException> { ds.products("TZC-000010", pin, pageSize = 51) }
     }

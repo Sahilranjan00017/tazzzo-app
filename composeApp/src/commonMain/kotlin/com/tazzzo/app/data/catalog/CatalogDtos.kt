@@ -16,6 +16,9 @@ import kotlinx.serialization.json.JsonElement
     val items: List<NodeDto> = emptyList()
 )
 
+/** `GET /v1/categories/{id}`: the node flattened with its envelope (backend `NodeDetailDto`). */
+@Serializable internal data class NodeDetailDto(val id: String, val name: String, val resolvedReleaseId: String)
+
 @Serializable internal data class ServiceAreaSummaryDto(val serviceAreaId: String? = null, val serviceable: Boolean)
 
 @Serializable internal data class ProductCardDto(
@@ -114,6 +117,10 @@ internal fun ProductCardDto.toDomain(): CatalogProduct {
 }
 
 internal fun NodeListDto.toDomain() = TaxonomyPage(resolvedReleaseId, items.map { CatalogNode(it.id, it.name) })
+
+/** The node read by [requestedId]; a body naming another node is a contract violation, never a name for this one. */
+internal fun NodeDetailDto.toDomain(requestedId: String): CatalogNode =
+    if (id == requestedId) CatalogNode(id, name) else malformed()
 
 internal fun PagedProductsDto.toDomain() = ProductPage(
     resolvedReleaseId = resolvedReleaseId,

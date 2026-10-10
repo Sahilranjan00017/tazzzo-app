@@ -79,6 +79,14 @@ class CatalogReader(
     suspend fun categories(): TaxonomyPage = taxonomy.categories()
     suspend fun children(nodeId: String): TaxonomyPage = taxonomy.children(nodeId)
 
+    /** One node by id; `null` when it is unknown or not consumer-visible (404). Not cached here (see CategoryNodeResolver). */
+    suspend fun node(nodeId: String): CatalogNode? =
+        try {
+            source.node(nodeId)
+        } catch (e: ApiException) {
+            if ((e.error as? ApiError.Http)?.status == 404) null else throw e
+        }
+
     suspend fun productPage(nodeId: String, pin: Pincode?, cursor: String?, pageSize: Int = RemoteCatalogDataSource.DEFAULT_PAGE_SIZE): ProductPage =
         try {
             source.products(nodeId, pin, cursor, pageSize)

@@ -1,5 +1,6 @@
 package com.tazzzo.app.data.cart
 
+import com.tazzzo.app.data.catalog.PRODUCT_ID
 import com.tazzzo.app.data.remote.ApiClient
 import com.tazzzo.app.data.remote.ApiRequest
 import com.tazzzo.app.data.remote.IfMatch
@@ -56,9 +57,9 @@ class RemoteCartDataSource(private val api: ApiClient) : CartSource {
 
     companion object {
         const val BASE = "/v1/customer/cart"
-        private val SKU = Regex("^TZP-[0-9]{1,18}$")
         private val ADDRESS_ID = Regex("^ADDR_[A-Za-z0-9_-]{6,64}$")
-        fun isValidSku(skuId: String) = SKU.matches(skuId)
+        /** The cart `skuId` is a product id: the shared platform grammar [PRODUCT_ID], one unescaped path segment. */
+        fun isValidSku(skuId: String) = PRODUCT_ID.matches(skuId)
         private fun requireSku(id: String) = require(isValidSku(id)) { "invalid sku id" }
     }
 }

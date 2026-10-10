@@ -468,7 +468,11 @@ What `BACKEND_CONTRACTS.md` documents:
 - **Model change log** — `Order.payment` was added (documented before the change
   was made) so the confirmation screen can state how the customer paid
 
-**Still undefined in that document:** auth endpoints, banners, bestsellers,
+**Consumed since (2026-10-07):** the published Home — `GET /v1/content/home?channel=app`
+(see `docs/BACKEND_CONTRACTS.md` §7 and `PRODUCTION_READINESS.md`). Banners, product
+rails and category grids on Home now come from the CMS; the editorial plates remain.
+
+**Still undefined in that document:** auth endpoints, bestsellers,
 address CRUD detail, payment method listing, order history — all of which the
 readiness report specifies.
 

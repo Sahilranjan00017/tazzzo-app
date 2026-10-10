@@ -260,6 +260,19 @@ object ServiceLocator {
         val source = com.tazzzo.app.data.catalog.RemoteCatalogDataSource(catalogClient, installationId)
         com.tazzzo.app.data.catalog.CatalogReader(source, com.tazzzo.app.data.catalog.TaxonomyCache(source))
     }
+    /** One thread at a time: the published Home's state is confined to this dispatcher (see HomeContentHolder). */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val contentScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1)
+    )
+    /** The CMS-published Home (`GET /v1/content/home?channel=app`): banners, product rails and category grids. */
+    val homeContent: com.tazzzo.app.data.content.HomeContentHolder by lazy {
+        val source = com.tazzzo.app.data.content.RemoteContentDataSource(catalogClient, installationId)
+        val nodes = com.tazzzo.app.data.content.CategoryNodeResolver(remoteCatalog::node)
+        com.tazzzo.app.data.content.HomeContentHolder(
+            contentScope, source::home, remoteCatalog::product, launchContext.pin, resolveNodes = nodes::resolve
+        )
+    }
     val launchContext: com.tazzzo.app.data.catalog.LaunchContext by lazy {
         com.tazzzo.app.data.catalog.LaunchContext(
             com.tazzzo.app.data.catalog.PersistentPinStore(persistentStoreForCatalog),
