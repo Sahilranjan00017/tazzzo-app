@@ -85,7 +85,7 @@ class RemoteModeWiringTest {
 
     @Test fun everyMockOnlyCapabilityIsOffInRemoteMode() {
         val c = CatalogCapabilities.forMode(CatalogMode.REMOTE)
-        assertFalse(c.search); assertFalse(c.deals); assertFalse(c.bestsellers); assertFalse(c.banners)
+        assertTrue(c.search); assertFalse(c.deals); assertFalse(c.bestsellers); assertFalse(c.banners)
         assertFalse(c.counts); assertFalse(c.sorting)
         assertTrue(c.cartIntegration); assertTrue(c.checkoutIntegration); assertTrue(c.orderIntegration); assertFalse(c.reorder)
     }

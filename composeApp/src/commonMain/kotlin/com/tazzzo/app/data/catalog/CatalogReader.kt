@@ -96,6 +96,10 @@ class CatalogReader(
             if ((e.error as? ApiError.Http)?.status == 404) ProductPage.empty() else throw e
         }
 
+    /** One page of product search results (an empty page is a real "no results"; errors are thrown as-is). */
+    suspend fun searchPage(query: String, pin: Pincode?, cursor: String?, pageSize: Int = RemoteCatalogDataSource.DEFAULT_PAGE_SIZE): ProductPage =
+        source.search(query, pin, cursor, pageSize)
+
     /** The PDP; `null` when the product is unknown or not visible (404). */
     suspend fun product(productId: String, pin: Pincode?): CatalogProductDetail? =
         try {

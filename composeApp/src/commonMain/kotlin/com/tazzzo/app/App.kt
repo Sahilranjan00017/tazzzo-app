@@ -118,7 +118,8 @@ fun App() {
                         is Screen.Help -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteHelpScreen() else HelpScreen()
                         is Screen.Addresses -> if (remoteCatalog) RemoteAddressesScreen() else AddressesScreen()
                         is Screen.AddressForm -> RemoteAddressFormScreen(screen.addressId)
-                        is Screen.MasterList -> if (ServiceLocator.catalogCapabilities.search) MasterListScreen() else UnavailableSurface("Shopping list")
+                        // The shopping list is built from MOCK order history: MOCK-only (REMOTE has search now, but no list contract).
+                        is Screen.MasterList -> if (!remoteCatalog) MasterListScreen() else UnavailableSurface("Shopping list")
                         is Screen.About -> if (remoteCatalog) com.tazzzo.app.ui.profile.RemoteAboutScreen() else AboutScreen()
                         is Screen.Club -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubScreen()
                         is Screen.ClubCheckout -> if (remoteCatalog) com.tazzzo.app.ui.catalog.UnavailableSurface("Tazzzo Club") else ClubCheckoutScreen()

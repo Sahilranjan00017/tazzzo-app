@@ -106,15 +106,15 @@ class ShopModelTest {
 
     // ---- search and the shop tab --------------------------------------------------------------------------------------
 
-    @Test fun remoteSearchIsUnavailableAndMockSearchIsNot() {
-        assertEquals(SearchSurface.Unavailable, searchSurface(CatalogCapabilities.REMOTE))
+    @Test fun searchIsAvailableInBothModes() {
+        assertEquals(SearchSurface.Available, searchSurface(CatalogCapabilities.REMOTE))
         assertEquals(SearchSurface.Available, searchSurface(CatalogCapabilities.MOCK))
-        assertEquals(SearchSurface.Unavailable, searchSurface(CatalogCapabilities.forMode(CatalogMode.REMOTE)))
+        assertEquals(SearchSurface.Available, searchSurface(CatalogCapabilities.forMode(CatalogMode.REMOTE)))
     }
 
-    @Test fun theUnavailableSearchCopyPromisesNothingAndPointsAtTheShop() {
-        assertTrue("isn't available yet" in ShopCopy.SEARCH_UNAVAILABLE_TITLE)
-        assertFalse("result" in ShopCopy.SEARCH_UNAVAILABLE_BODY.lowercase())
+    @Test fun theSearchCopySaysProductsOnlyAndPointsAtTheShop() {
+        assertTrue("products only" in ShopCopy.SEARCH_START_BODY.lowercase())
+        assertFalse("isn't available" in (ShopCopy.SEARCH_START_TITLE + ShopCopy.SEARCH_START_BODY + ShopCopy.NO_RESULTS_BODY).lowercase())
         assertEquals("Browse the Shop", ShopCopy.BACK_TO_SHOP)
     }
 

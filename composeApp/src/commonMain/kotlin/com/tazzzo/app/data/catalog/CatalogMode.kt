@@ -38,6 +38,7 @@ object CatalogSource {
  * is false instead of faking it (PR-04C consumes this).
  */
 data class CatalogCapabilities(
+    /** Product search: REMOTE `GET /v1/search` (products only, prefix match on name/brand); MOCK the local index. */
     val search: Boolean,
     val bestsellers: Boolean,
     val deals: Boolean,
@@ -73,9 +74,9 @@ data class CatalogCapabilities(
     val reorder: Boolean
 ) {
     companion object {
-        /** What the running backend provides: taxonomy, product lists, PDP, serviceability, cart, checkout, COD orders and history. */
+        /** What the running backend provides: taxonomy, product lists, PDP, product search, serviceability, cart, checkout, COD orders and history. */
         val REMOTE = CatalogCapabilities(
-            search = false, bestsellers = false, deals = false, banners = false,
+            search = true, bestsellers = false, deals = false, banners = false,
             counts = false, sorting = false, cartIntegration = true, checkoutIntegration = true, orderIntegration = true, orderHistoryIntegration = true,
             reorder = false
         )

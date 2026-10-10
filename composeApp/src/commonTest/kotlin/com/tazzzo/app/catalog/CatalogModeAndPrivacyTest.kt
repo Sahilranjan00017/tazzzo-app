@@ -53,7 +53,8 @@ class CatalogModeAndPrivacyTest {
 
     @Test fun remoteCapabilitiesAdmitOnlyWhatTheBackendHasAndKeepRealProductsOutOfTheCart() {
         val c = CatalogCapabilities.forMode(CatalogMode.REMOTE)
-        assertFalse(c.search || c.bestsellers || c.deals || c.banners || c.counts || c.sorting)
+        assertTrue(c.search, "REMOTE has GET /v1/search")
+        assertFalse(c.bestsellers || c.deals || c.banners || c.counts || c.sorting)
         assertTrue(c.cartIntegration, "REMOTE products go to the server cart")
         assertTrue(c.checkoutIntegration, "REMOTE checkout is the real quote review")
         assertTrue(c.orderIntegration, "REMOTE places real COD orders")

@@ -96,9 +96,14 @@ class HomeContentMappingTest {
         assertEquals("Banner", bannerLabel(b.copy(title = "", altText = "")))
     }
 
-    @Test fun onlyProductAndCategoryLinksMakeABannerTappable() {
+    @Test fun productCategoryAndSendableSearchLinksMakeABannerTappable() {
         assertTrue(linkIsTappable(ContentLink.Product("TZP-1"))); assertTrue(linkIsTappable(ContentLink.Category("TZG-000001")))
-        assertTrue(!linkIsTappable(ContentLink.Search("atta")), "the Search screen cannot open on a query")
+        assertTrue(linkIsTappable(ContentLink.Search("atta")), "Search opens prefilled with the query and runs it")
+        assertTrue(linkIsTappable(ContentLink.Search("atta 5 kg")))
+        // A query /v1/search would reject (too long, no searchable word, too many words) stays a picture.
+        assertTrue(!linkIsTappable(ContentLink.Search("x".repeat(65))))
+        assertTrue(!linkIsTappable(ContentLink.Search("a")))
+        assertTrue(!linkIsTappable(ContentLink.Search("aa bb cc dd ee ff")))
         assertTrue(!linkIsTappable(null))
     }
 

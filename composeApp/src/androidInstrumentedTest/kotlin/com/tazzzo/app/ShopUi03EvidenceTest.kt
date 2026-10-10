@@ -35,7 +35,8 @@ import com.tazzzo.app.ui.catalog.BrowsePath
 import com.tazzzo.app.ui.catalog.BrowseScreenLayout
 import com.tazzzo.app.ui.catalog.ChipLevel
 import com.tazzzo.app.ui.catalog.SearchScreenLayout
-import com.tazzzo.app.ui.catalog.SearchSurface
+import com.tazzzo.app.ui.catalog.SearchActions
+import com.tazzzo.app.ui.catalog.SearchBody
 import com.tazzzo.app.ui.catalog.ShopActions
 import com.tazzzo.app.ui.catalog.ShopScreenLayout
 import com.tazzzo.app.ui.common.ProductImageLoader
@@ -168,10 +169,18 @@ class ShopUi03EvidenceTest {
         snapshot("ui03_plp_failed")
     }
 
-    @Test fun search_unavailable() {
-        content(nav = false) { SearchScreenLayout(SearchSurface.Unavailable, onBack = {}, onShop = {}) }
-        rule.onNodeWithText("Search isn't available yet").assertIsDisplayed()
-        snapshot("ui03_search")
+    private val searchActions = SearchActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+
+    @Test fun search_recent() {
+        content(nav = false) { SearchScreenLayout("", SearchBody.Start(listOf("atta", "milk")), searchActions) }
+        rule.onNodeWithText("Recent searches").assertIsDisplayed()
+        snapshot("ui03_search_recent")
+    }
+
+    @Test fun search_results() {
+        content(nav = false) { SearchScreenLayout("atta", SearchBody.Results(PagedState.Content(products.take(4), hasMore = false)), searchActions) }
+        rule.onNodeWithTag("searchResults").assertIsDisplayed()
+        snapshot("ui03_search_results")
     }
 
     @Test fun home_rail_uses_the_shared_images() {

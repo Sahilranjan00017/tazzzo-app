@@ -221,7 +221,19 @@ class TazzzoAppState(
         }
 
     // --- search ----------------------------------------------------------
-    /** Most-recent-first, deduplicated, capped. Session-only until persistence lands. */
+    /**
+     * A query the Search screen should run when it is shown (a `search:` banner). Consumed (set back to null) by the screen.
+     * Only a query that passes [com.tazzzo.app.data.catalog.SearchQueryRules] is ever set.
+     */
+    var searchPrefill by mutableStateOf<String?>(null)
+
+    /** Opens Search; with [query], prefilled and run at once. An unsendable query opens an empty Search. */
+    fun openSearch(query: String? = null) {
+        searchPrefill = query?.let { com.tazzzo.app.data.catalog.SearchQueryRules.check(it) as? com.tazzzo.app.data.catalog.SearchQueryCheck.Valid }?.text
+        navigate(Screen.Search)
+    }
+
+    /** Most-recent-first, deduplicated, capped; persisted per device and cleared on logout. */
     val recentSearches = mutableStateListOf<String>()
     fun clearRecentSearches() {
         recentSearches.clear()

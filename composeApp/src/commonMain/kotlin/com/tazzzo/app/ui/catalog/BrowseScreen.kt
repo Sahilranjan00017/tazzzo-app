@@ -182,7 +182,7 @@ fun BrowseScreenLayout(
     }
 }
 
-private const val PREFETCH_DISTANCE = 6
+internal const val PREFETCH_DISTANCE = 6
 
 @Composable
 private fun BrowseHeader(title: String, breadcrumb: List<String>, onBack: () -> Unit) {
@@ -242,7 +242,7 @@ private fun BrowseChip(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun GridFooter(s: PagedState.Content<CatalogProduct>, consecutiveFailures: Int, onRetry: () -> Unit) {
+internal fun GridFooter(s: PagedState.Content<CatalogProduct>, consecutiveFailures: Int, onRetry: () -> Unit) {
     when (val a = s.append) {
         AppendState.Loading -> Box(Modifier.fillMaxWidth().padding(TazSpace.lg), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = TazColors.BrandEditorial, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
@@ -256,7 +256,7 @@ private fun GridFooter(s: PagedState.Content<CatalogProduct>, consecutiveFailure
 }
 
 @Composable
-private fun ProductGridSkeleton() {
+internal fun ProductGridSkeleton() {
     LazyVerticalGrid(
         modifier = Modifier.fillMaxSize().testTag("productGridSkeleton"), columns = GridCells.Adaptive(PRODUCT_GRID_MIN_CELL_DP.dp), userScrollEnabled = false,
         contentPadding = PaddingValues(horizontal = TazSpace.screenEdge, vertical = TazSpace.sm),
