@@ -129,7 +129,7 @@ jobs:
         run: |
           expect_refused() {
             local out rc
-            out=$(env "$@" 2>&1); rc=$?
+            out=$(env "$@" 2>&1) && rc=0 || rc=$?   # not a bare assignment: bash -e would exit on the expected failure
             if [ "$rc" -eq 0 ]; then echo "ACCEPTED, expected a refusal: $*"; exit 1; fi
             echo "$out" | grep -qE 'tazzzo\.(env|apiBase)|uat build type' || { echo "refused for another reason: $*"; echo "$out" | tail -20; exit 1; }
             echo "refused as expected: ${*: -2}"
