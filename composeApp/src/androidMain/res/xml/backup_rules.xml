@@ -6,4 +6,5 @@
 <full-backup-content>
     <exclude domain="sharedpref" path="tazzzo_secure_auth.xml" />
     <exclude domain="sharedpref" path="com.tazzzo.app_preferences.xml" />
+    <exclude domain="sharedpref" path="com.tazzzo.app.uat_preferences.xml" />
 </full-backup-content>

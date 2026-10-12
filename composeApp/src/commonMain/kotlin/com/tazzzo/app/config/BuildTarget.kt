@@ -31,11 +31,17 @@ sealed interface ApiBaseCheck {
  *
  * Accepted: `https://<dns-name>[:port]` with at least one dot, lowercase letters, digits and hyphens, no user info, path,
  * query or fragment, and a host different from the production API host. Everything else is rejected, never repaired.
+ * Also rejected: a top-level label that does not start with a letter (so decimal, octal and `0x` hex IP spellings fail),
+ * `localhost`, `*.localhost`, `*.local`, and any host equal to or under `tazzzo.com` EXCEPT exactly three labels whose first
+ * label starts with `api-uat` or `uat` (`api-uat.tazzzo.com`, `uat-api.tazzzo.com`, `uat.tazzzo.com`; never `api.`, `staging-api.`,
+ * `www.`, the bare domain or a deeper name). Hosts outside tazzzo.com (the final hostname) follow only the general rules.
+ * The same rule is written in `composeApp/build.gradle.kts`; both are tested (`BuildTargetTest`, CI `uat-android`).
  */
 object UatApiBase {
     const val DEFAULT = "https://api-uat.tazzzo.com"
 
     private val ORIGIN = Regex("^https://([a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+)(:([0-9]{1,5}))?/?$")
+    private const val HOUSE_DOMAIN = "tazzzo.com"
     private val NUMERIC_HOST = Regex("^[0-9.]+$")
 
     fun check(raw: String?, productionBase: String = BuildEnvironment.PROD.gatewayBaseUrl): ApiBaseCheck {
@@ -50,6 +56,13 @@ object UatApiBase {
         val port = match.groupValues[6]
         if (port.isNotEmpty() && port.toInt() !in 1..65535) return ApiBaseCheck.Rejected("port out of range")
         if (host == hostOf(productionBase)) return ApiBaseCheck.Rejected("this is the production API host")
+        if (host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return ApiBaseCheck.Rejected("a local host is not a UAT API")
+        if (!host.substringAfterLast('.').first().isLetter()) return ApiBaseCheck.Rejected("the top-level label must start with a letter (no IP-like hosts)")
+        if (host == HOUSE_DOMAIN || host.endsWith(".$HOUSE_DOMAIN")) {
+            val labels = host.split('.')
+            val uatName = labels.size == 3 && (labels[0].startsWith("api-uat") || labels[0].startsWith("uat"))
+            if (!uatName) return ApiBaseCheck.Rejected("under $HOUSE_DOMAIN only a three-label host starting with api-uat or uat is a UAT API")
+        }
         return ApiBaseCheck.Ok("https://$host" + if (port.isNotEmpty()) ":$port" else "")
     }
 

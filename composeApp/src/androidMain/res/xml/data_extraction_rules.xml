@@ -5,9 +5,11 @@
     <cloud-backup>
         <exclude domain="sharedpref" path="tazzzo_secure_auth.xml" />
         <exclude domain="sharedpref" path="com.tazzzo.app_preferences.xml" />
+        <exclude domain="sharedpref" path="com.tazzzo.app.uat_preferences.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="tazzzo_secure_auth.xml" />
         <exclude domain="sharedpref" path="com.tazzzo.app_preferences.xml" />
+        <exclude domain="sharedpref" path="com.tazzzo.app.uat_preferences.xml" />
     </device-transfer>
 </data-extraction-rules>

@@ -29,13 +29,14 @@ environment switch**. The app never reads an environment variable, intent extra 
 | A release build cannot select another backend at runtime | unchanged: `AppEnvironment.resolve` ignores overrides in release (`ReleaseHardeningTest`, `BuildTargetTest`) |
 | A UAT binary cannot reach the production API | `resolve(release, UAT)` is always `UAT`, a debug UAT build ignores a `PROD` override; the UAT address must not be the production host (Gradle + runtime guard, `UatApiBase`) |
 | A production binary cannot reach UAT | `resolve(.., PROD)` never returns `UAT`; the UAT environment's address is empty there and would throw if used |
-| UAT address is https-only, an origin, not the production host | `tazzzoValidateUatApiBase` (build) and `UatApiBase.check` (runtime, same rules); CI step "Wrong or production-pointing settings are refused" |
+| UAT address is https-only, an origin, not the production host, not local or IP-like | `tazzzoValidateUatApiBase` (build) and `UatApiBase.check` (runtime), same rules, both tested (see "The UAT address rule"); CI step "Wrong or production-pointing settings are refused" |
 | `tazzzo.apiBase` cannot redirect a production build | the build fails if `tazzzo.apiBase` / `TAZZZO_API_BASE` is set without `uat` |
-| A UAT APK is not shipped as the release one (or reverse) | task-graph guard: `assembleRelease`/`bundleRelease` with `uat` fails, `assembleUat` without `uat` fails |
+| A UAT APK is not shipped as the release one (or reverse) | task-graph guard keyed on the VARIANT: any requested bundle/package/sign/publish/install/assemble/minify/merge/lintVital task of a Release variant fails with `uat`, and of a Uat variant fails without it (`packageReleaseBundle`, `signUatBundle` and the rest are covered, not just `assemble*`). Debug, unit-test and ordinary lint tasks are not matched |
+| The production iOS archive cannot silently become UAT (or the reverse) | Gradle refuses `embedAndSignAppleFrameworkForXcode` unless `TAZZZO_ENV=uat` <=> `PRODUCT_BUNDLE_IDENTIFIER` ends in `.uat`; a Release configuration without an exported bundle id is refused; `ios-release` also asserts the generated target is `prod` |
 | Dev tooling and the MOCK catalogue are unreachable in UAT | the `uat` build type is not debuggable (`BuildConfig.DEBUG=false`, so `allowsDevTooling` is false); iOS Release is a non-debug binary; `allowsDevTooling` is also false for any UAT-target build |
 | A UAT build is visibly marked | Profile and About show `Version 1.0 (1) · UAT`; Android label `Tazzzo UAT`, application id `com.tazzzo.app.uat` (installs next to production) |
 
-Honest limits: the production API URL string is still compiled into a UAT binary (it is the constant the guard compares
+Honest limits: a UAT-TARGET *debug* build (`-Ptazzzo.env=uat` with a debug task) is not a UAT binary: it has no dev tooling, defaults to UAT and ignores a PROD override, but it can still be moved to DEV or STAGING by a debug override. The production API URL string is still compiled into a UAT binary (it is the constant the guard compares
 against and what `BuildEnvironment.PROD` holds); it is unreachable by selection, not absent. Production binaries contain
 no UAT address.
 
@@ -62,7 +63,9 @@ to a store or to customers, and different machines produce different signatures 
 machine needs an uninstall first). The production `release` build type is untouched: it has no signing configuration in this
 repository. No key, password or keystore is added; CI's `secrets` job fails if one is committed.
 
-CI builds this APK on every PR (job `uat-android`) and uploads it as the artifact `tazzzo-uat-apk-debug-signed` (14 days).
+CI builds this APK on every PR (job `uat-android`; it also checks id, label, no `debuggable`, cleartext off, no mock-only photography, and runs `UatTargetBinaryTest` with `-Ptazzzo.env=uat` so the generated UAT constants are exercised by a unit run) and uploads it as the artifact `tazzzo-uat-apk-debug-signed` (14 days).
+
+**Usability note.** Because the guard names variants, plain `./gradlew assemble`, `build` and `bundle` pull in both the `release` and `uat` variants and therefore fail in every configuration. Name the variant: `assembleDebug`, `assembleUat -Ptazzzo.env=uat`, `assembleRelease`.
 
 Production, as before: `./gradlew :composeApp:assembleRelease` (no `tazzzo.*` input) produces the production binary.
 
@@ -70,10 +73,20 @@ Production, as before: `./gradlew :composeApp:assembleRelease` (no `tazzzo.*` in
 
 The Xcode "Compile Kotlin Framework" script phase runs `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode`. Gradle
 reads `TAZZZO_ENV` / `TAZZZO_API_BASE` from the environment, and `xcodebuild` exports build settings given on its command
-line to that script, so no Xcode project edit is needed:
+line (and all other build settings, such as `PRODUCT_BUNDLE_IDENTIFIER` and `CONFIGURATION`) to that script, so no Xcode
+project edit is needed. The script phase in `iosApp/iosApp.xcodeproj` is plain shell that already relies on exported settings
+(`$SRCROOT`); that Xcode exports `PRODUCT_BUNDLE_IDENTIFIER` the same way is Xcode's documented behaviour and is **exercised
+for real only by the `ios-release` archive in CI** (positive, production case).
+
+**Leak risk and the guard.** Because Gradle reads the process environment, a stray `export TAZZZO_ENV=uat` in a shell (or
+`tazzzo.env=uat` in `~/.gradle/gradle.properties`) would otherwise turn a production Release archive into a UAT-addressed one,
+and a UAT build without the UAT bundle id would carry the production id. The Apple embed task is therefore refused unless
+`TAZZZO_ENV=uat` **if and only if** `PRODUCT_BUNDLE_IDENTIFIER` ends in `.uat`, and a Release configuration with no exported
+bundle id is refused with a clear message. `ios-release` additionally asserts the generated target is `prod`. Check your shell
+(`env | grep TAZZZO`) before archiving production.
 
 ```bash
-# UAT, unsigned archive (compile/link check, as the CI iOS release job does for production)
+# UAT, unsigned archive (compile/link check, as the CI iOS release job does for production). Both settings are required together.
 xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
   -destination 'generic/platform=iOS' -archivePath build/Tazzzo-UAT.xcarchive \
   TAZZZO_ENV=uat PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app.uat \
@@ -83,7 +96,7 @@ xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuratio
 
 - `-configuration Release` is what makes it a non-debug binary (`Platform.isDebugBinary` is false). Without `TAZZZO_ENV=uat`
   the same command produces the production binary.
-- `PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app.uat` is the suggested separate bundle id so a UAT build can sit next to
+- `PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app.uat` is REQUIRED for a UAT build (the guard above) so it can sit next to
   production. The home-screen name stays "Tazzzo" because `Info.plist` holds a literal `CFBundleDisplayName`; the UAT build is
   recognised by the `· UAT` marker in Profile and About.
 - Gradle caches by the generated constant: switching `TAZZZO_ENV` regenerates it and rebuilds the framework.
@@ -93,6 +106,23 @@ xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuratio
   iOS": `TAZZZO_ENV=uat` + `compileKotlinIosSimulatorArm64`, plus a generated-file check) and by the shared logic tests.
   A full UAT archive (command above) was not added to CI because it would repeat the 25-minute release link; run it
   manually when needed.
+
+## The UAT address rule
+
+Written identically in `composeApp/build.gradle.kts` (`tazzzoValidateUatApiBase`) and `UatApiBase.check`, tested in
+`BuildTargetTest` and by the refusal cases of CI job `uat-android`. An address is accepted only if it is `https://<host>[:port]`
+(optional single trailing `/`, nothing else) and the host: has at least one dot, uses lowercase letters/digits/hyphens (input
+is lower-cased), is not the production host, is not `localhost`, `*.localhost` or `*.local`, has a top-level label that
+starts with a letter (so decimal, octal and `0x` hex IP spellings fail), and, if it is `tazzzo.com` or under it, has exactly
+three labels with the first starting `api-uat` or `uat` (`api-uat.tazzzo.com` default; `uat-api.tazzzo.com`,
+`uat.tazzzo.com` allowed; `api.`, `staging-api.`, `www.`, the bare domain and deeper names refused). Hosts outside tazzzo.com
+(the final hostname) follow only the general rules.
+
+## Backup
+
+The UAT application id uses its own default preferences file, `com.tazzzo.app.uat_preferences.xml`; it is excluded from cloud
+backup and device transfer next to the production file and the secure session blob (`backup_rules.xml`,
+`data_extraction_rules.xml`).
 
 ## Network security
 

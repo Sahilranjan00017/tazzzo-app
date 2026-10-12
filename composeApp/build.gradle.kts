@@ -34,6 +34,13 @@ fun tazzzoValidateUatApiBase(raw: String): String {
     val port = match.groupValues[6]
     if (port.isNotEmpty() && port.toInt() !in 1..65535) refuse("port out of range")
     if (host == tazzzoProductionApiBase.removePrefix("https://")) refuse("this is the production API host")
+    if (host == "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) refuse("a local host is not a UAT API")
+    if (!host.substringAfterLast('.').first().isLetter()) refuse("the top-level label must start with a letter (no IP-like hosts)")
+    if (host == "tazzzo.com" || host.endsWith(".tazzzo.com")) {
+        val labels = host.split('.')
+        if (!(labels.size == 3 && (labels[0].startsWith("api-uat") || labels[0].startsWith("uat"))))
+            refuse("under tazzzo.com only a three-label host starting with api-uat or uat is a UAT API")
+    }
     return "https://$host" + if (port.isNotEmpty()) ":$port" else ""
 }
 
@@ -51,17 +58,37 @@ val tazzzoUatApiBase: String = run {
 }
 if (tazzzoTarget == "uat") logger.lifecycle("tazzzo build target: uat (api base $tazzzoUatApiBase)")
 
-// A UAT binary must come from the `uat` build type and a production binary from `release`: the other pairings are refused so a
-// UAT-addressed APK can never be shipped as the release one, or the reverse. (iOS has one Release configuration; there the
-// generated constant alone decides, and TAZZZO_ENV must be set on that xcodebuild.)
+// ---- Guards ------------------------------------------------------------------------------------------------------------------
+// Android: a UAT binary must come from the `uat` build type and a production binary from `release`. Keyed on the VARIANT, not on
+// a few task names: any requested task that packages/signs/publishes/installs/assembles/minifies/merges (or lint-vitals) a
+// Release variant is refused when tazzzo.env=uat, and the same for a Uat variant when it is not uat. Debug, unit-test and ordinary
+// lint tasks are not matched. Usability note: plain `assemble`, `build` and `bundle` pull in BOTH variants, so they fail in every
+// configuration; name the variant (assembleDebug, assembleUat, assembleRelease).
+val variantTask = Regex("^(bundle|package|sign|publish|install|assemble|minify|merge|lintVital)\\w*?(Release|Uat)")
+// iOS: the Xcode script phase exports build settings, so the bundle id says what the archive is meant to be. UAT <=> id ends in
+// ".uat"; a stray TAZZZO_ENV in the shell (or tazzzo.env in ~/.gradle/gradle.properties) can then not turn the production archive
+// into a UAT-addressed one, and a UAT build can not carry the production bundle id.
+val xcodeBundleId: String? = providers.environmentVariable("PRODUCT_BUNDLE_IDENTIFIER").orNull?.takeIf { it.isNotBlank() }
+val xcodeConfiguration: String? = providers.environmentVariable("CONFIGURATION").orNull
 gradle.taskGraph.whenReady {
     val names = allTasks.map { it.name }.toSet()
-    val releaseOutputs = setOf("assembleRelease", "bundleRelease", "packageRelease", "installRelease")
-    val uatOutputs = setOf("assembleUat", "bundleUat", "packageUat", "installUat")
-    if (tazzzoTarget == "uat" && names.any { it in releaseOutputs })
-        throw GradleException("tazzzo.env=uat must use the uat build type (assembleUat), not release")
-    if (tazzzoTarget != "uat" && names.any { it in uatOutputs })
+    val variants = names.mapNotNull { variantTask.find(it)?.groupValues?.get(2) }.toSet()
+    if (tazzzoTarget == "uat" && "Release" in variants)
+        throw GradleException("tazzzo.env=uat must use the uat build type (assembleUat), not release (${names.filter { variantTask.find(it)?.groupValues?.get(2) == "Release" }.sorted().first()})")
+    if (tazzzoTarget != "uat" && "Uat" in variants)
         throw GradleException("the uat build type needs -Ptazzzo.env=uat (otherwise it would be a production-addressed app)")
+    if ("embedAndSignAppleFrameworkForXcode" in names) {
+        val bundleId = xcodeBundleId
+        if (bundleId == null) {
+            if (xcodeConfiguration.equals("Release", ignoreCase = true))
+                throw GradleException("Xcode did not export PRODUCT_BUNDLE_IDENTIFIER to the script phase; refusing a Release archive whose bundle id cannot be checked against tazzzo.env")
+        } else if ((tazzzoTarget == "uat") != bundleId.endsWith(".uat")) {
+            throw GradleException(
+                if (tazzzoTarget == "uat") "tazzzo.env=uat needs PRODUCT_BUNDLE_IDENTIFIER ending in .uat (e.g. com.tazzzo.app.uat); the production bundle id must not carry a UAT build"
+                else "PRODUCT_BUNDLE_IDENTIFIER ends in .uat but tazzzo.env is not uat; a UAT bundle id must not carry a production-addressed build"
+            )
+        }
+    }
 }
 
 val generatedBuildTargetDir = layout.buildDirectory.dir("generated/tazzzo/commonMain/kotlin")
@@ -213,6 +240,10 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    // The settings `release` and `uat` share, applied by both so they cannot drift apart (minify/shrink changes go here).
+    val releaseLike: com.android.build.api.dsl.ApplicationBuildType.() -> Unit = {
+        isMinifyEnabled = false
+    }
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -223,7 +254,7 @@ android {
         // the machine's DEBUG keystore, for internal UAT installs only; the production `release` build type is untouched
         // (it has no signing config here) and no key or password exists in this repository.
         create("uat") {
-            initWith(getByName("release"))
+            releaseLike()
             matchingFallbacks += listOf("release")
             isDebuggable = false
             applicationIdSuffix = ".uat"
@@ -234,7 +265,7 @@ android {
             // Demo flags, the autopilot and DevLogSink are gated on
             // AppEnvironment.allowsDevTooling, which is false whenever
             // BuildConfig.DEBUG is false — i.e. in every release build.
-            isMinifyEnabled = false
+            releaseLike()
         }
     }
     compileOptions {

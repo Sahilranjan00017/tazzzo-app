@@ -76,8 +76,9 @@ class BuildTargetTest {
         assertEquals(BuildTarget.UAT, BuildTarget.fromCode("uat"))
     }
 
-    @Test fun aUatReleaseBuildHasNoDevToolingAndTheMockCatalogueIsUnreachable() {
-        // isDebug=false is what the `uat` build type reports (BuildConfig.DEBUG=false); the gates are the existing release ones.
+    @Test fun aNonDebugBuildAlwaysUsesTheRemoteCatalogue() {
+        // Only the pure selector is proven here: isDebug=false is what the `uat` build type reports (BuildConfig.DEBUG=false). That a
+        // UAT-TARGET binary also has no dev tooling is asserted in UatTargetBinaryTest, which CI runs with -Ptazzzo.env=uat.
         assertEquals(com.tazzzo.app.data.catalog.CatalogMode.REMOTE,
             com.tazzzo.app.data.catalog.CatalogModeSelector.resolve(isDebug = false, debugOverride = com.tazzzo.app.data.catalog.CatalogMode.MOCK))
     }
@@ -95,7 +96,8 @@ class BuildTargetTest {
     @Test fun aFinalHostnameOverrideIsAcceptedAndNormalised() {
         assertEquals("https://api-uat.example.org", ok("https://api-uat.example.org/"))
         assertEquals("https://uat-api.tazzzo.in:8443", ok("https://UAT-API.Tazzzo.IN:8443"))
-        assertEquals("https://x.api.tazzzo.com", ok("https://x.api.tazzzo.com"))   // a different host that merely ends in the prod name
+        for (host in listOf("api-uat.tazzzo.com", "uat.tazzzo.com", "uat-api.tazzzo.com", "api-uat2.tazzzo.com"))
+            assertEquals("https://$host", ok("https://$host"), host)
     }
 
     @Test fun theProductionHostIsRejectedForUat() {
@@ -115,6 +117,22 @@ class BuildTargetTest {
             "https://user:pw@api-uat.example.org", "https://api-uat.example.org:0", "https://api-uat.example.org:65536",
             "https://api-uat.example.org:", "https://api_uat.example.org", "https://-api.example.org", "https://api-.example.org",
             "https://api..example.org", "https://api-uat.example.org.", "https://exa mple.org", "https://api-uat.example.org\\evil"
+        )) rejected(raw)
+    }
+
+    @Test fun theHouseDomainIsOnlyOpenToUatNames() {
+        for (raw in listOf(
+            "https://api.tazzzo.com", "https://staging-api.tazzzo.com", "https://dev-api.tazzzo.com", "https://www.tazzzo.com",
+            "https://tazzzo.com", "https://cms.tazzzo.com", "https://x.api-uat.tazzzo.com", "https://x.api.tazzzo.com", "https://myuat.tazzzo.com"
+        )) rejected(raw)
+        // a look-alike that is not under tazzzo.com is a different domain and follows only the general rules
+        assertEquals("https://api-uat.tazzzo.com.evil.example", ok("https://api-uat.tazzzo.com.evil.example"))
+    }
+
+    @Test fun localAndIpLikeHostsAreRejected() {
+        for (raw in listOf(
+            "https://foo.local", "https://a.localhost", "https://localhost.local", "https://1.1", "https://127.1", "https://0x7f.1",
+            "https://0x7f.0x0.0x0.0x1", "https://0300.0250.0.1", "https://2130706433.1", "https://10.0.2.2:8443", "https://api-uat.example.123"
         )) rejected(raw)
     }
 

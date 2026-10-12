@@ -125,6 +125,10 @@ jobs:
           cat "$f"
           grep -q 'TARGET: String = "prod"' "$f"
           grep -q 'UAT_API_BASE: String = ""' "$f"
+          # the Gradle copies of the two addresses must equal the Kotlin constants they mirror
+          kt=composeApp/src/commonMain/kotlin/com/tazzzo/app/config
+          [ "$(grep -oP 'tazzzoProductionApiBase = "\K[^"]+' composeApp/build.gradle.kts)" = "$(grep -oP 'PROD\("\K[^"]+' $kt/AppEnvironment.kt)" ]
+          [ "$(grep -oP 'tazzzoDefaultUatApiBase = "\K[^"]+' composeApp/build.gradle.kts)" = "$(grep -oP 'const val DEFAULT = "\K[^"]+' $kt/BuildTarget.kt)" ]
       - name: Wrong or production-pointing settings are refused
         run: |
           expect_refused() {
@@ -142,9 +146,37 @@ jobs:
           expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=http://api-uat.example.org
           expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://api-uat.example.org/v1
           expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://10.0.2.2
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://api.tazzzo.com.
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://staging-api.tazzzo.com
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://0x7f.1
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://foo.local
           expect_refused ./gradlew :composeApp:assembleRelease -Ptazzzo.env=uat --console=plain -q
+          expect_refused ./gradlew :composeApp:bundleRelease -Ptazzzo.env=uat --console=plain -q
+          expect_refused ./gradlew :composeApp:packageReleaseBundle -Ptazzzo.env=uat --console=plain -q
+          expect_refused ./gradlew :composeApp:signReleaseBundle -Ptazzzo.env=uat --console=plain -q
+          expect_refused ./gradlew :composeApp:packageUatBundle --console=plain -q
+          expect_refused ./gradlew :composeApp:signUatBundle --console=plain -q
+          expect_refused ./gradlew :composeApp:assemble --console=plain -q
+          expect_refused ./gradlew :composeApp:assemble -Ptazzzo.env=uat --console=plain -q
           expect_refused ./gradlew :composeApp:assembleUat --console=plain -q
           TAZZZO_ENV=uat TAZZZO_API_BASE=https://api.tazzzo.com expect_refused $g
+      - name: iOS embed guard ties TAZZZO_ENV to the bundle id (Xcode exports PRODUCT_BUNDLE_IDENTIFIER)
+        run: |
+          expect_refused() {
+            local out rc
+            out=$(env "$@" 2>&1) && rc=0 || rc=$?
+            if [ "$rc" -eq 0 ]; then echo "ACCEPTED, expected a refusal: $*"; exit 1; fi
+            echo "$out" | grep -qE 'PRODUCT_BUNDLE_IDENTIFIER' || { echo "refused for another reason: $*"; echo "$out" | tail -20; exit 1; }
+            echo "refused as expected"
+          }
+          # Only the guard is exercised: the task graph is built with --dry-run, nothing is compiled.
+          e="./gradlew :composeApp:embedAndSignAppleFrameworkForXcode --dry-run --console=plain -q"
+          expect_refused TAZZZO_ENV=uat PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app CONFIGURATION=Release $e      # stray env var on a production archive
+          expect_refused PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app.uat CONFIGURATION=Release $e                  # UAT id without the UAT target
+          expect_refused TAZZZO_ENV=uat CONFIGURATION=Release PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app $e
+          expect_refused CONFIGURATION=Release $e                                                              # Release without a bundle id
+          TAZZZO_ENV=uat PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app.uat CONFIGURATION=Release $e
+          PRODUCT_BUNDLE_IDENTIFIER=com.tazzzo.app CONFIGURATION=Release $e
       - name: Environment variables select UAT too (the iOS / Xcode path)
         run: |
           TAZZZO_ENV=uat ./gradlew :composeApp:generateBuildTarget --console=plain -q
@@ -164,11 +196,17 @@ jobs:
           "$aapt2" dump xmltree "$apk" --file AndroidManifest.xml > manifest.txt
           grep -iE 'usesCleartextTraffic|debuggable' manifest.txt || true
           grep -qiE 'usesCleartextTraffic[^=]*=(false|\(type 0x12\)0x0)' manifest.txt
-          ! grep -qi 'debuggable' manifest.txt
+          if grep -qi 'debuggable' manifest.txt; then echo "the UAT APK is debuggable"; exit 1; fi
+          # the MOCK-only photography must not be in the package (same assets the iOS job checks)
+          unzip -l "$apk" > apk-files.txt
+          if grep -qE '(prod_p[0-9]+|cat_[a-z_]+|hero_basket|banner_coins)\.jpg' apk-files.txt; then echo "mock-only assets are in the UAT APK"; grep -E '(prod_p[0-9]+|cat_[a-z_]+|hero_basket|banner_coins)\.jpg' apk-files.txt; exit 1; fi
+          grep -q 'bg_home_hero.webp' apk-files.txt
           # to a file first: grep -q closing the pipe early would fail the step under pipefail
           unzip -p "$apk" 'classes*.dex' | strings > dex-strings.txt
           grep -q 'https://api-uat.tazzzo.com' dex-strings.txt
           echo "uat_apk_bytes=$(stat -c %s "$apk")"
+      - name: Unit tests of a UAT-target binary (generated constants, gates)
+        run: ./gradlew :composeApp:testDebugUnitTest -Ptazzzo.env=uat --tests '*UatTargetBinaryTest' --console=plain
       - uses: actions/upload-artifact@v4
         with:
           name: tazzzo-uat-apk-debug-signed
@@ -220,6 +258,12 @@ jobs:
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Tazzzo.xcarchive" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
           echo "archive_seconds=$(( $(date +%s) - start ))"
+      - name: The production archive was built for the production target
+        run: |
+          f=composeApp/build/generated/tazzzo/commonMain/kotlin/com/tazzzo/app/config/GeneratedBuildTarget.kt
+          cat "$f"
+          grep -q 'TARGET: String = "prod"' "$f"
+          grep -q 'UAT_API_BASE: String = ""' "$f"
       - name: Release asset inspection
         run: |
           app=$(find "$RUNNER_TEMP/Tazzzo.xcarchive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)
