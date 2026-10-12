@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.tazzzo.app.HomeTab
 import com.tazzzo.app.LocalAppState
 import com.tazzzo.app.Screen
-import com.tazzzo.app.config.appVersionLabel
+import com.tazzzo.app.config.appVersionDisplayLabel
 import com.tazzzo.app.data.account.NameSave
 import com.tazzzo.app.data.account.ProfileState
 import com.tazzzo.app.data.address.BookState
@@ -95,7 +95,7 @@ fun RemoteProfileContent() {
         signedIn = app.isAuthenticated,
         identity = remoteIdentity(loaded),
         addressCount = (book as? BookState.Loaded)?.addresses?.size,
-        version = appVersionLabel(),
+        version = appVersionDisplayLabel(),
         confirmLogout = confirmLogout,
         canEditName = loaded != null,
         actions = ProfileActions(
@@ -305,7 +305,7 @@ private fun LogoutSheet(onCancel: () -> Unit, onConfirm: () -> Unit) {
 @Composable
 fun RemoteAboutScreen() {
     val app = LocalAppState.current
-    AboutLayout(version = appVersionLabel(), onBack = { app.back() }, openLegal = { app.navigate(Screen.Legal(it.path)) })
+    AboutLayout(version = appVersionDisplayLabel(), onBack = { app.back() }, openLegal = { app.navigate(Screen.Legal(it.path)) })
 }
 
 /** Truthful About: the wordmark, the canonical tagline, the version, and the two legal documents (in-app, plain text). */

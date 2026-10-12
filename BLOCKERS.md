@@ -35,6 +35,11 @@ the PRODUCTION_READINESS.md verification log describing how it was verified.
 - [ ] D4 delivery promise unapproved — app ships neutral "Fast delivery" copy.
 - [ ] D5 coin economics unapproved — current values are dev config only.
 
+- [ ] UAT distribution (2026-10-12): the UAT build configuration exists (docs/uat/UAT_BUILD.md) but an **installable iOS UAT build
+      is NOT AVAILABLE** — it needs an Apple Developer account, a certificate and a provisioning profile for the UAT bundle id
+      (`com.tazzzo.app.uat` suggested). Android UAT APKs are debug-keystore signed: internal installs only, never a store or customers.
+      The UAT API host `api-uat.tazzzo.com` comes from the change request and is unverified from this repository.
+
 ## P1 — blocks production quality
 - [x] Android compile + critical journey — verified 2026-08-30 (see log).
       Progress 2026-08-30: keyboard behaviour (typed search + address form),

@@ -104,6 +104,78 @@ jobs:
           path: composeApp/build/test-results/testDebugUnitTest/
           if-no-files-found: ignore
 
+  # UAT build configuration (docs/uat/UAT_BUILD.md). Linux only, no secrets, no signing material: the UAT APK is signed with the
+  # runner's throwaway debug keystore. Checks that (1) the default build target is production and carries no UAT address,
+  # (2) bad or production-pointing UAT settings fail the build, (3) the UAT APK has its own id/label, is not debuggable, forbids
+  # cleartext traffic and contains the UAT address.
+  uat-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version-file: .java-version
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Default build target is production and carries no UAT address
+        run: |
+          ./gradlew :composeApp:generateBuildTarget --console=plain -q
+          f=composeApp/build/generated/tazzzo/commonMain/kotlin/com/tazzzo/app/config/GeneratedBuildTarget.kt
+          cat "$f"
+          grep -q 'TARGET: String = "prod"' "$f"
+          grep -q 'UAT_API_BASE: String = ""' "$f"
+      - name: Wrong or production-pointing settings are refused
+        run: |
+          expect_refused() {
+            local out rc
+            out=$(env "$@" 2>&1); rc=$?
+            if [ "$rc" -eq 0 ]; then echo "ACCEPTED, expected a refusal: $*"; exit 1; fi
+            echo "$out" | grep -qE 'tazzzo\.(env|apiBase)|uat build type' || { echo "refused for another reason: $*"; echo "$out" | tail -20; exit 1; }
+            echo "refused as expected: ${*: -2}"
+          }
+          g="./gradlew :composeApp:generateBuildTarget --console=plain -q"
+          expect_refused $g -Ptazzzo.env=staging
+          expect_refused $g -Ptazzzo.apiBase=https://api-uat.example.org
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://api.tazzzo.com
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://API.TAZZZO.COM/
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=http://api-uat.example.org
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://api-uat.example.org/v1
+          expect_refused $g -Ptazzzo.env=uat -Ptazzzo.apiBase=https://10.0.2.2
+          expect_refused ./gradlew :composeApp:assembleRelease -Ptazzzo.env=uat --console=plain -q
+          expect_refused ./gradlew :composeApp:assembleUat --console=plain -q
+          TAZZZO_ENV=uat TAZZZO_API_BASE=https://api.tazzzo.com expect_refused $g
+      - name: Environment variables select UAT too (the iOS / Xcode path)
+        run: |
+          TAZZZO_ENV=uat ./gradlew :composeApp:generateBuildTarget --console=plain -q
+          f=composeApp/build/generated/tazzzo/commonMain/kotlin/com/tazzzo/app/config/GeneratedBuildTarget.kt
+          grep -q 'TARGET: String = "uat"' "$f"
+          grep -q 'UAT_API_BASE: String = "https://api-uat.tazzzo.com"' "$f"
+      - name: Assemble the UAT APK
+        run: ./gradlew :composeApp:assembleUat -Ptazzzo.env=uat --console=plain
+      - name: Inspect the UAT APK
+        run: |
+          apk=$(find composeApp/build/outputs/apk/uat -name '*.apk' | head -1)
+          echo "apk=$apk"
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$aapt2" dump badging "$apk" | grep -E "^package: |application-label:" | tee badging.txt
+          grep -q "name='com.tazzzo.app.uat'" badging.txt
+          grep -q "application-label:'Tazzzo UAT'" badging.txt
+          "$aapt2" dump xmltree "$apk" --file AndroidManifest.xml > manifest.txt
+          grep -iE 'usesCleartextTraffic|debuggable' manifest.txt || true
+          grep -qiE 'usesCleartextTraffic[^=]*=(false|\(type 0x12\)0x0)' manifest.txt
+          ! grep -qi 'debuggable' manifest.txt
+          # to a file first: grep -q closing the pipe early would fail the step under pipefail
+          unzip -p "$apk" 'classes*.dex' | strings > dex-strings.txt
+          grep -q 'https://api-uat.tazzzo.com' dex-strings.txt
+          echo "uat_apk_bytes=$(stat -c %s "$apk")"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tazzzo-uat-apk-debug-signed
+          path: composeApp/build/outputs/apk/uat/*.apk
+          retention-days: 14
+          if-no-files-found: error
+
   # iOS RELEASE verification, unsigned. The Kotlin/Native release link runs whole-program optimisation and needs far more heap
   # than the debug link (it ran out of memory on an 8 GB laptop at the project default of 1.5 GB). The larger heap is set for
   # this job only, through the runner's user-level Gradle properties, so local developers keep the small defaults and the Xcode
@@ -205,6 +277,10 @@ jobs:
           print(f"files={len(files)} tests={t} failures={f} errors={e}")
           sys.exit(0 if t > 0 and f == 0 and e == 0 else 1)
           PY
+      - name: UAT build target compiles for iOS (TAZZZO_ENV path used by the Xcode script)
+        run: |
+          TAZZZO_ENV=uat ./gradlew :composeApp:compileKotlinIosSimulatorArm64 --console=plain
+          grep -q 'TARGET: String = "uat"' composeApp/build/generated/tazzzo/commonMain/kotlin/com/tazzzo/app/config/GeneratedBuildTarget.kt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
