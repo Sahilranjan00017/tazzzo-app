@@ -5,6 +5,7 @@ import com.tazzzo.app.analytics.DevLogSink
 import com.tazzzo.app.analytics.NoopSink
 import com.tazzzo.app.analytics.defaultAnalyticsSink
 import com.tazzzo.app.config.AppEnvironment
+import com.tazzzo.app.config.BuildTarget
 import com.tazzzo.app.config.BuildEnvironment
 import com.tazzzo.app.data.catalog.CatalogCapabilities
 import com.tazzzo.app.data.catalog.CatalogMode
@@ -43,6 +44,9 @@ class ReleaseHardeningTest {
         for (o in listOf(null, BuildEnvironment.DEV, BuildEnvironment.STAGING, BuildEnvironment.PROD))
             assertEquals(BuildEnvironment.PROD, AppEnvironment.resolve(isDebug = false, override = o))
         assertEquals(BuildEnvironment.STAGING, AppEnvironment.resolve(isDebug = true, override = BuildEnvironment.STAGING))
+        // The default target is production: the two-argument form every earlier caller uses is unchanged.
+        for (o in listOf(null) + BuildEnvironment.entries)
+            assertEquals(BuildEnvironment.PROD, AppEnvironment.resolve(isDebug = false, override = o, target = BuildTarget.PROD))
     }
 
     @Test fun aReleaseBuildAlwaysUsesTheRemoteCatalogue() {
@@ -104,11 +108,13 @@ class ReleaseHardeningTest {
 
     @Test fun everyConfiguredEnvironmentIsHttpsAndNeverLocal() {
         for (e in BuildEnvironment.entries) {
+            // UAT's address is generated per build: empty in a production-target binary, which is the point (see BuildTargetTest).
+            if (e == BuildEnvironment.UAT && AppEnvironment.target == BuildTarget.PROD) { assertEquals("", e.gatewayBaseUrl); continue }
             assertTrue(e.gatewayBaseUrl.startsWith("https://"), e.name)
             for (local in listOf("localhost", "127.0.0.1", "10.0.2.2", "192.168.", ".local"))
                 assertFalse(local in e.gatewayBaseUrl, "${e.name} $local")
         }
-        assertEquals(3, BuildEnvironment.entries.map { it.gatewayBaseUrl }.toSet().size)
+        assertEquals(3, BuildEnvironment.entries.map { it.gatewayBaseUrl }.filter { it.isNotEmpty() && it != BuildEnvironment.UAT.gatewayBaseUrl }.toSet().size)
         assertNotEquals(BuildEnvironment.PROD.gatewayBaseUrl, BuildEnvironment.STAGING.gatewayBaseUrl)
     }
 

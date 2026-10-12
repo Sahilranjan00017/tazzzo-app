@@ -38,6 +38,16 @@ Statuses: ✅ done · 🟡 partial · ❌ not started
 
 ## Verification log (never remove a row — record how each was verified)
 
+- 2026-10-12 UAT BUILD CONFIGURATION (`feature/uat-build-config`). A build-time target (`-Ptazzzo.env=uat`, default `prod`; iOS via
+  `TAZZZO_ENV` exported by `xcodebuild`) generates a commonMain constant; a UAT binary is release-shaped (REMOTE, no dev tooling,
+  not debuggable), talks to `https://api-uat.tazzzo.com` (override `-Ptazzzo.apiBase=`, https origin only, never the production
+  host), shows `· UAT` in Profile/About and installs as `com.tazzzo.app.uat` "Tazzzo UAT" on Android (debug-keystore signed,
+  internal installs only). A default build is still PROD and carries no UAT address; release ignores every override; the
+  production host is unreachable from UAT and the UAT host from PROD (`BuildTargetTest`, `ReleaseHardeningTest`). Verified:
+  pure logic in the scratch JVM harness (1145 tests); Gradle/Android/iOS compile only by CI (`uat-android` job, `macos` UAT
+  compile step). NOT RUN: any device, the UAT backend, an installable iOS UAT build (needs an Apple Developer account and
+  provisioning: NOT AVAILABLE). See docs/uat/UAT_BUILD.md.
+
 - 2026-10-10 RELEASE ORDERING ON + ADVISORY MONEY (`feature/app-orders-checkout-release`). REMOTE places real COD orders
   (`orderIntegration = true`, debug opt-in removed) and shows real order history. The backend quote `moneyPreview` is ADVISORY
   (the order computes its own money, may differ, placed with 200; PAYABLE_CHANGED is never sent): checkout shows "Total" +

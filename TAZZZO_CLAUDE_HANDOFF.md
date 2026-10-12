@@ -67,6 +67,13 @@ The machine's default JDK is 27-ea, which Gradle 8.14 rejects.
 
 ## 2. CURRENT PRODUCT STATE
 
+> **2026-10-12 — UAT build target.** A second kind of release binary exists: `-Ptazzzo.env=uat` (Android `assembleUat`, iOS via
+> `TAZZZO_ENV=uat` on `xcodebuild`) generates `GeneratedBuildTarget` and builds a release-shaped app addressed to the UAT API
+> (`config/BuildTarget.kt`, `AppEnvironment.resolve(isDebug, override, target)`). Default builds are unchanged PROD. A release
+> build still ignores every override, UAT and PROD cannot reach each other, and the UAT build shows `· UAT` next to the
+> version. Commands, signing (debug keystore, internal only), final-hostname override and what is NOT available (installable
+> iOS UAT: no Apple account): `docs/uat/UAT_BUILD.md`.
+
 > **2026-10-10 — product-closure release path (REMOTE = every release build).** The table below is the historical MOCK
 > (debug/demo) inventory. The RELEASE app now routes through `RouteTable.kt` (`routeImpl`): REMOTE never renders a MOCK
 > screen (`ReleaseConfigurationTest`). Day-1 REMOTE surfaces: launch/onboarding/login (OTP; back on the OTP step returns

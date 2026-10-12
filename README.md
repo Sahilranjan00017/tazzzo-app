@@ -66,7 +66,7 @@ compiles the Kotlin framework automatically via `./gradlew embedAndSignAppleFram
 UI never touches the network directly — it talks to interfaces in
 `data/repository/Repositories.kt`, currently backed by `Mock*` classes.
 
-1. Set the real gateway host per environment in `config/AppEnvironment.kt`
+1. Set the real gateway host per environment in `config/AppEnvironment.kt` (the UAT host is a build-time setting: see `docs/uat/UAT_BUILD.md`)
    (auth / catalog / orders / coins / voice / support services — endpoint
    sketch documented in that file).
 2. Add Ktor client to `composeApp/build.gradle.kts` (`ktor-client-core`,
